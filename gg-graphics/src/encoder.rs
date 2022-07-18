@@ -9,9 +9,9 @@ pub struct GraphicsEncoder {
 }
 
 impl GraphicsEncoder {
-    pub fn new(canvas: Canvas) -> GraphicsEncoder {
+    pub fn new(canvas: &Canvas) -> GraphicsEncoder {
         GraphicsEncoder {
-            canvas,
+            canvas: canvas.clone(),
             list: Vec::new(),
         }
     }

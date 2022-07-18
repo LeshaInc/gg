@@ -39,6 +39,11 @@ impl<T> Rect<T> {
 
 impl<T: Num + Copy> Rect<T> {
     #[inline]
+    pub fn from_pos_extents(pos: Vec2<T>, extents: Vec2<T>) -> Rect<T> {
+        Rect::new(pos, pos + extents)
+    }
+
+    #[inline]
     pub fn center(&self) -> Vec2<T> {
         let two = T::one() + T::one();
         (self.min + self.max) / two
@@ -79,5 +84,11 @@ impl<T: Ord + Copy> Rect<T> {
         let min = self.min.max(rhs.min);
         let max = self.max.min(rhs.max).max(min);
         Rect::new(min, max)
+    }
+}
+
+impl<T: Num + Copy> From<[T; 4]> for Rect<T> {
+    fn from([x, y, w, h]: [T; 4]) -> Self {
+        Rect::from_pos_extents(Vec2::new(x, y), Vec2::new(w, h))
     }
 }

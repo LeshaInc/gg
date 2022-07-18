@@ -40,10 +40,17 @@ impl Images {
     ) -> PoolAllocation {
         let (size, data) = match assets.get_by_id_mut(id) {
             Some(image) => {
-                let data = image.data.take().unwrap_or_else(|| {
-                    tracing::error!(?id, "image does not have data");
-                    checkerboard(image.size)
-                });
+                let data = match image.data.take() {
+                    Some(v) => v,
+                    None => {
+                        if let Some(alloc) = self.map.get(&id) {
+                            return *alloc;
+                        }
+
+                        tracing::error!(?id, "image does not have data");
+                        checkerboard(image.size)
+                    }
+                };
 
                 (image.size, data)
             }
