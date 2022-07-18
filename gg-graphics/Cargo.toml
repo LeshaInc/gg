@@ -1,0 +1,17 @@
+[package]
+name = "gg-graphics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gg-assets = { version = "0.1.0", path = "../gg-assets" }
+gg-math = { version = "0.1.0", path = "../gg-math" }
+
+async-trait = "0.1.56"
+eyre = "0.6.8"
+fontdue = "0.7.2"
+
+[dependencies.image]
+version = "0.24.2"
+default-features = false
+features = ["png"]

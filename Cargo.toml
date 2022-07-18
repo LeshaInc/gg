@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "gg-assets",
+    "gg-graphics",
+    "gg-graphics-impl",
+    "gg-main",
+    "gg-math",
+    "gg-rtti",
+]
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+debug = true
+lto = "thin"

@@ -1,0 +1,20 @@
+[package]
+name = "gg-main"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eyre = "0.6.8"
+gg-assets = { version = "0.1.0", path = "../gg-assets" }
+gg-graphics = { version = "0.1.0", path = "../gg-graphics" }
+gg-graphics-impl = { version = "0.1.0", path = "../gg-graphics-impl" }
+gg-math = { version = "0.1.0", path = "../gg-math" }
+tracing = "0.1.35"
+tracing-subscriber = "0.3.14"
+
+[dependencies.winit]
+version = "0.26.1"
+default-features = false
+features = ["x11"]
