@@ -122,13 +122,6 @@ impl Backend for BackendImpl {
         self.atlases.upload(&self.device, &self.queue);
         self.canvases.update();
 
-        self.bindings
-            .update(&self.device, &self.atlases, &self.canvases);
-
-        if self.bindings.bind_group_layout_changed() {
-            self.pipelines.recreate(&self.device, &self.bindings);
-        }
-
         let surface_texture = match self.surface.get_current_texture() {
             Ok(v) => v,
             Err(_) => {
@@ -142,6 +135,18 @@ impl Backend for BackendImpl {
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         for list in &submitted_lists {
+            let skip_view = match list.canvas.as_raw() {
+                Canvas::MainWindow => None,
+                Canvas::Texture { view, .. } => Some(view),
+            };
+
+            self.bindings
+                .update(&self.device, &self.atlases, &self.canvases, skip_view);
+
+            if self.bindings.bind_group_layout_changed() {
+                self.pipelines.recreate(&self.device, &self.bindings);
+            }
+
             self.batch_list(assets, &list);
             self.encode_pass(&mut encoder, list.canvas.as_raw(), &main_view);
         }

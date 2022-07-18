@@ -8,6 +8,9 @@ struct VertexOutput {
 @group(0) @binding(0)
 var textures: binding_array<texture_2d<f32>>;
 
+@group(0) @binding(1)
+var linear_sampler: sampler;
+
 @vertex
 fn vs_main(
     @location(0) pos: vec2<f32>,
@@ -25,5 +28,5 @@ fn vs_main(
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    return vertex.color;
+    return vertex.color * textureSample(textures[vertex.tex_id], linear_sampler, vertex.tex);
 }

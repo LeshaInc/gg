@@ -4,9 +4,9 @@ use std::sync::atomic::Ordering;
 use wgpu::util::DeviceExt;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, Device, Extent3d, Queue, ShaderStages,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
-    TextureView, TextureViewDimension,
+    BindGroupLayoutEntry, BindingResource, BindingType, Device, Extent3d, Queue, Sampler,
+    SamplerBindingType, SamplerDescriptor, ShaderStages, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension,
 };
 
 use crate::atlas::{AtlasId, AtlasPool};
@@ -18,6 +18,7 @@ pub struct Bindings {
     bind_group_layout: BindGroupLayout,
     bind_group_layout_changed: bool,
     bind_group: BindGroup,
+    sampler: Sampler,
     white_texture_view: TextureView,
     num_atlases: u32,
 }
@@ -29,16 +30,19 @@ impl Bindings {
         let white_texture_view = create_white_texture_view(device, queue);
         let bind_group_layout = create_bind_group_layout(device, count);
 
+        let sampler = create_sampler(device);
+
         let views = std::iter::repeat(&white_texture_view)
             .take(count as usize)
             .collect::<Vec<_>>();
-        let bind_group = create_bind_group(device, &bind_group_layout, &views);
+        let bind_group = create_bind_group(device, &bind_group_layout, &sampler, &views);
 
         Bindings {
             layout_num_textures: count,
             bind_group_layout,
             bind_group_layout_changed: false,
             bind_group,
+            sampler,
             num_atlases: 0,
             white_texture_view,
         }
@@ -71,7 +75,13 @@ impl Bindings {
         }
     }
 
-    pub fn update(&mut self, device: &Device, atlases: &AtlasPool, canvases: &Canvases) {
+    pub fn update(
+        &mut self,
+        device: &Device,
+        atlases: &AtlasPool,
+        canvases: &Canvases,
+        skip_view: Option<&TextureView>,
+    ) {
         let atlas_views = atlases.texture_views();
         let canvas_views = canvases.texture_views();
 
@@ -87,43 +97,75 @@ impl Bindings {
         let mut texture_views = Vec::with_capacity(total_count as usize);
         texture_views.push(&self.white_texture_view);
         texture_views.extend(atlas_views);
-        texture_views.extend(canvas_views);
+
+        if let Some(skip_view) = skip_view {
+            texture_views.extend(canvas_views.map(|view| {
+                if std::ptr::eq(view, skip_view) {
+                    &self.white_texture_view
+                } else {
+                    view
+                }
+            }));
+        } else {
+            texture_views.extend(canvas_views);
+        }
+
         while texture_views.len() < self.layout_num_textures as usize {
             texture_views.push(&self.white_texture_view);
         }
 
-        self.bind_group = create_bind_group(device, &self.bind_group_layout, &texture_views);
+        self.bind_group = create_bind_group(
+            device,
+            &self.bind_group_layout,
+            &self.sampler,
+            &texture_views,
+        );
     }
 }
 
 fn create_bind_group_layout(device: &Device, num_textures: u32) -> BindGroupLayout {
     device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: None,
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::FRAGMENT,
-            ty: BindingType::Texture {
-                sample_type: TextureSampleType::Float { filterable: true },
-                view_dimension: TextureViewDimension::D2,
-                multisampled: false,
+        entries: &[
+            BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: NonZeroU32::new(num_textures),
             },
-            count: NonZeroU32::new(num_textures),
-        }],
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
     })
 }
 
 fn create_bind_group(
     device: &Device,
     layout: &BindGroupLayout,
+    sampler: &Sampler,
     views: &[&TextureView],
 ) -> BindGroup {
     device.create_bind_group(&BindGroupDescriptor {
         label: None,
         layout,
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: BindingResource::TextureViewArray(views),
-        }],
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureViewArray(views),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Sampler(sampler),
+            },
+        ],
     })
 }
 
@@ -147,4 +189,8 @@ fn create_white_texture_view(device: &Device, queue: &Queue) -> TextureView {
     );
 
     texture.create_view(&Default::default())
+}
+
+fn create_sampler(device: &Device) -> Sampler {
+    device.create_sampler(&SamplerDescriptor::default())
 }
