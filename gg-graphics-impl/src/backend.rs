@@ -1,12 +1,12 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use eyre::{eyre, Result};
 use gg_assets::{Assets, Id};
 use gg_graphics::{
     Backend, Color, Command, CommandList, DrawGlyph, DrawRect, FillImage, Image, NinePatchImage,
 };
 use gg_math::{Affine2, Rect, Vec2};
+use gg_util::eyre::{eyre, Result};
 use wgpu::util::backend_bits_from_env;
 use wgpu::{
     Backends, CommandEncoder, Device, DeviceDescriptor, Features, IndexFormat, Instance, LoadOp,

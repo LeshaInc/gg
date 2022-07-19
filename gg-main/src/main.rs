@@ -4,7 +4,8 @@ use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use eyre::Result;
+use gg_util::async_trait;
+use gg_util::eyre::Result;
 use gg_assets::{
     Asset, Assets, BytesAssetLoader, DirSource, Handle, Id, LoaderCtx, LoaderRegistry,
 };
@@ -133,7 +134,7 @@ impl Asset for FileList {
 
 struct FileListLoader;
 
-#[async_trait::async_trait]
+#[async_trait]
 impl BytesAssetLoader<FileList> for FileListLoader {
     async fn load(&self, _: &mut LoaderCtx, bytes: Vec<u8>) -> Result<FileList> {
         let mut files = Vec::new();

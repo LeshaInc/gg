@@ -4,18 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-gg-rtti = { version = "0.1.0", path = "../gg-rtti" }
+gg-util = { version = "0.1.0", path = "../gg-util" }
 
-ahash = "0.7.6"
-async-trait = "0.1.56"
-eyre = "0.6.8"
-parking_lot = "0.12.1"
-smallvec = "1.9.0"
-tracing = "0.1.35"
-serde = "1.0.139"
-serde_json = "1.0.82"
 crossbeam-channel = "0.5.5"
 notify = "4.0.17"
+serde = "1.0.139"
+serde_json = "1.0.82"
+smallvec = "1.9.0"
+tracing = "0.1.35"
 
 [dependencies.tokio]
 version = "1.19.2"

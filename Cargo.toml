@@ -7,7 +7,7 @@ members = [
     "gg-graphics-impl",
     "gg-main",
     "gg-math",
-    "gg-rtti",
+    "gg-util",
 ]
 
 [profile.dev]

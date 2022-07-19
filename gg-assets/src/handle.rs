@@ -3,7 +3,7 @@ use std::hash::{self, Hash};
 use std::marker::PhantomData;
 use std::sync::{Arc, Weak};
 
-use gg_rtti::TypeId;
+use gg_util::rtti::{type_name_of_id, TypeId};
 
 use crate::command::CommandSender;
 use crate::id::{Id, UntypedId};
@@ -131,7 +131,7 @@ impl UntypedHandle {
 
 impl Debug for UntypedHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(type_name) = gg_rtti::type_name_of_id(self.ty()) {
+        if let Some(type_name) = type_name_of_id(self.ty()) {
             write!(f, "{}({})", type_name, self.id().0)
         } else {
             write!(f, "{}", self.id().0)

@@ -1,8 +1,8 @@
-use async_trait::async_trait;
-use eyre::{eyre, Result};
 use fontdue::FontSettings;
 use gg_assets::{Asset, BytesAssetLoader, LoaderCtx, LoaderRegistry};
 use gg_math::Vec2;
+use gg_util::async_trait;
+use gg_util::eyre::{eyre, Result};
 
 #[derive(Clone, Debug)]
 pub struct Font {

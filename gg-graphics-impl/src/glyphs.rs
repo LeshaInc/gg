@@ -1,6 +1,6 @@
 use std::hash::{Hash, Hasher};
 
-use ahash::AHashMap;
+use gg_util::ahash::AHashMap;
 use gg_assets::{Assets, Id};
 use gg_graphics::{Font, GlyphIndex, GlyphMetrics};
 use gg_math::Rect;

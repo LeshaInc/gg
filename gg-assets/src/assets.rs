@@ -2,9 +2,9 @@ use std::ops::{Index, IndexMut};
 use std::path::Path;
 use std::sync::Arc;
 
-use ahash::AHashSet;
-use gg_rtti::TypeId;
-use parking_lot::{Mutex, RwLock};
+use gg_util::ahash::AHashSet;
+use gg_util::parking_lot::{Mutex, RwLock};
+use gg_util::rtti::TypeId;
 
 use crate::command::{new_command_channel, CommandReceiver};
 use crate::event::{EventKind, EventSenders};
@@ -58,7 +58,7 @@ impl Assets {
     }
 
     pub fn insert<A: Asset>(&mut self, asset: A) -> Handle<A> {
-        gg_rtti::register::<A>();
+        gg_util::rtti::register::<A>();
         let handle = self.shared.handle_allocator.alloc();
         self.storage.insert(handle.id(), asset);
         self.shared.send_event(EventKind::Created, handle.id());
@@ -66,7 +66,7 @@ impl Assets {
     }
 
     pub fn insert_defer<A: Asset>(&self, asset: A) -> Handle<A> {
-        gg_rtti::register::<A>();
+        gg_util::rtti::register::<A>();
         let handle = self.shared.handle_allocator.alloc();
         self.shared.command_sender.insert(handle.id(), asset);
         handle

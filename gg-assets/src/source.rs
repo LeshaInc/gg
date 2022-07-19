@@ -6,9 +6,9 @@ use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use eyre::{Result, WrapErr};
+use gg_util::eyre::{Result, WrapErr};
+use gg_util::parking_lot::Mutex;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use parking_lot::Mutex;
 use tracing::error;
 
 pub trait Source: Send + Sync + Debug + 'static {

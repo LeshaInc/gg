@@ -2,8 +2,8 @@ use std::fmt::{self, Debug};
 use std::path::Path;
 use std::sync::Arc;
 
-use ahash::{AHashMap, AHashSet};
-use gg_rtti::TypeId;
+use gg_util::ahash::{AHashMap, AHashSet};
+use gg_util::rtti::TypeId;
 use smallvec::SmallVec;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 

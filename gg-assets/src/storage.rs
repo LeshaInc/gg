@@ -2,8 +2,8 @@ use std::any::Any;
 use std::cell::UnsafeCell;
 use std::fmt::{self, Debug};
 
-use ahash::AHashMap;
-use gg_rtti::TypeId;
+use gg_util::ahash::AHashMap;
+use gg_util::rtti::TypeId;
 
 use crate::id::{Id, UntypedId};
 use crate::Asset;

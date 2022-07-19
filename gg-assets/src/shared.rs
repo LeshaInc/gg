@@ -1,9 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use ahash::AHashSet;
-use gg_rtti::TypeId;
-use parking_lot::{Mutex, RwLock};
+use gg_util::ahash::AHashSet;
+use gg_util::parking_lot::{Mutex, RwLock};
+use gg_util::rtti::TypeId;
 use tracing::trace;
 
 use crate::command::CommandSender;
@@ -67,7 +67,7 @@ impl SharedData {
         P: AsRef<Path>,
     {
         if self.initialized_assets.lock().insert(TypeId::of::<A>()) {
-            gg_rtti::register::<A>();
+            gg_util::rtti::register::<A>();
             self.loaders.write().insert_asset_loaders::<A>();
         }
 
@@ -96,10 +96,10 @@ impl SharedData {
         A: Asset,
         I: Input,
     {
-        gg_rtti::register::<I>();
+        gg_util::rtti::register::<I>();
 
         if self.initialized_assets.lock().insert(TypeId::of::<A>()) {
-            gg_rtti::register::<A>();
+            gg_util::rtti::register::<A>();
             self.loaders.write().insert_asset_loaders::<A>();
         }
 
@@ -122,8 +122,8 @@ impl SharedData {
         I: Input,
         L: AssetLoader<A, Input = I>,
     {
-        gg_rtti::register::<A>();
-        gg_rtti::register::<I>();
+        gg_util::rtti::register::<A>();
+        gg_util::rtti::register::<I>();
 
         let input = Box::new(input);
         let loader = AssetLoaderObject::new(loader);

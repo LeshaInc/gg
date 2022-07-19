@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use eyre::Result;
+use gg_util::eyre::Result;
 use tokio::sync::oneshot;
 
 use crate::asset_set::AssetSet;

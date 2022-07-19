@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use eyre::{bail, Result};
-use gg_rtti::TypeId;
+use gg_util::async_trait;
+use gg_util::eyre::{bail, Result};
+use gg_util::rtti::TypeId;
 use serde::de::DeserializeOwned;
 
 use crate::storage::AnyAsset;
@@ -73,8 +73,8 @@ impl AssetLoaderObject {
         A: Asset,
         L: AssetLoader<A>,
     {
-        gg_rtti::register::<A>();
-        gg_rtti::register::<L>();
+        gg_util::rtti::register::<A>();
+        gg_util::rtti::register::<L>();
 
         AssetLoaderObject {
             ty: TypeId::of::<L>(),

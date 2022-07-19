@@ -1,5 +1,5 @@
-use ahash::AHashMap;
-use gg_rtti::TypeId;
+use gg_util::ahash::AHashMap;
+use gg_util::rtti::TypeId;
 use smallvec::SmallVec;
 
 use crate::loader::AssetLoaderObject;
@@ -59,7 +59,7 @@ pub struct LoaderRegistry {
 
 impl LoaderRegistry {
     pub fn add<A: Asset, L: AssetLoader<A>>(&mut self, loader: L) {
-        gg_rtti::register::<L>();
+        gg_util::rtti::register::<L>();
         self.loaders.insert(AssetLoaderObject::new(loader));
     }
 }

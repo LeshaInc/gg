@@ -1,5 +1,5 @@
 use crossbeam_channel::{Receiver, Sender};
-use gg_rtti::TypeId;
+use gg_util::rtti::TypeId;
 
 use crate::event::EventKind;
 use crate::id::UntypedId;

@@ -7,15 +7,13 @@ edition = "2021"
 gg-assets = { version = "0.1.0", path = "../gg-assets" }
 gg-graphics = { version = "0.1.0", path = "../gg-graphics" }
 gg-math = { version = "0.1.0", path = "../gg-math" }
+gg-util = { version = "0.1.0", path = "../gg-util" }
 
 guillotiere = "0.6.2"
-wgpu = "0.13.1"
-ahash = "0.7.6"
-tracing = "0.1.35"
 pollster = "0.2.5"
-eyre = "0.6.8"
+tracing = "0.1.35"
+wgpu = "0.13.1"
 
 [dependencies.winit]
 version = "0.26.1"
 default-features = false
-features = ["x11"]

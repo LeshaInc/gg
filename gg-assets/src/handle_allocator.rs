@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use gg_rtti::TypeId;
+use gg_util::rtti::TypeId;
 
 use crate::command::CommandSender;
 use crate::handle::UntypedHandle;

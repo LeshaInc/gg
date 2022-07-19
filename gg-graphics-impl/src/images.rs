@@ -1,4 +1,4 @@
-use ahash::AHashMap;
+use gg_util::ahash::AHashMap;
 use gg_assets::{Assets, EventKind, EventReceiver, Id};
 use gg_graphics::Image;
 use gg_math::{Rect, Vec2};

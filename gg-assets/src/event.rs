@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use ahash::AHashMap;
 use crossbeam_channel::{Receiver, Sender};
-use gg_rtti::TypeId;
+use gg_util::ahash::AHashMap;
+use gg_util::rtti::TypeId;
 
 use crate::id::UntypedId;
 use crate::{Asset, Id};
