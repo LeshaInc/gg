@@ -6,8 +6,7 @@ use gg_math::{Rect, Vec2};
 use wgpu::{Device, Queue, TextureFormat, TextureView};
 
 pub use self::allocator::{
-    Allocation, AllocationId, Allocator, AllocatorKind, AnyAllocator, GridAllocator,
-    ShelfAllocator, TreeAllocator,
+    Allocation, AllocationId, Allocator, AllocatorKind, AnyAllocator, GridAllocator, TreeAllocator,
 };
 pub use self::pool::{AtlasId, AtlasPool, PoolAllocation, PoolAllocationId, PoolConfig, PoolImage};
 pub use self::texture::AtlasTexture;
