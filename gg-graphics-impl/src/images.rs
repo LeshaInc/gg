@@ -24,14 +24,8 @@ impl Images {
 
     pub fn get(&self, atlases: &AtlasPool, id: Id<Image>) -> Option<(AtlasId, Rect<f32>)> {
         let alloc = self.map.get(&id)?;
-        let atlas_id = alloc.id.atlas_id;
-        let atlas = atlases.get(atlas_id);
-        let size = atlas.size().cast::<f32>();
-        let rect = Rect::new(
-            alloc.rect.min.cast::<f32>() / size,
-            alloc.rect.max.cast::<f32>() / size,
-        );
-        Some((atlas_id, rect))
+        let rect = atlases.get_normalized_rect(&alloc);
+        Some((alloc.id.atlas_id, rect))
     }
 
     pub fn alloc(&mut self, atlases: &mut AtlasPool, assets: &mut Assets, id: Id<Image>) {

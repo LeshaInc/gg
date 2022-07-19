@@ -27,6 +27,11 @@ impl Font {
         let inner = self.inner.horizontal_line_metrics(size)?;
         Some(LineMetrics { inner })
     }
+
+    pub fn rasterize(&self, glyph: GlyphIndex, size: f32) -> (GlyphMetrics, Vec<u8>) {
+        let (metrics, data) = self.inner.rasterize_indexed(glyph.0, size);
+        (GlyphMetrics { inner: metrics }, data)
+    }
 }
 
 impl Asset for Font {
@@ -45,7 +50,7 @@ pub struct GlyphMetrics {
 
 impl GlyphMetrics {
     pub fn bitmap_offset(&self) -> Vec2<i32> {
-        Vec2::new(self.inner.xmin, self.inner.ymin)
+        Vec2::new(self.inner.xmin, -self.inner.ymin)
     }
 
     pub fn bitmap_size(&self) -> Vec2<u32> {

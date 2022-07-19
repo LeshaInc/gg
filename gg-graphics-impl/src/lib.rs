@@ -1,9 +1,10 @@
 mod atlas;
 mod backend;
 mod batch;
-mod images;
-mod canvas;
 mod bindings;
+mod canvas;
+mod glyphs;
+mod images;
 mod pipeline;
 
 pub use self::backend::BackendImpl;

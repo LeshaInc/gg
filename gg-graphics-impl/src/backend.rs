@@ -3,7 +3,7 @@ use std::sync::Arc;
 use eyre::{eyre, Result};
 use gg_assets::{Assets, Id};
 use gg_graphics::{
-    Backend, Color, Command, CommandList, DrawRect, FillImage, Image, NinePatchImage,
+    Backend, Color, Command, CommandList, DrawGlyph, DrawRect, FillImage, Image, NinePatchImage,
 };
 use gg_math::{Affine2, Rect, Vec2};
 use wgpu::util::backend_bits_from_env;
@@ -19,6 +19,7 @@ use crate::atlas::{AtlasPool, PoolConfig};
 use crate::batch::{Batcher, State, Vertex};
 use crate::bindings::Bindings;
 use crate::canvas::{Canvas, Canvases};
+use crate::glyphs::{GlyphKey, Glyphs};
 use crate::images::Images;
 use crate::pipeline::Pipelines;
 
@@ -29,6 +30,7 @@ pub struct BackendImpl {
     batcher: Batcher,
     atlases: AtlasPool,
     images: Images,
+    glyphs: Glyphs,
     canvases: Canvases,
     bindings: Bindings,
     pipelines: Pipelines,
@@ -68,6 +70,7 @@ impl BackendImpl {
         });
 
         let images = Images::new(assets, Vec2::splat(8)); // TODO: configure separately
+        let glyphs = Glyphs::new();
         let canvases = Canvases::new();
         let bindings = Bindings::new(&device, &queue);
         let pipelines = Pipelines::new(&device, &bindings);
@@ -79,6 +82,7 @@ impl BackendImpl {
             batcher,
             atlases,
             images,
+            glyphs,
             canvases,
             bindings,
             pipelines,
@@ -163,15 +167,17 @@ impl Backend for BackendImpl {
 
 impl BackendImpl {
     fn alloc_list(&mut self, assets: &mut Assets, commands: &CommandList) {
-        self.alloc_images(assets, commands);
-    }
-
-    fn alloc_images(&mut self, assets: &mut Assets, commands: &CommandList) {
         for command in &commands.list {
-            if let Command::DrawRect(rect) = command {
-                if let Some(image) = &rect.fill.image {
-                    self.alloc_fill_image(assets, image);
+            match command {
+                Command::DrawRect(rect) => {
+                    if let Some(image) = &rect.fill.image {
+                        self.alloc_fill_image(assets, image);
+                    }
                 }
+                Command::DrawGlyph(glyph) => {
+                    self.alloc_glyph(assets, glyph);
+                }
+                _ => {}
             }
         }
     }
@@ -195,6 +201,18 @@ impl BackendImpl {
                 }
             }
         }
+    }
+
+    fn alloc_glyph(&mut self, assets: &mut Assets, glyph: &DrawGlyph) {
+        self.glyphs.alloc(
+            &mut self.atlases,
+            assets,
+            GlyphKey {
+                font: glyph.font,
+                glyph: glyph.glyph,
+                size: glyph.size,
+            },
+        );
     }
 
     fn configure_surface(&mut self) {
@@ -227,25 +245,37 @@ impl BackendImpl {
 
         for command in &commands.list {
             match command {
-                Command::Save => self.batcher.save_state(),
-                Command::Restore => self.batcher.restore_state(),
-                Command::SetScissor(rect) => self
-                    .batcher
-                    .modify_state(|state| state.scissor = rect.intersect(&full_scissor)),
-                Command::ClearScissor => self
-                    .batcher
-                    .modify_state(|state| state.scissor = full_scissor),
-                &Command::PreTransform(v) => self.batcher.modify_state(|state| {
-                    state.view = state.view * v;
-                    state.view_proj = state.proj * state.view;
-                }),
-                &Command::PostTransform(v) => self.batcher.modify_state(|state| {
-                    state.view = v * state.view;
-                    state.view_proj = state.proj * state.view;
-                }),
-                Command::DrawRect(rect) => self.draw_rect(assets, rect),
-                Command::DrawGlyph(_) => {
-                    todo!()
+                Command::Save => {
+                    self.batcher.save_state();
+                }
+                Command::Restore => {
+                    self.batcher.restore_state();
+                }
+                Command::SetScissor(rect) => {
+                    self.batcher
+                        .modify_state(|state| state.scissor = rect.intersect(&full_scissor));
+                }
+                Command::ClearScissor => {
+                    self.batcher
+                        .modify_state(|state| state.scissor = full_scissor);
+                }
+                &Command::PreTransform(v) => {
+                    self.batcher.modify_state(|state| {
+                        state.view = state.view * v;
+                        state.view_proj = state.proj * state.view;
+                    });
+                }
+                &Command::PostTransform(v) => {
+                    self.batcher.modify_state(|state| {
+                        state.view = v * state.view;
+                        state.view_proj = state.proj * state.view;
+                    });
+                }
+                Command::DrawRect(rect) => {
+                    self.draw_rect(assets, rect);
+                }
+                Command::DrawGlyph(glyph) => {
+                    self.draw_glyph(glyph);
                 }
             }
         }
@@ -346,6 +376,29 @@ impl BackendImpl {
             Vec2::new(inner.min.x, outer.max.y),
         );
         self.draw_textured_rect(rect, color, image.bottom_left.id());
+    }
+
+    fn draw_glyph(&mut self, glyph: &DrawGlyph) {
+        let alloc = self.glyphs.get(
+            &self.atlases,
+            GlyphKey {
+                font: glyph.font,
+                glyph: glyph.glyph,
+                size: glyph.size,
+            },
+        );
+
+        if let Some((metrics, atlas_id, tex_rect)) = alloc {
+            let size = metrics.bitmap_size().cast::<f32>();
+            let offset = metrics.bitmap_offset().cast::<f32>() + Vec2::new(0.0, -size.y);
+            let rect = Rect::from_pos_extents(glyph.pos + offset, size);
+            let tex_id = self.bindings.atlas_index(atlas_id);
+            let color = Color {
+                r: glyph.color.r + 2.0,
+                ..glyph.color
+            };
+            self.emit_rect(rect, tex_rect, tex_id, color);
+        }
     }
 
     fn emit_rect(&mut self, rect: Rect<f32>, tex_rect: Rect<f32>, tex_id: u32, color: Color) {

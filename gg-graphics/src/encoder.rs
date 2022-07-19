@@ -1,6 +1,6 @@
 use gg_math::{Affine2, Rect};
 
-use crate::{Canvas, Color, Command, CommandList, DrawRect, Fill, FillImage};
+use crate::{Canvas, Color, Command, CommandList, DrawGlyph, DrawRect, Fill, FillImage};
 
 #[derive(Clone, Debug)]
 pub struct GraphicsEncoder {
@@ -55,6 +55,10 @@ impl GraphicsEncoder {
                 },
             },
         }
+    }
+
+    pub fn glyph(&mut self, glyph: DrawGlyph) {
+        self.command(Command::DrawGlyph(glyph));
     }
 
     pub fn finish(self) -> CommandList {

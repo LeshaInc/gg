@@ -28,5 +28,13 @@ fn vs_main(
 
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    return vertex.color * textureSample(textures[vertex.tex_id], linear_sampler, vertex.tex);
+    let col = vertex.color;
+
+    let tex = textures[vertex.tex_id];
+    let tex_col = textureSample(tex, linear_sampler, vertex.tex);
+
+    let glyph_factor = f32(col.r > 1.5);
+    let glyph_color = vec4<f32>(col.r - 2.0, col.g, col.b, tex_col.r);
+
+    return mix(col * tex_col, glyph_color, glyph_factor);
 }

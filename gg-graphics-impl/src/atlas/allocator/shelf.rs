@@ -30,9 +30,10 @@ impl Allocator for ShelfAllocator {
 
     fn alloc(&mut self, size: Vec2<u32>) -> Option<Allocation> {
         let alloc = self.inner.allocate(to_size(size))?;
+        let rect = from_rect(alloc.rectangle);
         Some(Allocation {
             id: AllocationId(alloc.id.serialize()),
-            rect: from_rect(alloc.rectangle),
+            rect: Rect::from_pos_extents(rect.min, size),
         })
     }
 
