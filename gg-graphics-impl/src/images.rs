@@ -24,7 +24,7 @@ impl Images {
 
     pub fn get(&self, atlases: &AtlasPool, id: Id<Image>) -> Option<(AtlasId, Rect<f32>)> {
         let alloc = self.map.get(&id)?;
-        let rect = atlases.get_normalized_rect(&alloc);
+        let rect = atlases.get_normalized_rect(alloc);
         Some((alloc.id.atlas_id, rect))
     }
 

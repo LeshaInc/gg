@@ -17,6 +17,7 @@ pub enum Command {
     ClearScissor,
     PreTransform(Affine2<f32>),
     PostTransform(Affine2<f32>),
+    Clear(Color),
     DrawRect(DrawRect),
     DrawGlyph(DrawGlyph),
 }

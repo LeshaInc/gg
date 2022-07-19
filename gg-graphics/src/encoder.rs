@@ -44,6 +44,10 @@ impl GraphicsEncoder {
         self.command(Command::PostTransform(affine));
     }
 
+    pub fn clear(&mut self, color: impl Into<Color>) {
+        self.command(Command::Clear(color.into()));
+    }
+
     pub fn rect(&mut self, rect: impl Into<Rect<f32>>) -> RectEncoder<'_> {
         RectEncoder {
             encoder: self,

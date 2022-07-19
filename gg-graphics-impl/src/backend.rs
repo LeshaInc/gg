@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use eyre::{eyre, Result};
@@ -153,8 +154,8 @@ impl Backend for BackendImpl {
                 self.pipelines.recreate(&self.device, &self.bindings);
             }
 
-            self.batch_list(assets, list);
-            self.encode_pass(&mut encoder, list.canvas.as_raw(), &main_view);
+            let clear_color = self.batch_list(assets, list);
+            self.encode_pass(&mut encoder, clear_color, list.canvas.as_raw(), &main_view);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -228,7 +229,7 @@ impl BackendImpl {
         )
     }
 
-    fn batch_list(&mut self, assets: &Assets, commands: &CommandList) {
+    fn batch_list(&mut self, assets: &Assets, commands: &CommandList) -> Option<Color> {
         let resolution = match *commands.canvas.as_raw() {
             Canvas::MainWindow => self.resolution,
             Canvas::Texture { size, .. } => size,
@@ -243,7 +244,16 @@ impl BackendImpl {
             proj,
         });
 
-        for command in &commands.list {
+        let it = commands.list.iter().enumerate();
+        let (start_idx, clear_color) = it
+            .flat_map(|(i, cmd)| match cmd {
+                Command::Clear(v) => Some((i + 1, Some(*v))),
+                _ => None,
+            })
+            .next()
+            .unwrap_or((0, None));
+
+        for command in &commands.list[start_idx..] {
             match command {
                 Command::Save => {
                     self.batcher.save_state();
@@ -271,6 +281,7 @@ impl BackendImpl {
                         state.view_proj = state.proj * state.view;
                     });
                 }
+                Command::Clear(_) => {}
                 Command::DrawRect(rect) => {
                     self.draw_rect(assets, rect);
                 }
@@ -281,6 +292,7 @@ impl BackendImpl {
         }
 
         self.batcher.flush();
+        clear_color
     }
 
     fn draw_rect(&mut self, assets: &Assets, rect: &DrawRect) {
@@ -419,15 +431,25 @@ impl BackendImpl {
     fn encode_pass(
         &mut self,
         encoder: &mut CommandEncoder,
+        clear_color: Option<Color>,
         canvas: &Canvas,
         main_view: &TextureView,
     ) {
         let vbuf = self.batcher.create_vertex_buffer(&self.device);
         let ibuf = self.batcher.create_index_buffer(&self.device);
 
-        let view = match canvas {
-            Canvas::MainWindow => main_view,
-            Canvas::Texture { view, .. } => view,
+        let (view, clear_color) = match canvas {
+            Canvas::MainWindow => (main_view, clear_color.or(Some(Color::BLACK))),
+            Canvas::Texture {
+                view, has_cleared, ..
+            } => {
+                if has_cleared.load(Ordering::SeqCst) {
+                    (view, clear_color)
+                } else {
+                    has_cleared.store(true, Ordering::SeqCst);
+                    (view, clear_color.or(Some(Color::BLACK)))
+                }
+            }
         };
 
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -436,7 +458,15 @@ impl BackendImpl {
                 view,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(wgpu::Color::BLACK),
+                    load: match clear_color {
+                        Some(col) => LoadOp::Clear(wgpu::Color {
+                            r: col.r as f64,
+                            g: col.g as f64,
+                            b: col.b as f64,
+                            a: col.a as f64,
+                        }),
+                        None => LoadOp::Load,
+                    },
                     store: true,
                 },
             })],
