@@ -1,8 +1,12 @@
+use std::io::BufRead;
+use std::path::PathBuf;
+
 use eyre::Result;
-use gg_assets::{Assets, DirSource, Handle};
+use gg_assets::{Asset, Assets, BytesAssetLoader, DirSource, Handle, LoaderCtx, LoaderRegistry};
 use gg_graphics::{Backend, GraphicsEncoder, Image};
 use gg_graphics_impl::BackendImpl;
-use gg_math::{Affine2, Rect, Rotation2, Vec2};
+use gg_math::Vec2;
+use rand::Rng;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -16,19 +20,18 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
-    let ferris: Handle<Image> = assets.load("ferris.png");
+    let pokemon_list: Handle<FileList> = assets.load("pokemon/list.txt");
+    let mut pokemons = Vec::new();
 
     let window = WindowBuilder::new()
         .with_title("A fantastic window!")
         .with_inner_size(LogicalSize::new(128.0, 128.0))
         .build(&event_loop)?;
 
-    let mut backend = BackendImpl::new(&window)?;
+    let mut backend = BackendImpl::new(&assets, &window)?;
     let main_canvas = backend.get_main_canvas();
 
-    let canvas = backend.create_canvas(Vec2::new(200, 200));
-
-    let mut time: f32 = 0.0;
+    let mut rng = rand::thread_rng();
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -38,49 +41,61 @@ fn main() -> Result<()> {
         Event::MainEventsCleared => {
             assets.maintain();
 
+            let mut to_load = Vec::new();
+            if let Some(list) = assets.get(&pokemon_list) {
+                for _ in 0..1000 {
+                    let idx = rng.gen_range(0..list.files.len());
+                    let file = &list.files[idx];
+                    to_load.push(file);
+                }
+            }
+
+            for file in to_load {
+                let pokemon: Handle<Image> = assets.load(&file);
+                let pos = Vec2::new(rng.gen_range(-50.0..1920.0), rng.gen_range(-50.0..1080.0));
+                pokemons.push((pokemon, pos));
+            }
+
             let size = window.inner_size();
             backend.resize(Vec2::new(size.width, size.height));
 
-            let mut encoder = GraphicsEncoder::new(&canvas);
-
-            for v in 0..10 {
-                let v = v as f32;
-                encoder.save();
-                encoder.pre_transform(Affine2::rotation(Rotation2::from_angle((time + v).sin())));
-
-                encoder
-                    .rect([50.0, 50.0, 100.0, 100.0])
-                    .fill_color([(time + v).cos() * 0.5 + 0.5; 3]);
-                encoder.restore();
-            }
-
-            backend.submit(encoder.finish());
-
             let mut encoder = GraphicsEncoder::new(&main_canvas);
 
-            for x in 0..100 {
-                let x = x as f32;
-                let c = x / 100.0;
+            for (img, pos) in &pokemons {
                 encoder
-                    .rect([x * 10.0, 0.0, 10.0, 600.0])
-                    .fill_color([c, c, c]);
+                    .rect([pos.x, pos.y, 64.0, 64.0])
+                    .fill_image(img)
+                    .fill_color([1.0, 1.0, 1.0, 0.1]);
             }
 
-            encoder
-                .rect([200.0, 200.0, 200.0, 200.0])
-                .fill_image(&canvas);
-
-            encoder
-                .rect([400.0, 100.0, 230.0, 155.0])
-                .fill_image(&ferris);
-
             backend.submit(encoder.finish());
-
             backend.present(&mut assets);
 
-            time += 1.0 / 60.0;
             *control_flow = ControlFlow::Poll;
         }
         _ => (),
     });
+}
+
+struct FileList {
+    files: Vec<PathBuf>,
+}
+
+impl Asset for FileList {
+    fn register_loaders(registry: &mut LoaderRegistry) {
+        registry.add(FileListLoader);
+    }
+}
+
+struct FileListLoader;
+
+#[async_trait::async_trait]
+impl BytesAssetLoader<FileList> for FileListLoader {
+    async fn load(&self, _: &mut LoaderCtx, bytes: Vec<u8>) -> Result<FileList> {
+        let mut files = Vec::new();
+        for line in bytes.lines() {
+            files.push(PathBuf::from(line?));
+        }
+        Ok(FileList { files })
+    }
 }

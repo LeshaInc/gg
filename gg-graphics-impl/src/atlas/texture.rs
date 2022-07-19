@@ -106,6 +106,6 @@ fn create_texture(device: &Device, size: Vec2<u32>, format: TextureFormat) -> wg
         sample_count: 1,
         dimension: TextureDimension::D2,
         format,
-        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
     })
 }

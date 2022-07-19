@@ -1,6 +1,7 @@
 mod asset_set;
 mod assets;
 mod command;
+mod event;
 mod flag;
 mod handle;
 mod handle_allocator;
@@ -17,6 +18,7 @@ mod task;
 
 pub use self::asset_set::{AssetSet, AssetSetAccessor};
 pub use self::assets::Assets;
+pub use self::event::{Event, EventKind, EventReceiver};
 pub use self::handle::{Handle, WeakHandle};
 pub use self::id::Id;
 pub use self::loader::{AssetLoader, BytesAssetLoader, Input, JsonAssetLoader};

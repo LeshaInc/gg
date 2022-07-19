@@ -1,6 +1,7 @@
 use crossbeam_channel::{Receiver, Sender};
 use gg_rtti::TypeId;
 
+use crate::event::EventKind;
 use crate::id::UntypedId;
 use crate::storage::AnyAsset;
 use crate::{Asset, Assets, Id};
@@ -15,7 +16,14 @@ impl Command {
     pub fn execute(self, assets: &mut Assets) {
         match self {
             Command::Insert(id, ty, value) => {
+                let event_kind = if assets.storage.contains_untyped(id, ty) {
+                    EventKind::Updated
+                } else {
+                    EventKind::Created
+                };
+
                 assets.storage.insert_any(id, ty, value);
+                assets.shared.send_event_untyped(event_kind, id, ty);
 
                 let meta_storage = assets.shared.metadata.read();
                 if let Some(meta) = meta_storage.get(id) {
@@ -26,6 +34,7 @@ impl Command {
             Command::Remove(id, ty) => {
                 assets.storage.remove(id, ty);
                 assets.shared.metadata.write().remove(id);
+                assets.shared.send_event_untyped(EventKind::Removed, id, ty);
             }
 
             Command::Closure(closure) => {

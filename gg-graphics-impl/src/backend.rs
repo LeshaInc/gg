@@ -37,7 +37,7 @@ pub struct BackendImpl {
 }
 
 impl BackendImpl {
-    pub fn new(window: &Window) -> Result<BackendImpl> {
+    pub fn new(assets: &Assets, window: &Window) -> Result<BackendImpl> {
         let backend = backend_bits_from_env().unwrap_or(Backends::PRIMARY);
         let instance = Instance::new(backend);
         let surface = unsafe { instance.create_surface(window) };
@@ -64,10 +64,10 @@ impl BackendImpl {
 
         let batcher = Batcher::new();
         let atlases = AtlasPool::new(PoolConfig {
-            max_size: Vec2::splat(limits.max_texture_dimension_2d),
+            max_size: Vec2::splat(limits.max_texture_dimension_2d.min(8192)),
         });
 
-        let images = Images::new(Vec2::splat(8));
+        let images = Images::new(assets, Vec2::splat(8)); // TODO: configure separately
         let canvases = Canvases::new();
         let bindings = Bindings::new(&device, &queue);
         let pipelines = Pipelines::new(&device, &bindings);
@@ -115,8 +115,10 @@ impl Backend for BackendImpl {
     fn present(&mut self, assets: &mut Assets) {
         let submitted_lists = std::mem::take(&mut self.submitted_lists);
 
+        self.images.cleanup(&mut self.atlases);
+
         for list in &submitted_lists {
-            self.alloc_list(assets, &list);
+            self.alloc_list(assets, list);
         }
 
         self.atlases.upload(&self.device, &self.queue);
@@ -147,7 +149,7 @@ impl Backend for BackendImpl {
                 self.pipelines.recreate(&self.device, &self.bindings);
             }
 
-            self.batch_list(assets, &list);
+            self.batch_list(assets, list);
             self.encode_pass(&mut encoder, list.canvas.as_raw(), &main_view);
         }
 
@@ -392,7 +394,7 @@ impl BackendImpl {
         pass.set_index_buffer(ibuf.slice(..), IndexFormat::Uint32);
 
         pass.set_bind_group(0, self.bindings.bind_group(), &[]);
-        pass.set_pipeline(&self.pipelines.pipeline());
+        pass.set_pipeline(self.pipelines.pipeline());
 
         for batch in self.batcher.batches() {
             pass.set_scissor_rect(
@@ -415,7 +417,7 @@ fn get_image_size(assets: &Assets, id: Id<Image>) -> Vec2<f32> {
     assets
         .get_by_id(id)
         .map(|img| img.size.cast::<f32>())
-        .unwrap_or(Vec2::zero())
+        .unwrap_or_else(Vec2::zero)
 }
 
 fn projection_matrix(res: Vec2<u32>) -> Affine2<f32> {

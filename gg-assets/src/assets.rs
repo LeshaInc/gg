@@ -6,6 +6,7 @@ use gg_rtti::TypeId;
 use parking_lot::RwLock;
 
 use crate::command::{new_command_channel, CommandReceiver};
+use crate::event::{EventKind, EventSenders};
 use crate::handle_allocator::HandleAllocator;
 use crate::loader::AssetLoaderObject;
 use crate::loaders::AssetLoaders;
@@ -13,7 +14,7 @@ use crate::metadata::MetadataStorage;
 use crate::shared::SharedData;
 use crate::storage::Storage;
 use crate::task::{new_task_channel, spawn_workers};
-use crate::{Asset, AssetLoader, Handle, Id, Input, Source};
+use crate::{Asset, AssetLoader, EventReceiver, Handle, Id, Input, Source};
 
 #[derive(Debug)]
 pub struct Assets {
@@ -41,6 +42,7 @@ impl Assets {
             source,
             metadata: RwLock::new(MetadataStorage::new()),
             loaders: RwLock::new(AssetLoaders::new()),
+            event_senders: RwLock::new(EventSenders::new()),
         });
 
         spawn_workers(shared.clone(), task_receiver);
@@ -57,6 +59,7 @@ impl Assets {
         gg_rtti::register::<A>();
         let handle = self.shared.handle_allocator.alloc();
         self.storage.insert(handle.id(), asset);
+        self.shared.send_event(EventKind::Created, handle.id());
         handle
     }
 
@@ -113,6 +116,10 @@ impl Assets {
 
     pub fn get_by_id_mut<A: Asset>(&mut self, id: Id<A>) -> Option<&mut A> {
         self.storage.get_mut(id)
+    }
+
+    pub fn subscribe<A: Asset>(&self) -> EventReceiver<A> {
+        self.shared.event_senders.write().subscribe()
     }
 
     pub fn add_loader<A, L>(&self, loader: L)

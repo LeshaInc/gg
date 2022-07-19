@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use gg_assets::{Assets, Id};
+use gg_assets::{Assets, EventKind, EventReceiver, Id};
 use gg_graphics::Image;
 use gg_math::{Rect, Vec2};
 use wgpu::TextureFormat;
@@ -10,13 +10,15 @@ use crate::atlas::{AllocatorKind, AtlasId, AtlasPool, PoolAllocation, PoolImage}
 pub struct Images {
     cell_size: Vec2<u16>,
     map: AHashMap<Id<Image>, PoolAllocation>,
+    event_receiver: EventReceiver<Image>,
 }
 
 impl Images {
-    pub fn new(cell_size: Vec2<u16>) -> Images {
+    pub fn new(assets: &Assets, cell_size: Vec2<u16>) -> Images {
         Images {
             cell_size,
             map: AHashMap::new(),
+            event_receiver: assets.subscribe(),
         }
     }
 
@@ -32,58 +34,61 @@ impl Images {
         Some((atlas_id, rect))
     }
 
-    pub fn alloc(
-        &mut self,
-        atlases: &mut AtlasPool,
-        assets: &mut Assets,
-        id: Id<Image>,
-    ) -> PoolAllocation {
+    pub fn alloc(&mut self, atlases: &mut AtlasPool, assets: &mut Assets, id: Id<Image>) {
         let (size, data) = match assets.get_by_id_mut(id) {
             Some(image) => {
                 let data = match image.data.take() {
                     Some(v) => v,
                     None => {
-                        if let Some(alloc) = self.map.get(&id) {
-                            return *alloc;
+                        if self.map.contains_key(&id) {
+                            return;
                         }
 
-                        tracing::error!(?id, "image does not have data");
                         checkerboard(image.size)
                     }
                 };
 
                 (image.size, data)
             }
-
             None => {
-                let size = Vec2::new(32, 32);
+                if self.map.contains_key(&id) {
+                    return;
+                }
+
+                let size = Vec2::new(16, 16);
                 (size, checkerboard(size))
             }
         };
 
-        let alloc = self.map.entry(id).or_insert_with(|| {
-            let preferred_allocator = if size == self.cell_size.cast() {
-                Some(AllocatorKind::Grid {
-                    cell_size: self.cell_size,
-                })
-            } else {
-                None
-            };
-
-            atlases.alloc(PoolImage {
-                size,
-                data,
-                format: TextureFormat::Rgba8UnormSrgb,
-                preferred_allocator,
+        let preferred_allocator = if size == self.cell_size.cast() {
+            Some(AllocatorKind::Grid {
+                cell_size: self.cell_size,
             })
+        } else {
+            None
+        };
+
+        if let Some(old_alloc) = self.map.get(&id) {
+            atlases.free(old_alloc.id);
+        }
+
+        let new_alloc = atlases.alloc(PoolImage {
+            size,
+            data,
+            format: TextureFormat::Rgba8UnormSrgb,
+            preferred_allocator,
         });
 
-        *alloc
+        self.map.insert(id, new_alloc);
     }
 
-    pub fn free(&mut self, atlases: &mut AtlasPool, id: Id<Image>) {
-        if let Some(alloc) = self.map.remove(&id) {
-            atlases.free(alloc.id);
+    pub fn cleanup(&mut self, atlases: &mut AtlasPool) {
+        for event in self.event_receiver.try_iter() {
+            if event.kind == EventKind::Removed {
+                if let Some(alloc) = self.map.remove(&event.asset) {
+                    atlases.free(alloc.id);
+                }
+            }
         }
     }
 }
@@ -98,7 +103,7 @@ fn checkerboard(size: Vec2<u32>) -> Vec<u8> {
             pixel[2] = 255;
         }
 
-        pixel[3] = 0;
+        pixel[3] = 255;
 
         pos.x += 1;
         if pos.x == size.x {

@@ -86,7 +86,7 @@ impl Bindings {
         let canvas_views = canvases.texture_views();
 
         self.num_atlases = atlas_views.len() as u32;
-        let total_count = self.num_atlases + canvas_views.len() as u32;
+        let total_count = 1 + self.num_atlases + canvas_views.len() as u32;
 
         if total_count > self.layout_num_textures {
             self.bind_group_layout = create_bind_group_layout(device, total_count);

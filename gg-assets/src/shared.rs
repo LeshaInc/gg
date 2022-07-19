@@ -6,14 +6,16 @@ use parking_lot::RwLock;
 use tracing::trace;
 
 use crate::command::CommandSender;
+use crate::event::{EventKind, EventSenders};
 use crate::handle::UntypedHandle;
 use crate::handle_allocator::HandleAllocator;
+use crate::id::UntypedId;
 use crate::loader::AssetLoaderObject;
 use crate::loaders::AssetLoaders;
 use crate::metadata::MetadataStorage;
 use crate::sync_any::SyncAny;
 use crate::task::TaskSender;
-use crate::{Asset, AssetLoader, Handle, Input, Source};
+use crate::{Asset, AssetLoader, Handle, Id, Input, Source};
 
 #[derive(Debug)]
 pub struct SharedData {
@@ -23,9 +25,18 @@ pub struct SharedData {
     pub source: Box<dyn Source>,
     pub metadata: RwLock<MetadataStorage>,
     pub loaders: RwLock<AssetLoaders>,
+    pub event_senders: RwLock<EventSenders>,
 }
 
 impl SharedData {
+    pub fn send_event<A: Asset>(&self, kind: EventKind, id: Id<A>) {
+        self.event_senders.read().send(kind, id)
+    }
+
+    pub fn send_event_untyped(&self, kind: EventKind, id: UntypedId, ty: TypeId) {
+        self.event_senders.read().send_untyped(kind, id, ty)
+    }
+
     pub fn set_path(&self, handle: &UntypedHandle, path: Arc<Path>) {
         let mut metadata = self.metadata.write();
         metadata.set_path_for_handle(handle, path);
