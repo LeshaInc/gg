@@ -8,7 +8,7 @@ use eyre::Result;
 use gg_assets::{
     Asset, Assets, BytesAssetLoader, DirSource, Handle, Id, LoaderCtx, LoaderRegistry,
 };
-use gg_graphics::{Backend, DrawGlyph, Font, GraphicsEncoder, Image};
+use gg_graphics::{Backend, DrawGlyph, Font, FontLoader, GraphicsEncoder, Image, PngLoader};
 use gg_graphics_impl::BackendImpl;
 use gg_math::Vec2;
 use rand::Rng;
@@ -27,8 +27,12 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
+    assets.add_loader(PngLoader);
+    assets.add_loader(FontLoader);
+    assets.add_loader(FileListLoader);
+
     let pokemon_list: Handle<FileList> = assets.load("pokemon/list.txt");
-    let mut pokemons = Vec::new();
+    let mut pokemons = Vec::with_capacity(1000000);
 
     let font: Handle<Font> = assets.load("OpenSans-Regular.ttf");
 
@@ -40,8 +44,11 @@ fn main() -> Result<()> {
     let mut backend = BackendImpl::new(&assets, &window)?;
     let main_canvas = backend.get_main_canvas();
 
+    let offscreen_canvas = backend.create_canvas(Vec2::new(1920, 1080));
+
     let mut rng = rand::thread_rng();
     let mut fps_counter = FpsCounter::new(100);
+    let mut frame_start = Instant::now();
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -49,13 +56,11 @@ fn main() -> Result<()> {
             ..
         } => *control_flow = ControlFlow::Exit,
         Event::MainEventsCleared => {
-            let frame_start = Instant::now();
-
             assets.maintain();
 
             let mut to_load = Vec::new();
             if let Some(list) = assets.get(&pokemon_list) {
-                for _ in 0..100 {
+                for _ in 0..1000 {
                     let idx = rng.gen_range(0..list.files.len());
                     let file = &list.files[idx];
                     to_load.push(file);
@@ -71,14 +76,24 @@ fn main() -> Result<()> {
             let size = window.inner_size();
             backend.resize(Vec2::new(size.width, size.height));
 
+            let mut encoder = GraphicsEncoder::new(&offscreen_canvas);
+
+            for (img, pos) in pokemons.iter().rev().take(1000) {
+                if assets.get(img).is_some() {
+                    encoder
+                        .rect([pos.x, pos.y, 64.0, 64.0])
+                        .fill_image(img)
+                        .fill_color([1.0, 1.0, 1.0, 0.1]);
+                }
+            }
+
+            backend.submit(encoder.finish());
+
             let mut encoder = GraphicsEncoder::new(&main_canvas);
 
-            for (img, pos) in &pokemons {
-                encoder
-                    .rect([pos.x, pos.y, 64.0, 64.0])
-                    .fill_image(img)
-                    .fill_color([1.0, 1.0, 1.0, 0.1]);
-            }
+            encoder
+                .rect([0.0, 0.0, 1920.0, 1080.0])
+                .fill_image(&offscreen_canvas);
 
             let text = format!("fps: {}", fps_counter.fps());
             let pos = Vec2::new(20.0, 20.0);
@@ -93,9 +108,13 @@ fn main() -> Result<()> {
             draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
 
             backend.submit(encoder.finish());
+
             backend.present(&mut assets);
 
             fps_counter.add_sample(frame_start.elapsed());
+            frame_start = Instant::now();
+
+            window.request_redraw();
             *control_flow = ControlFlow::Poll;
         }
         _ => (),

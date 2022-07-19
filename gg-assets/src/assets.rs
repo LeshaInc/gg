@@ -2,8 +2,9 @@ use std::ops::{Index, IndexMut};
 use std::path::Path;
 use std::sync::Arc;
 
+use ahash::AHashSet;
 use gg_rtti::TypeId;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use crate::command::{new_command_channel, CommandReceiver};
 use crate::event::{EventKind, EventSenders};
@@ -43,6 +44,7 @@ impl Assets {
             metadata: RwLock::new(MetadataStorage::new()),
             loaders: RwLock::new(AssetLoaders::new()),
             event_senders: RwLock::new(EventSenders::new()),
+            initialized_assets: Mutex::new(AHashSet::new()),
         });
 
         spawn_workers(shared.clone(), task_receiver);

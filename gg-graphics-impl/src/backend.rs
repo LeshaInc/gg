@@ -113,8 +113,11 @@ impl Backend for BackendImpl {
     }
 
     fn resize(&mut self, new_resolution: Vec2<u32>) {
-        self.resolution = new_resolution;
-        self.configure_surface();
+        let old_resolution = self.resolution;
+        if old_resolution != new_resolution {
+            self.resolution = new_resolution;
+            self.configure_surface();
+        }
     }
 
     fn present(&mut self, assets: &mut Assets) {
@@ -224,7 +227,7 @@ impl BackendImpl {
                 format: TextureFormat::Bgra8UnormSrgb,
                 width: self.resolution.x,
                 height: self.resolution.y,
-                present_mode: PresentMode::AutoVsync,
+                present_mode: PresentMode::Immediate,
             },
         )
     }

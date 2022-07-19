@@ -11,8 +11,8 @@ pub use self::canvas::{Canvas, RawCanvas};
 pub use self::color::Color;
 pub use self::command::{Command, CommandList, DrawGlyph, DrawRect, Fill, FillImage};
 pub use self::encoder::GraphicsEncoder;
-pub use self::font::{Font, GlyphIndex, GlyphMetrics};
-pub use self::image::{Image, NinePatchImage};
+pub use self::font::{Font, GlyphIndex, GlyphMetrics, FontLoader};
+pub use self::image::{Image, NinePatchImage, PngLoader};
 
 // #[derive(Debug)]
 // pub struct Graphics {

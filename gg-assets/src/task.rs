@@ -19,6 +19,7 @@ use crate::LoaderCtx;
 
 pub fn spawn_workers(shared: Arc<SharedData>, mut task_receiver: TaskReceiver) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
         .thread_name_fn(|| {
             static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
             let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);

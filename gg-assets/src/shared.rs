@@ -1,8 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use ahash::AHashSet;
 use gg_rtti::TypeId;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tracing::trace;
 
 use crate::command::CommandSender;
@@ -26,6 +27,7 @@ pub struct SharedData {
     pub metadata: RwLock<MetadataStorage>,
     pub loaders: RwLock<AssetLoaders>,
     pub event_senders: RwLock<EventSenders>,
+    pub initialized_assets: Mutex<AHashSet<TypeId>>,
 }
 
 impl SharedData {
@@ -64,9 +66,10 @@ impl SharedData {
         A: Asset,
         P: AsRef<Path>,
     {
-        gg_rtti::register::<A>();
-
-        self.loaders.write().insert_asset_loaders::<A>();
+        if self.initialized_assets.lock().insert(TypeId::of::<A>()) {
+            gg_rtti::register::<A>();
+            self.loaders.write().insert_asset_loaders::<A>();
+        }
 
         let path = path.as_ref().into();
         let asset_type = TypeId::of::<A>();
@@ -76,6 +79,7 @@ impl SharedData {
 
     pub fn load_untyped(&self, path: Arc<Path>, asset_type: TypeId) -> UntypedHandle {
         let mut metadata = self.metadata.write();
+
         if let Some(handle) = metadata.find_handle_by_path(&path, asset_type) {
             return handle;
         }
@@ -92,10 +96,12 @@ impl SharedData {
         A: Asset,
         I: Input,
     {
-        gg_rtti::register::<A>();
         gg_rtti::register::<I>();
 
-        self.loaders.write().insert_asset_loaders::<A>();
+        if self.initialized_assets.lock().insert(TypeId::of::<A>()) {
+            gg_rtti::register::<A>();
+            self.loaders.write().insert_asset_loaders::<A>();
+        }
 
         let input = Box::new(input);
         let asset_type = TypeId::of::<A>();

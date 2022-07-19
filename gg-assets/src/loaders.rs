@@ -1,4 +1,4 @@
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use gg_rtti::TypeId;
 use smallvec::SmallVec;
 
@@ -7,7 +7,6 @@ use crate::{Asset, AssetLoader};
 
 #[derive(Debug, Default)]
 pub struct AssetLoaders {
-    first_time_init: AHashSet<TypeId>,
     loaders: AHashMap<TypeId, AssetLoaderObject>,
     mapping: AHashMap<MappingKey, SmallVec<[TypeId; 1]>>,
 }
@@ -24,7 +23,6 @@ impl AssetLoaders {
     }
 
     pub fn insert_asset_loaders<A: Asset>(&mut self) {
-        self.first_time_init.insert(TypeId::of::<A>());
         let loaders = std::mem::take(self);
         let mut registry = LoaderRegistry { loaders };
         A::register_loaders(&mut registry);
