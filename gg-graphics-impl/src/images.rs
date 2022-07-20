@@ -1,7 +1,7 @@
-use gg_util::ahash::AHashMap;
 use gg_assets::{Assets, EventKind, EventReceiver, Id};
 use gg_graphics::Image;
 use gg_math::{Rect, Vec2};
+use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
 
 use crate::atlas::{AllocatorKind, AtlasId, AtlasPool, PoolAllocation, PoolImage};

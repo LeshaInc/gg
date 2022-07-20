@@ -1,9 +1,9 @@
 use std::hash::{Hash, Hasher};
 
-use gg_util::ahash::AHashMap;
 use gg_assets::{Assets, Id};
 use gg_graphics::{Font, GlyphIndex, GlyphMetrics};
 use gg_math::Rect;
+use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
 
 use crate::atlas::{AtlasId, AtlasPool, PoolAllocation, PoolImage};

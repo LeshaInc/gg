@@ -5,9 +5,9 @@ use std::thread;
 
 use gg_util::eyre::{bail, eyre, Result, WrapErr};
 use gg_util::rtti::TypeId;
-use tracing::{error, instrument, trace};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::OwnedSemaphorePermit;
+use tracing::{error, instrument, trace};
 
 use crate::handle::UntypedHandle;
 use crate::loader::AssetLoaderObject;

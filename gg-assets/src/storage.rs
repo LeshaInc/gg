@@ -141,7 +141,8 @@ impl<T: Asset> AnyStorage for TypedStorage<T> {
         let v = asset.into_any();
         let type_got = TypeId::from(v.type_id());
         if let Ok(typed) = v.downcast::<T>() {
-            self.entries.insert(Id::from_untyped(id), UnsafeCell::new(*typed));
+            self.entries
+                .insert(Id::from_untyped(id), UnsafeCell::new(*typed));
         } else {
             tracing::error!(
                 type_got = ?type_got,

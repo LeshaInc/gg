@@ -4,14 +4,14 @@ use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use gg_util::async_trait;
-use gg_util::eyre::Result;
 use gg_assets::{
     Asset, Assets, BytesAssetLoader, DirSource, Handle, Id, LoaderCtx, LoaderRegistry,
 };
 use gg_graphics::{Backend, DrawGlyph, Font, FontLoader, GraphicsEncoder, Image, PngLoader};
 use gg_graphics_impl::BackendImpl;
 use gg_math::Vec2;
+use gg_util::async_trait;
+use gg_util::eyre::Result;
 use rand::Rng;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
