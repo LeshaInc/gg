@@ -1,16 +1,23 @@
 use std::hash::{Hash, Hasher};
 
 use gg_assets::{Assets, Id};
-use gg_graphics::{Font, GlyphIndex, GlyphMetrics};
-use gg_math::Rect;
+use gg_graphics::{Font, GlyphId};
+use gg_math::Vec2;
 use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
 
-use crate::atlas::{AtlasId, AtlasPool, PoolAllocation, PoolImage};
+use crate::atlas::{AtlasPool, PoolAllocation, PoolImage};
 
 #[derive(Debug, Default)]
 pub struct Glyphs {
-    map: AHashMap<GlyphKey, Option<(GlyphMetrics, PoolAllocation)>>,
+    map: AHashMap<GlyphKey, Option<Glyph>>,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Glyph {
+    pub offset: Vec2<f32>,
+    pub size: Vec2<u32>,
+    pub alloc: PoolAllocation,
 }
 
 impl Glyphs {
@@ -18,15 +25,8 @@ impl Glyphs {
         Glyphs::default()
     }
 
-    pub fn get(
-        &self,
-        atlases: &AtlasPool,
-        key: GlyphKey,
-    ) -> Option<(GlyphMetrics, AtlasId, Rect<f32>)> {
-        let entry = *self.map.get(&key)?;
-        let (metrics, alloc) = entry?;
-        let rect = atlases.get_normalized_rect(&alloc);
-        Some((metrics, alloc.id.atlas_id, rect))
+    pub fn get(&self, key: GlyphKey) -> Option<Glyph> {
+        *self.map.get(&key)?
     }
 
     pub fn alloc(&mut self, atlases: &mut AtlasPool, assets: &Assets, key: GlyphKey) {
@@ -39,18 +39,23 @@ impl Glyphs {
             None => return,
         };
 
-        let (metrics, data) = font.rasterize(key.glyph, key.size);
-        if data.is_empty() {
-            self.map.insert(key, None);
-        } else {
+        if let Some(raster) = font.rasterize(key.glyph, key.size) {
             let alloc = atlases.alloc(PoolImage {
-                size: metrics.bitmap_size(),
-                data,
+                size: raster.size,
+                data: raster.data,
                 format: TextureFormat::R8Unorm,
                 preferred_allocator: None,
             });
 
-            self.map.insert(key, Some((metrics, alloc)));
+            let glyph = Glyph {
+                offset: raster.offset,
+                size: raster.size,
+                alloc,
+            };
+
+            self.map.insert(key, Some(glyph));
+        } else {
+            self.map.insert(key, None);
         }
     }
 }
@@ -58,7 +63,7 @@ impl Glyphs {
 #[derive(Clone, Copy, Debug)]
 pub struct GlyphKey {
     pub font: Id<Font>,
-    pub glyph: GlyphIndex,
+    pub glyph: GlyphId,
     pub size: f32,
 }
 

@@ -393,27 +393,28 @@ impl BackendImpl {
         self.draw_textured_rect(rect, color, image.bottom_left.id());
     }
 
-    fn draw_glyph(&mut self, glyph: &DrawGlyph) {
-        let alloc = self.glyphs.get(
-            &self.atlases,
-            GlyphKey {
-                font: glyph.font,
-                glyph: glyph.glyph,
-                size: glyph.size,
-            },
-        );
+    fn draw_glyph(&mut self, cmd: &DrawGlyph) {
+        let glyph = match self.glyphs.get(GlyphKey {
+            font: cmd.font,
+            glyph: cmd.glyph,
+            size: cmd.size,
+        }) {
+            Some(v) => v,
+            None => return,
+        };
 
-        if let Some((metrics, atlas_id, tex_rect)) = alloc {
-            let size = metrics.bitmap_size().cast::<f32>();
-            let offset = metrics.bitmap_offset().cast::<f32>() + Vec2::new(0.0, -size.y);
-            let rect = Rect::from_pos_extents(glyph.pos + offset, size);
-            let tex_id = self.bindings.atlas_index(atlas_id);
-            let color = Color {
-                r: glyph.color.r + 2.0,
-                ..glyph.color
-            };
-            self.emit_rect(rect, tex_rect, tex_id, color);
-        }
+        let tex_rect = self.atlases.get_normalized_rect(&glyph.alloc);
+
+        let size = glyph.size.cast::<f32>();
+        let offset = glyph.offset + Vec2::new(0.0, -size.y);
+        let rect = Rect::from_pos_extents(cmd.pos + offset, size);
+        let tex_id = self.bindings.atlas_index(glyph.alloc.id.atlas_id);
+        let color = Color {
+            r: cmd.color.r + 2.0,
+            ..cmd.color
+        };
+
+        self.emit_rect(rect, tex_rect, tex_id, color);
     }
 
     fn emit_rect(&mut self, rect: Rect<f32>, tex_rect: Rect<f32>, tex_id: u32, color: Color) {

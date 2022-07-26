@@ -8,7 +8,10 @@ gg-assets = { version = "0.1.0", path = "../gg-assets" }
 gg-math = { version = "0.1.0", path = "../gg-math" }
 gg-util = { version = "0.1.0", path = "../gg-util" }
 
-fontdue = "0.7.2"
+ab_glyph_rasterizer = "0.1.5"
+ouroboros = "0.15.0"
+rustybuzz = "0.5.1"
+ttf-parser = "0.15.2"
 
 [dependencies.image]
 version = "0.24.2"

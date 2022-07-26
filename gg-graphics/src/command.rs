@@ -1,7 +1,7 @@
 use gg_assets::{Handle, Id};
 use gg_math::{Affine2, Rect, Vec2};
 
-use crate::{Canvas, Color, Font, GlyphIndex, Image, NinePatchImage};
+use crate::{Canvas, Color, Font, GlyphId, Image, NinePatchImage};
 
 #[derive(Debug)]
 pub struct CommandList {
@@ -37,7 +37,7 @@ pub struct DrawRect {
 #[derive(Clone, Copy, Debug)]
 pub struct DrawGlyph {
     pub font: Id<Font>,
-    pub glyph: GlyphIndex,
+    pub glyph: GlyphId,
     pub size: f32,
     pub pos: Vec2<f32>,
     pub color: Color,
