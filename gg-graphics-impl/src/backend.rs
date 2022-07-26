@@ -227,7 +227,7 @@ impl BackendImpl {
                 format: TextureFormat::Bgra8UnormSrgb,
                 width: self.resolution.x,
                 height: self.resolution.y,
-                present_mode: PresentMode::Immediate,
+                present_mode: PresentMode::AutoNoVsync,
             },
         )
     }

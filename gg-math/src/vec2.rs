@@ -1,11 +1,13 @@
 use std::fmt::{self, Debug};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Sub, SubAssign};
+use std::ops::{
+    Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Not, Sub, SubAssign,
+};
 
 use num_traits::{Float, Num, NumCast, Signed, Zero};
 
 use crate::lerp;
 
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct Vec2<T> {
     pub x: T,
@@ -412,5 +414,27 @@ impl<T: DivAssign + Copy> DivAssign<T> for Vec2<T> {
     fn div_assign(&mut self, rhs: T) {
         self.x /= rhs;
         self.y /= rhs;
+    }
+}
+
+impl<T> Index<usize> for Vec2<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &T {
+        match index {
+            0 => &self.x,
+            1 => &self.y,
+            _ => panic!("index out of bounds"),
+        }
+    }
+}
+
+impl<T> IndexMut<usize> for Vec2<T> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        match index {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            _ => panic!("index out of bounds"),
+        }
     }
 }

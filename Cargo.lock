@@ -540,6 +540,7 @@ dependencies = [
  "gg-graphics",
  "gg-graphics-impl",
  "gg-math",
+ "gg-ui",
  "gg-util",
  "rand",
  "tracing-subscriber",
@@ -551,6 +552,16 @@ name = "gg-math"
 version = "0.1.0"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "gg-ui"
+version = "0.1.0"
+dependencies = [
+ "gg-assets",
+ "gg-graphics",
+ "gg-math",
+ "gg-util",
 ]
 
 [[package]]

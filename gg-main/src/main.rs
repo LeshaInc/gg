@@ -1,18 +1,13 @@
 mod fps_counter;
 
-use std::io::BufRead;
-use std::path::PathBuf;
 use std::time::Instant;
 
-use gg_assets::{
-    Asset, Assets, BytesAssetLoader, DirSource, Handle, Id, LoaderCtx, LoaderRegistry,
-};
-use gg_graphics::{Backend, DrawGlyph, Font, FontLoader, GraphicsEncoder, Image, PngLoader};
+use gg_assets::{Assets, DirSource, Handle, Id};
+use gg_graphics::{Backend, DrawGlyph, Font, GraphicsEncoder};
 use gg_graphics_impl::BackendImpl;
-use gg_math::Vec2;
-use gg_util::async_trait;
+use gg_math::{Rect, Vec2};
+use gg_ui::{views, UiContext, View, ViewExt};
 use gg_util::eyre::Result;
-use rand::Rng;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -28,13 +23,6 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
-    assets.add_loader(PngLoader);
-    assets.add_loader(FontLoader);
-    assets.add_loader(FileListLoader);
-
-    let pokemon_list: Handle<FileList> = assets.load("pokemon/list.txt");
-    let mut pokemons = Vec::with_capacity(1000000);
-
     let font: Handle<Font> = assets.load("OpenSans-Regular.ttf");
 
     let window = WindowBuilder::new()
@@ -45,71 +33,41 @@ fn main() -> Result<()> {
     let mut backend = BackendImpl::new(&assets, &window)?;
     let main_canvas = backend.get_main_canvas();
 
-    let offscreen_canvas = backend.create_canvas(Vec2::new(1920, 1080));
-
-    let mut rng = rand::thread_rng();
     let mut fps_counter = FpsCounter::new(100);
     let mut frame_start = Instant::now();
+
+    let mut ui = gg_ui::Driver::new();
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
         } => *control_flow = ControlFlow::Exit,
-        Event::MainEventsCleared => {
+        Event::RedrawRequested(_) => {
             assets.maintain();
 
-            let mut to_load = Vec::new();
-            if let Some(list) = assets.get(&pokemon_list) {
-                for _ in 0..1000 {
-                    let idx = rng.gen_range(0..list.files.len());
-                    let file = &list.files[idx];
-                    to_load.push(file);
-                }
-            }
-
-            for file in to_load {
-                let pokemon: Handle<Image> = assets.load(&file);
-                let pos = Vec2::new(rng.gen_range(-50.0..1920.0), rng.gen_range(-50.0..1080.0));
-                pokemons.push((pokemon, pos));
-            }
-
             let size = window.inner_size();
-            backend.resize(Vec2::new(size.width, size.height));
-
-            let mut encoder = GraphicsEncoder::new(&offscreen_canvas);
-
-            for (img, pos) in pokemons.iter().rev().take(1000) {
-                if assets.get(img).is_some() {
-                    encoder
-                        .rect([pos.x, pos.y, 64.0, 64.0])
-                        .fill_image(img)
-                        .fill_color([1.0, 1.0, 1.0, 0.1]);
-                }
-            }
-
-            backend.submit(encoder.finish());
+            let size = Vec2::new(size.width, size.height);
+            backend.resize(size);
 
             let mut encoder = GraphicsEncoder::new(&main_canvas);
 
-            encoder
-                .rect([0.0, 0.0, 1920.0, 1080.0])
-                .fill_image(&offscreen_canvas);
+            encoder.clear([0.02; 3]);
+
+            let padding = Vec2::splat(30.0);
+            let ui_ctx = UiContext {
+                bounds: Rect::new(padding, size.cast::<f32>() - padding),
+                assets: &assets,
+                encoder: &mut encoder,
+            };
+
+            ui.run(build_ui(), ui_ctx);
 
             let text = format!("fps: {}", fps_counter.fps());
             let pos = Vec2::new(20.0, 20.0);
             draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
 
-            let text = format!("spf: {}", fps_counter.spf());
-            let pos = Vec2::new(20.0, 45.0);
-            draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
-
-            let text = format!("sprites: {}", pokemons.len());
-            let pos = Vec2::new(20.0, 70.0);
-            draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
-
             backend.submit(encoder.finish());
-
             backend.present(&mut assets);
 
             fps_counter.add_sample(frame_start.elapsed());
@@ -122,27 +80,26 @@ fn main() -> Result<()> {
     });
 }
 
-struct FileList {
-    files: Vec<PathBuf>,
-}
-
-impl Asset for FileList {
-    fn register_loaders(registry: &mut LoaderRegistry) {
-        registry.add(FileListLoader);
-    }
-}
-
-struct FileListLoader;
-
-#[async_trait]
-impl BytesAssetLoader<FileList> for FileListLoader {
-    async fn load(&self, _: &mut LoaderCtx, bytes: Vec<u8>) -> Result<FileList> {
-        let mut files = Vec::new();
-        for line in bytes.lines() {
-            files.push(PathBuf::from(line?));
-        }
-        Ok(FileList { files })
-    }
+pub fn build_ui() -> impl View<()> {
+    views::vstack((
+        views::rect([1.0, 0.0, 0.0])
+            .max_width(100.0)
+            .max_height(50.0),
+        views::rect([0.0, 1.0, 0.0]).max_height(300.0),
+        views::rect([0.0, 0.0, 1.0])
+            .max_width(200.0)
+            .max_height(30.0),
+        views::hstack((
+            views::rect([0.0, 1.0, 1.0]),
+            views::rect([1.0, 0.0, 1.0]),
+            views::vstack((
+                views::rect([1.0, 1.0, 1.0]).max_height(10.0),
+                views::rect([1.0, 1.0, 1.0]).max_height(10.0),
+                views::rect([1.0, 1.0, 1.0]).max_height(10.0),
+            )),
+        ))
+        .max_height(100.0),
+    ))
 }
 
 fn draw_text(
