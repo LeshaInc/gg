@@ -100,28 +100,7 @@ impl Font {
         })
     }
 
-    pub fn shape(&self, size: f32, text: &str) -> Vec<ShapedGlyph> {
-        let face = self.inner.borrow_face();
-        let scale = size / face.units_per_em() as f32;
-
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-        buffer.set_direction(Direction::LeftToRight);
-
-        let glyphs = rustybuzz::shape(face, &[], buffer);
-        let info = glyphs.glyph_infos();
-        info.iter()
-            .zip(glyphs.glyph_positions())
-            .map(|(info, pos)| ShapedGlyph {
-                glyph: GlyphId(info.glyph_id as _),
-                advance: Vec2::new(pos.x_advance, pos.y_advance).cast::<f32>() * scale,
-                offset: Vec2::new(pos.x_offset, pos.y_offset).cast::<f32>() * scale,
-                cluster: info.cluster,
-            })
-            .collect()
-    }
-
-    pub fn shape2(&self, size: f32, text: &str, buf: &mut Vec<ShapedGlyph>) {
+    pub fn shape(&self, size: f32, text: &str, buf: &mut Vec<ShapedGlyph>) {
         let face = self.inner.borrow_face();
         let scale = size / face.units_per_em() as f32;
 

@@ -49,7 +49,7 @@ impl BackendImpl {
         let resolution = Vec2::new(size.width, size.height);
 
         let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
-            power_preference: PowerPreference::HighPerformance,
+            power_preference: PowerPreference::LowPower,
             force_fallback_adapter: false,
             compatible_surface: Some(&surface),
         }))

@@ -16,4 +16,6 @@ pub use self::font::{
     Font, FontLoader, GlyphId, GlyphRaster, LineMetrics, ShapedGlyph, SubpixelOffset,
 };
 pub use self::image::{Image, NinePatchImage, PngLoader};
-pub use self::text_layout::{TextLayoutProperties, TextLayouter, TextProperties};
+pub use self::text_layout::{
+    TextHAlign, TextLayoutProperties, TextLayouter, TextProperties, TextVAlign,
+};
