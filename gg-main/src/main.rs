@@ -64,7 +64,6 @@ fn main() -> Result<()> {
             ui.run(build_ui(), ui_ctx);
 
             let text = format!("fps: {}", fps_counter.fps());
-            // let text = format!("p");
             let pos = Vec2::new(20.0, 20.0);
             draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
 
@@ -107,7 +106,7 @@ fn draw_text(
     assets: &Assets,
     encoder: &mut GraphicsEncoder,
     font_id: Id<Font>,
-    mut pos: Vec2<f32>,
+    mut cursor: Vec2<f32>,
     size: f32,
     text: &str,
 ) {
@@ -116,17 +115,15 @@ fn draw_text(
         None => return,
     };
 
-    for c in text.chars() {
-        let glyph = font.lookup_glyph(c);
-
+    for glyph in font.shape(size, text) {
         encoder.glyph(DrawGlyph {
             font: font_id,
-            glyph,
+            glyph: glyph.glyph,
             size,
-            pos,
+            pos: cursor + glyph.offset,
             color: [1.0; 4].into(),
         });
 
-        pos.x += font.glyph_advance(glyph, size);
+        cursor.x += glyph.advance.x;
     }
 }

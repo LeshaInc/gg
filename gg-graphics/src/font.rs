@@ -5,7 +5,7 @@ use gg_assets::{Asset, BytesAssetLoader, LoaderCtx, LoaderRegistry};
 use gg_math::Vec2;
 use gg_util::async_trait;
 use gg_util::eyre::{eyre, Result};
-use rustybuzz::Face;
+use rustybuzz::{Direction, Face, UnicodeBuffer};
 pub use ttf_parser::GlyphId;
 use ttf_parser::OutlineBuilder;
 
@@ -90,10 +90,30 @@ impl Font {
         });
 
         Some(GlyphRaster {
-            offset: -px_min,
+            offset: Vec2::new(px_min.x, -px_min.y),
             size: Vec2::new(px_width as u32, px_height as u32),
             data,
         })
+    }
+
+    pub fn shape(&self, size: f32, text: &str) -> Vec<ShapedGlyph> {
+        let face = self.inner.borrow_face();
+        let scale = size / face.units_per_em() as f32;
+
+        let mut buffer = UnicodeBuffer::new();
+        buffer.push_str(text);
+        buffer.set_direction(Direction::LeftToRight);
+
+        let glyphs = rustybuzz::shape(face, &[], buffer);
+        let info = glyphs.glyph_infos();
+        info.iter()
+            .zip(glyphs.glyph_positions())
+            .map(|(info, pos)| ShapedGlyph {
+                glyph: GlyphId(info.glyph_id as _),
+                advance: Vec2::new(pos.x_advance, pos.y_advance).cast::<f32>() * scale,
+                offset: Vec2::new(pos.x_offset, pos.y_offset).cast::<f32>() * scale,
+            })
+            .collect()
     }
 }
 
@@ -115,6 +135,13 @@ pub struct GlyphRaster {
     pub offset: Vec2<f32>,
     pub size: Vec2<u32>,
     pub data: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct ShapedGlyph {
+    pub glyph: GlyphId,
+    pub advance: Vec2<f32>,
+    pub offset: Vec2<f32>,
 }
 
 struct Outliner<'a> {
