@@ -2,11 +2,13 @@ mod fps_counter;
 
 use std::time::Instant;
 
-use gg_assets::{Assets, DirSource, Handle, Id};
-use gg_graphics::{Backend, DrawGlyph, Font, GraphicsEncoder};
+use gg_assets::{Assets, DirSource, Handle};
+use gg_graphics::{
+    Backend, Color, Font, GraphicsEncoder, TextLayoutProperties, TextLayouter, TextProperties,
+};
 use gg_graphics_impl::BackendImpl;
 use gg_math::{Rect, Vec2};
-use gg_ui::{views, UiContext, View, ViewExt};
+use gg_ui::{views, View, ViewExt};
 use gg_util::eyre::Result;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -36,7 +38,15 @@ fn main() -> Result<()> {
     let mut fps_counter = FpsCounter::new(100);
     let mut frame_start = Instant::now();
 
-    let mut ui = gg_ui::Driver::new();
+    // let mut ui = gg_ui::Driver::new();
+
+    let mut text_layouter = TextLayouter::new();
+
+    let text_props = TextProperties {
+        font: font.id(),
+        size: 20.0,
+        color: Color::WHITE,
+    };
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -55,17 +65,33 @@ fn main() -> Result<()> {
             encoder.clear([0.02; 3]);
 
             let padding = Vec2::splat(30.0);
-            let ui_ctx = UiContext {
-                bounds: Rect::new(padding, size.cast::<f32>() - padding),
-                assets: &assets,
-                encoder: &mut encoder,
-            };
+            let ui_bounds = Rect::new(padding, size.cast::<f32>() - padding);
+            // let ui_ctx = UiContext {
+            //     bounds: ui_bounds,
+            //     assets: &assets,
+            //     encoder: &mut encoder,
+            // };
 
-            ui.run(build_ui(), ui_ctx);
+            // ui.run(build_ui(), ui_ctx);
 
-            let text = format!("fps: {}", fps_counter.fps());
-            let pos = Vec2::new(20.0, 20.0);
-            draw_text(&assets, &mut encoder, font.id(), pos, 20.0, &text);
+            text_layouter.set_props(&TextLayoutProperties {
+                max_size: ui_bounds.extents(),
+                line_height: 1.2,
+            });
+
+            text_layouter.reset();
+
+            let text = format!("fps: {}\n\n", fps_counter.fps());
+            text_layouter.append(text_props, &text);
+
+            let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec quis libero eros. Nam id risus pharetra, aliquam nisi quis, commodo elit. Morbi elementum fringilla elit id mollis. Ut sed neque condimentum, volutpat libero at, iaculis mauris. Duis est mauris, sagittis nec lacus vitae, suscipit pretium est. Mauris vel sapien nec nulla aliquam blandit sed in elit. Fusce gravida massa massa, id condimentum urna accumsan vel. Phasellus imperdiet quis quam eget euismod. Maecenas eget tempus enim. Nullam tincidunt ut magna vel malesuada. Proin auctor, enim ut tincidunt vehicula, ligula enim tristique turpis, sed ullamcorper eros dui et turpis. Mauris eget bibendum nibh, non convallis elit.
+
+Cras pulvinar sapien id sapien malesuada, a auctor mi mollis. Morbi porta nunc vitae rutrum laoreet. Pellentesque vehicula lobortis nulla, id dictum ex pellentesque et. Nam vel libero nunc. Suspendisse facilisis eros eu venenatis eleifend. Donec vitae iaculis ipsum. Nam congue mi quis vehicula scelerisque.
+
+Aenean mollis, ipsum sed pellentesque fringilla, risus ex maximus tortor, ut vulputate mauris justo vel dolor. Etiam imperdiet nibh non enim accumsan, non pulvinar diam lobortis. Curabitur euismod ac nisl a lacinia. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Proin pretium, neque porta fermentum congue, turpis velit tincidunt tellus, sit amet venenatis metus nunc nec quam. Aliquam quis metus pretium, feugiat diam sit amet, tristique enim. Phasellus ex leo, aliquam sit amet sapien consequat, egestas pulvinar nisi. Donec sit amet condimentum odio. Aenean elementum dignissim metus sit amet porttitor. Proin accumsan ut sem quis gravida. ";
+            text_layouter.append(text_props, &text);
+
+            text_layouter.draw(&assets, &mut encoder, ui_bounds);
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
@@ -100,30 +126,4 @@ pub fn build_ui() -> impl View<()> {
         ))
         .max_height(100.0),
     ))
-}
-
-fn draw_text(
-    assets: &Assets,
-    encoder: &mut GraphicsEncoder,
-    font_id: Id<Font>,
-    mut cursor: Vec2<f32>,
-    size: f32,
-    text: &str,
-) {
-    let font = match assets.get_by_id(font_id) {
-        Some(v) => v,
-        None => return,
-    };
-
-    for glyph in font.shape(size, text) {
-        encoder.glyph(DrawGlyph {
-            font: font_id,
-            glyph: glyph.glyph,
-            size,
-            pos: cursor + glyph.offset,
-            color: [1.0; 4].into(),
-        });
-
-        cursor.x += glyph.advance.x;
-    }
 }

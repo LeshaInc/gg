@@ -38,13 +38,10 @@ impl Font {
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         let face = self.inner.borrow_face();
         let scale = size / face.units_per_em() as f32;
-        let ascent = face.ascender() as f32 * scale;
-        let descent = face.descender() as f32 * scale;
-        let line_gap = face.line_gap() as f32 * scale;
         LineMetrics {
-            ascent,
-            descent,
-            line_gap,
+            ascender: face.ascender() as f32 * scale,
+            descender: face.descender() as f32 * scale,
+            line_gap: face.line_gap() as f32 * scale,
         }
     }
 
@@ -119,8 +116,27 @@ impl Font {
                 glyph: GlyphId(info.glyph_id as _),
                 advance: Vec2::new(pos.x_advance, pos.y_advance).cast::<f32>() * scale,
                 offset: Vec2::new(pos.x_offset, pos.y_offset).cast::<f32>() * scale,
+                cluster: info.cluster,
             })
             .collect()
+    }
+
+    pub fn shape2(&self, size: f32, text: &str, buf: &mut Vec<ShapedGlyph>) {
+        let face = self.inner.borrow_face();
+        let scale = size / face.units_per_em() as f32;
+
+        let mut buffer = UnicodeBuffer::new();
+        buffer.push_str(text);
+        buffer.set_direction(Direction::LeftToRight);
+
+        let glyphs = rustybuzz::shape(face, &[], buffer);
+        let it = glyphs.glyph_infos().iter().zip(glyphs.glyph_positions());
+        buf.extend(it.map(|(info, pos)| ShapedGlyph {
+            glyph: GlyphId(info.glyph_id as _),
+            advance: Vec2::new(pos.x_advance, pos.y_advance).cast::<f32>() * scale,
+            offset: Vec2::new(pos.x_offset, pos.y_offset).cast::<f32>() * scale,
+            cluster: info.cluster,
+        }));
     }
 }
 
@@ -132,8 +148,8 @@ impl Asset for Font {
 
 #[derive(Clone, Copy, Debug)]
 pub struct LineMetrics {
-    pub ascent: f32,
-    pub descent: f32,
+    pub ascender: f32,
+    pub descender: f32,
     pub line_gap: f32,
 }
 
@@ -168,6 +184,7 @@ pub struct ShapedGlyph {
     pub glyph: GlyphId,
     pub advance: Vec2<f32>,
     pub offset: Vec2<f32>,
+    pub cluster: u32,
 }
 
 struct Outliner<'a> {
