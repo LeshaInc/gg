@@ -48,15 +48,22 @@ impl Font {
         }
     }
 
-    pub fn rasterize(&self, glyph: GlyphId, size: f32) -> Option<GlyphRaster> {
+    pub fn rasterize(
+        &self,
+        glyph: GlyphId,
+        size: f32,
+        subpixel_offset: SubpixelOffset,
+    ) -> Option<GlyphRaster> {
+        let offset = subpixel_offset.get();
+
         let face = self.inner.borrow_face();
         let scale = size / face.units_per_em() as f32;
 
-        // TODO: subpixel offset
-
         let bbox = face.glyph_bounding_box(glyph)?;
-        let px_min = Vec2::new((bbox.x_min as f32) * scale, (bbox.y_min as f32) * scale).floor();
-        let px_max = Vec2::new((bbox.x_max as f32) * scale, (bbox.y_max as f32) * scale).ceil();
+        let px_min =
+            (Vec2::new((bbox.x_min as f32) * scale, (bbox.y_min as f32) * scale) + offset).floor();
+        let px_max =
+            (Vec2::new((bbox.x_max as f32) * scale, (bbox.y_max as f32) * scale) + offset).ceil();
 
         let px_width = (px_max.x - px_min.x).max(0.0) as usize;
         let px_height = (px_max.y - px_min.y).max(0.0) as usize;
@@ -78,7 +85,7 @@ impl Font {
                 glyph,
                 &mut Outliner {
                     rasterizer: &mut rasterizer,
-                    origin: point(px_min.x, px_min.y),
+                    origin: point(px_min.x - offset.x, px_min.y - offset.y),
                     last_move: None,
                     last_pos: point(0.0, 0.0),
                     scale,
@@ -135,6 +142,25 @@ pub struct GlyphRaster {
     pub offset: Vec2<f32>,
     pub size: Vec2<u32>,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SubpixelOffset {
+    sx: u8,
+    sy: u8,
+}
+
+impl SubpixelOffset {
+    pub fn new(frac: Vec2<f32>) -> SubpixelOffset {
+        SubpixelOffset {
+            sx: (frac.x * 4.0) as u8,
+            sy: (frac.y * 2.0) as u8,
+        }
+    }
+
+    pub fn get(self) -> Vec2<f32> {
+        Vec2::new((self.sx as f32) / 4.0, (self.sy as f32) / 2.0)
+    }
 }
 
 #[derive(Debug)]

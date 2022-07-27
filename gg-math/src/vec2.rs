@@ -240,6 +240,16 @@ impl<T: Float> Vec2<T> {
     }
 
     #[inline]
+    pub fn trunc(self) -> Vec2<T> {
+        self.map(T::trunc)
+    }
+
+    #[inline]
+    pub fn fract(self) -> Vec2<T> {
+        self.map(T::fract)
+    }
+
+    #[inline]
     pub fn fclamp(self, lo: Vec2<T>, hi: Vec2<T>) -> Vec2<T> {
         self.fmax(lo).fmin(hi)
     }

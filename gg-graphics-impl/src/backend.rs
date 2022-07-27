@@ -4,6 +4,7 @@ use std::sync::Arc;
 use gg_assets::{Assets, Id};
 use gg_graphics::{
     Backend, Color, Command, CommandList, DrawGlyph, DrawRect, FillImage, Image, NinePatchImage,
+    SubpixelOffset,
 };
 use gg_math::{Affine2, Rect, Vec2};
 use gg_util::eyre::{eyre, Result};
@@ -215,6 +216,7 @@ impl BackendImpl {
                 font: glyph.font,
                 glyph: glyph.glyph,
                 size: glyph.size,
+                subpixel_offset: SubpixelOffset::new(glyph.pos.fract()),
             },
         );
     }
@@ -398,6 +400,7 @@ impl BackendImpl {
             font: cmd.font,
             glyph: cmd.glyph,
             size: cmd.size,
+            subpixel_offset: SubpixelOffset::new(cmd.pos.fract()),
         }) {
             Some(v) => v,
             None => return,
@@ -407,7 +410,7 @@ impl BackendImpl {
 
         let size = glyph.size.cast::<f32>();
         let offset = glyph.offset + Vec2::new(0.0, -size.y);
-        let rect = Rect::from_pos_extents(cmd.pos + offset, size);
+        let rect = Rect::from_pos_extents((cmd.pos + offset).floor(), size);
         let tex_id = self.bindings.atlas_index(glyph.alloc.id.atlas_id);
         let color = Color {
             r: cmd.color.r + 2.0,

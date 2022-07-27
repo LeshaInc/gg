@@ -1,7 +1,7 @@
 use std::hash::{Hash, Hasher};
 
 use gg_assets::{Assets, Id};
-use gg_graphics::{Font, GlyphId};
+use gg_graphics::{Font, GlyphId, SubpixelOffset};
 use gg_math::Vec2;
 use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
@@ -39,7 +39,7 @@ impl Glyphs {
             None => return,
         };
 
-        if let Some(raster) = font.rasterize(key.glyph, key.size) {
+        if let Some(raster) = font.rasterize(key.glyph, key.size, key.subpixel_offset) {
             let alloc = atlases.alloc(PoolImage {
                 size: raster.size,
                 data: raster.data,
@@ -65,6 +65,7 @@ pub struct GlyphKey {
     pub font: Id<Font>,
     pub glyph: GlyphId,
     pub size: f32,
+    pub subpixel_offset: SubpixelOffset,
 }
 
 impl PartialEq for GlyphKey {
@@ -72,6 +73,7 @@ impl PartialEq for GlyphKey {
         self.font == rhs.font
             && self.glyph == rhs.glyph
             && self.size.to_bits() == rhs.size.to_bits()
+            && self.subpixel_offset == rhs.subpixel_offset
     }
 }
 
@@ -82,5 +84,6 @@ impl Hash for GlyphKey {
         self.font.hash(state);
         self.glyph.hash(state);
         self.size.to_bits().hash(state);
+        self.subpixel_offset.hash(state);
     }
 }
