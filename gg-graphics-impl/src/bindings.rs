@@ -4,9 +4,10 @@ use std::sync::atomic::Ordering;
 use wgpu::util::DeviceExt;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, Device, Extent3d, Queue, Sampler,
-    SamplerBindingType, SamplerDescriptor, ShaderStages, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension,
+    BindGroupLayoutEntry, BindingResource, BindingType, Device, Extent3d, FilterMode, Queue,
+    Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView,
+    TextureViewDimension,
 };
 
 use crate::atlas::{AtlasId, AtlasPool};
@@ -192,5 +193,9 @@ fn create_white_texture_view(device: &Device, queue: &Queue) -> TextureView {
 }
 
 fn create_sampler(device: &Device) -> Sampler {
-    device.create_sampler(&SamplerDescriptor::default())
+    device.create_sampler(&SamplerDescriptor {
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Linear,
+        ..Default::default()
+    })
 }

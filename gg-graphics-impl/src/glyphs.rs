@@ -1,8 +1,6 @@
-use std::hash::{Hash, Hasher};
-
 use gg_assets::{Assets, Id};
 use gg_graphics::{Font, GlyphId, SubpixelOffset};
-use gg_math::Vec2;
+use gg_math::{Rect, Vec2};
 use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
 
@@ -15,9 +13,10 @@ pub struct Glyphs {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Glyph {
-    pub offset: Vec2<f32>,
+    pub bounds: Rect<f32>,
     pub size: Vec2<u32>,
     pub alloc: PoolAllocation,
+    pub is_image: bool,
 }
 
 impl Glyphs {
@@ -39,51 +38,58 @@ impl Glyphs {
             None => return,
         };
 
-        if let Some(raster) = font.rasterize(key.glyph, key.size, key.subpixel_offset) {
-            let alloc = atlases.alloc(PoolImage {
-                size: raster.size,
-                data: raster.data,
-                format: TextureFormat::R8Unorm,
-                preferred_allocator: None,
-            });
+        let res = match key.kind {
+            GlyphKeyKind::Image { size } => font
+                .get_image(key.glyph, size)
+                .map(|raster| (raster, TextureFormat::Rgba8UnormSrgb)),
+            GlyphKeyKind::Vector {
+                size,
+                subpixel_offset,
+            } => font
+                .rasterize(key.glyph, f32::from_bits(size), subpixel_offset)
+                .map(|raster| (raster, TextureFormat::R8Unorm)),
+        };
 
-            let glyph = Glyph {
-                offset: raster.offset,
-                size: raster.size,
-                alloc,
-            };
+        let (raster, format) = match res {
+            Some(v) => v,
+            None => {
+                self.map.insert(key, None);
+                return;
+            }
+        };
 
-            self.map.insert(key, Some(glyph));
-        } else {
-            self.map.insert(key, None);
-        }
+        let alloc = atlases.alloc(PoolImage {
+            size: raster.size,
+            data: raster.data,
+            format,
+            preferred_allocator: None,
+        });
+
+        let glyph = Glyph {
+            bounds: raster.bounds,
+            size: raster.size,
+            alloc,
+            is_image: format == TextureFormat::Rgba8UnormSrgb,
+        };
+
+        self.map.insert(key, Some(glyph));
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct GlyphKey {
     pub font: Id<Font>,
     pub glyph: GlyphId,
-    pub size: f32,
-    pub subpixel_offset: SubpixelOffset,
+    pub kind: GlyphKeyKind,
 }
 
-impl PartialEq for GlyphKey {
-    fn eq(&self, rhs: &GlyphKey) -> bool {
-        self.font == rhs.font
-            && self.glyph == rhs.glyph
-            && self.size.to_bits() == rhs.size.to_bits()
-            && self.subpixel_offset == rhs.subpixel_offset
-    }
-}
-
-impl Eq for GlyphKey {}
-
-impl Hash for GlyphKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.font.hash(state);
-        self.glyph.hash(state);
-        self.size.to_bits().hash(state);
-        self.subpixel_offset.hash(state);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GlyphKeyKind {
+    Vector {
+        size: u32,
+        subpixel_offset: SubpixelOffset,
+    },
+    Image {
+        size: u32
     }
 }

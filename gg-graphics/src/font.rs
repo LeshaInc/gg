@@ -2,9 +2,10 @@ use std::cell::RefCell;
 
 use ab_glyph_rasterizer::{point, Point, Rasterizer};
 use gg_assets::{Asset, BytesAssetLoader, LoaderCtx, LoaderRegistry};
-use gg_math::Vec2;
+use gg_math::{Rect, Vec2};
 use gg_util::async_trait;
 use gg_util::eyre::{eyre, Result};
+use image::imageops::FilterType;
 use rustybuzz::{Direction, Face, UnicodeBuffer};
 pub use ttf_parser::GlyphId;
 use ttf_parser::OutlineBuilder;
@@ -51,11 +52,10 @@ impl Font {
         size: f32,
         subpixel_offset: SubpixelOffset,
     ) -> Option<GlyphRaster> {
-        let offset = subpixel_offset.get();
-
         let face = self.inner.borrow_face();
         let scale = size / face.units_per_em() as f32;
 
+        let offset = subpixel_offset.get();
         let bbox = face.glyph_bounding_box(glyph)?;
         let px_min =
             (Vec2::new((bbox.x_min as f32) * scale, (bbox.y_min as f32) * scale) + offset).floor();
@@ -93,10 +93,49 @@ impl Font {
             rasterizer.for_each_pixel(|i, a| data[i] = (a * 255.0) as u8);
         });
 
+        let size = Vec2::new(px_width, px_height).cast::<u32>();
+
         Some(GlyphRaster {
-            offset: Vec2::new(px_min.x, -px_min.y),
-            size: Vec2::new(px_width as u32, px_height as u32),
+            bounds: Rect::from_pos_extents(
+                Vec2::new(px_min.x, -px_min.y) / scale,
+                size.cast::<f32>() / scale,
+            ),
+            size,
             data,
+        })
+    }
+
+    pub fn has_image(&self, glyph: GlyphId) -> bool {
+        let face = self.inner.borrow_face();
+        face.glyph_raster_image(glyph, u16::MAX).is_some()
+    }
+
+    pub fn get_image(&self, glyph: GlyphId, size: u32) -> Option<GlyphRaster> {
+        let face = self.inner.borrow_face();
+
+        let raster = match face.glyph_raster_image(glyph, size.min(u16::MAX.into()) as u16) {
+            Some(v) => v,
+            None => return None,
+        };
+
+        let scale = raster.pixels_per_em as f32;
+
+        let mut image = image::load_from_memory(&raster.data).ok()?.into_rgba8();
+
+        let old_size = Vec2::new(image.width(), image.height());
+        let size = (old_size.cast::<f32>() / scale * (size as f32)).cast::<u32>();
+
+        if size.cmp_lt(old_size).any() {
+            image = image::imageops::resize(&image, size.x, size.y, FilterType::Triangle);
+        }
+
+        Some(GlyphRaster {
+            bounds: Rect::from_pos_extents(
+                Vec2::new(raster.x, -raster.y).cast::<f32>() / scale,
+                Vec2::new(raster.width, raster.height).cast::<f32>() / scale,
+            ),
+            size: Vec2::new(image.width(), image.height()),
+            data: image.into_flat_samples().samples,
         })
     }
 
@@ -134,7 +173,7 @@ pub struct LineMetrics {
 
 #[derive(Debug)]
 pub struct GlyphRaster {
-    pub offset: Vec2<f32>,
+    pub bounds: Rect<f32>,
     pub size: Vec2<u32>,
     pub data: Vec<u8>,
 }

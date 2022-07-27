@@ -28,7 +28,7 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
-    let font: Handle<Font> = assets.load("OpenSans-Regular.ttf");
+    let font: Handle<Font> = assets.load("NotoColorEmoji.ttf");
 
     let window = WindowBuilder::new()
         .with_title("A fantastic window!")
@@ -51,7 +51,6 @@ fn main() -> Result<()> {
             ..
         } => *control_flow = ControlFlow::Exit,
         Event::RedrawRequested(_) => {
-            let mut rng = StdRng::from_seed([0; 32]);
             assets.maintain();
 
             let size = window.inner_size();
@@ -88,19 +87,11 @@ fn main() -> Result<()> {
             let text = format!("fps: {}\n\n", fps_counter.fps());
             text_layouter.append(text_props, &text);
 
-            let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec quis libero eros. Nam id risus pharetra, aliquam nisi quis, commodo elit. Morbi elementum fringilla elit id mollis. Ut sed neque condimentum, volutpat libero at, iaculis mauris. Duis est mauris, sagittis nec lacus vitae, suscipit pretium est. Mauris vel sapien nec nulla aliquam blandit sed in elit. Fusce gravida massa massa, id condimentum urna accumsan vel. Phasellus imperdiet quis quam eget euismod. Maecenas eget tempus enim. Nullam tincidunt ut magna vel malesuada. Proin auctor, enim ut tincidunt vehicula, ligula enim tristique turpis, sed ullamcorper eros dui et turpis. Mauris eget bibendum nibh, non convallis elit.
+            let text = "😀😡🤯👺\n";
+            text_layouter.append(text_props, &text);
 
-Cras pulvinar sapien id sapien malesuada, a auctor mi mollis. Morbi porta nunc vitae rutrum laoreet. Pellentesque vehicula lobortis nulla, id dictum ex pellentesque et. Nam vel libero nunc. Suspendisse facilisis eros eu venenatis eleifend. Donec vitae iaculis ipsum. Nam congue mi quis vehicula scelerisque.
-
-Aenean mollis, ipsum sed pellentesque fringilla, risus ex maximus tortor, ut vulputate mauris justo vel dolor. Etiam imperdiet nibh non enim accumsan, non pulvinar diam lobortis. Curabitur euismod ac nisl a lacinia. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Proin pretium, neque porta fermentum congue, turpis velit tincidunt tellus, sit amet venenatis metus nunc nec quam. Aliquam quis metus pretium, feugiat diam sit amet, tristique enim. Phasellus ex leo, aliquam sit amet sapien consequat, egestas pulvinar nisi. Donec sit amet condimentum odio. Aenean elementum dignissim metus sit amet porttitor. Proin accumsan ut sem quis gravida.";
-
-            for char in text.chars() {
-                text_props.color.r = rng.gen_range(0.3..=1.0);
-                text_props.color.g = rng.gen_range(0.3..=1.0);
-                text_props.color.b = rng.gen_range(0.3..=1.0);
-                text_props.size = rng.gen_range(16.0..24f32).round();
-                text_layouter.append(text_props, &char.to_string());
-            }
+            text_props.size = 128.0;
+            text_layouter.append(text_props, &text);
 
             text_layouter.draw(&assets, &mut encoder, ui_bounds);
 

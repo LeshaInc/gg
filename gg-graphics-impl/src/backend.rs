@@ -21,7 +21,7 @@ use crate::atlas::{AtlasPool, PoolConfig};
 use crate::batch::{Batcher, State, Vertex};
 use crate::bindings::Bindings;
 use crate::canvas::{Canvas, Canvases};
-use crate::glyphs::{GlyphKey, Glyphs};
+use crate::glyphs::{GlyphKey, GlyphKeyKind, Glyphs};
 use crate::images::Images;
 use crate::pipeline::Pipelines;
 
@@ -208,17 +208,34 @@ impl BackendImpl {
         }
     }
 
-    fn alloc_glyph(&mut self, assets: &mut Assets, glyph: &DrawGlyph) {
-        self.glyphs.alloc(
-            &mut self.atlases,
-            assets,
-            GlyphKey {
-                font: glyph.font,
-                glyph: glyph.glyph,
-                size: glyph.size,
-                subpixel_offset: SubpixelOffset::new(glyph.pos.fract()),
-            },
-        );
+    fn get_glyph_key(assets: &Assets, cmd: &DrawGlyph) -> Option<GlyphKey> {
+        let font = match assets.get_by_id(cmd.font) {
+            Some(v) => v,
+            None => return None,
+        };
+
+        let kind = if font.has_image(cmd.glyph) {
+            GlyphKeyKind::Image {
+                size: cmd.size.ceil() as u32,
+            }
+        } else {
+            GlyphKeyKind::Vector {
+                size: cmd.size.to_bits(),
+                subpixel_offset: SubpixelOffset::new(cmd.pos.fract()),
+            }
+        };
+
+        Some(GlyphKey {
+            font: cmd.font,
+            glyph: cmd.glyph,
+            kind,
+        })
+    }
+
+    fn alloc_glyph(&mut self, assets: &mut Assets, cmd: &DrawGlyph) {
+        if let Some(key) = Self::get_glyph_key(assets, cmd) {
+            self.glyphs.alloc(&mut self.atlases, assets, key);
+        }
     }
 
     fn configure_surface(&mut self) {
@@ -291,7 +308,7 @@ impl BackendImpl {
                     self.draw_rect(assets, rect);
                 }
                 Command::DrawGlyph(glyph) => {
-                    self.draw_glyph(glyph);
+                    self.draw_glyph(assets, glyph);
                 }
             }
         }
@@ -395,26 +412,27 @@ impl BackendImpl {
         self.draw_textured_rect(rect, color, image.bottom_left.id());
     }
 
-    fn draw_glyph(&mut self, cmd: &DrawGlyph) {
-        let glyph = match self.glyphs.get(GlyphKey {
-            font: cmd.font,
-            glyph: cmd.glyph,
-            size: cmd.size,
-            subpixel_offset: SubpixelOffset::new(cmd.pos.fract()),
-        }) {
+    fn draw_glyph(&mut self, assets: &Assets, cmd: &DrawGlyph) {
+        let key = Self::get_glyph_key(assets, cmd);
+        let glyph = match key.and_then(|key| self.glyphs.get(key)) {
             Some(v) => v,
             None => return,
         };
 
+        let size = glyph.bounds.extents() * cmd.size;
+        let offset = glyph.bounds.min * cmd.size + Vec2::new(0.0, -size.y);
+        let rect = Rect::from_pos_extents((cmd.pos + offset).floor(), size);
+
+        let tex_id = self.bindings.atlas_index(glyph.alloc.id.atlas_id);
         let tex_rect = self.atlases.get_normalized_rect(&glyph.alloc);
 
-        let size = glyph.size.cast::<f32>();
-        let offset = glyph.offset + Vec2::new(0.0, -size.y);
-        let rect = Rect::from_pos_extents((cmd.pos + offset).floor(), size);
-        let tex_id = self.bindings.atlas_index(glyph.alloc.id.atlas_id);
-        let color = Color {
-            r: cmd.color.r + 2.0,
-            ..cmd.color
+        let color = if glyph.is_image {
+            [1.0, 1.0, 1.0, cmd.color.a].into()
+        } else {
+            Color {
+                r: cmd.color.r + 2.0,
+                ..cmd.color
+            }
         };
 
         self.emit_rect(rect, tex_rect, tex_id, color);
