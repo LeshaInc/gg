@@ -101,14 +101,14 @@ impl FontFace {
             rasterizer.for_each_pixel(|i, a| data[i] = (a * 255.0) as u8);
         });
 
-        let size = Vec2::new(px_width, px_height).cast::<u32>();
+        let raster_size = Vec2::new(px_width, px_height).cast::<u32>();
 
         Some(GlyphRaster {
             bounds: Rect::from_pos_extents(
-                Vec2::new(px_min.x, -px_min.y) / scale,
-                size.cast::<f32>() / scale,
+                Vec2::new(px_min.x, -px_min.y) / size,
+                raster_size.cast::<f32>() / size,
             ),
-            size,
+            size: raster_size,
             data,
         })
     }
