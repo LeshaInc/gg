@@ -12,10 +12,7 @@ pub use self::canvas::{Canvas, RawCanvas};
 pub use self::color::Color;
 pub use self::command::{Command, CommandList, DrawGlyph, DrawRect, Fill, FillImage};
 pub use self::encoder::GraphicsEncoder;
-pub use self::font::{
-    FontCollection, FontCollectionLoader, FontFace, GlyphId, GlyphRaster, LineMetrics, ShapedGlyph,
-    SubpixelOffset,
-};
+pub use self::font::*;
 pub use self::image::{Image, NinePatchImage, PngLoader};
 pub use self::text_layout::{
     TextHAlign, TextLayoutProperties, TextLayouter, TextProperties, TextVAlign,

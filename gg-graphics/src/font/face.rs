@@ -7,11 +7,20 @@ use gg_math::{Rect, Vec2};
 use gg_util::eyre::{eyre, Result};
 use image::imageops::FilterType;
 use rustybuzz::{Direction, Face, UnicodeBuffer};
+pub use ttf_parser::os2::{Style as FontStyle, Weight as FontWeight};
 pub use ttf_parser::GlyphId;
 use ttf_parser::OutlineBuilder;
 
 pub struct FontFace {
     inner: Inner,
+    props: FontFaceProps,
+}
+
+#[derive(Clone, Debug)]
+pub struct FontFaceProps {
+    pub name: String,
+    pub weight: FontWeight,
+    pub style: FontStyle,
 }
 
 #[ouroboros::self_referencing]
@@ -24,11 +33,28 @@ struct Inner {
 
 impl FontFace {
     pub fn new(data: Arc<[u8]>, index: u32) -> Result<FontFace> {
-        Ok(FontFace {
-            inner: Inner::try_new(data, |data| {
-                Face::from_slice(data, index).ok_or_else(|| eyre!("font parsing error"))
-            })?,
-        })
+        let inner = Inner::try_new(data, |data| {
+            Face::from_slice(data, index).ok_or_else(|| eyre!("font parsing error"))
+        })?;
+
+        let face = inner.borrow_face();
+
+        let raw = face.names().get(1);
+        let name = raw
+            .and_then(|v| v.to_string())
+            .ok_or_else(|| eyre!("font does not have a name"))?;
+
+        let props = FontFaceProps {
+            name,
+            weight: face.weight(),
+            style: face.style(),
+        };
+
+        Ok(FontFace { inner, props })
+    }
+
+    pub fn props(&self) -> &FontFaceProps {
+        &self.props
     }
 
     pub fn lookup_glyph(&self, ch: char) -> GlyphId {
