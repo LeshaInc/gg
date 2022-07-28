@@ -20,8 +20,8 @@ where
     L: FnMut(&mut D) -> &mut DV,
     V: View<DV>,
 {
-    fn update(&mut self, old: &Self) -> bool {
-        self.view.update(&old.view)
+    fn update(&mut self, old: &mut Self) -> bool {
+        self.view.update(&mut old.view)
     }
 
     fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {

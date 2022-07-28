@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::sync::Arc;
 
 use ab_glyph_rasterizer::{point, Point, Rasterizer};
@@ -27,7 +26,7 @@ pub struct FontFaceProps {
 struct Inner {
     data: Arc<[u8]>,
     #[covariant]
-    #[borrows(mut data)]
+    #[borrows(data)]
     face: Face<'this>,
 }
 
@@ -82,6 +81,7 @@ impl FontFace {
 
     pub fn rasterize(
         &self,
+        cache: &mut RasterizationCache,
         glyph: GlyphId,
         size: f32,
         subpixel_offset: SubpixelOffset,
@@ -102,30 +102,24 @@ impl FontFace {
             return None;
         }
 
-        thread_local! {
-            static RASTERIZER: RefCell<Rasterizer> = RefCell::new(Rasterizer::new(64, 64));
-        }
-
         let mut data = vec![0; px_width * px_height];
+        cache.rasterizer.reset(px_width, px_height);
 
-        RASTERIZER.with(|cell| {
-            let mut rasterizer = cell.borrow_mut();
-            rasterizer.reset(px_width, px_height);
+        face.outline_glyph(
+            glyph,
+            &mut Outliner {
+                rasterizer: &mut cache.rasterizer,
+                origin: point(px_min.x - offset.x, px_min.y - offset.y),
+                last_move: None,
+                last_pos: point(0.0, 0.0),
+                scale,
+                height: px_height as f32,
+            },
+        );
 
-            face.outline_glyph(
-                glyph,
-                &mut Outliner {
-                    rasterizer: &mut rasterizer,
-                    origin: point(px_min.x - offset.x, px_min.y - offset.y),
-                    last_move: None,
-                    last_pos: point(0.0, 0.0),
-                    scale,
-                    height: px_height as f32,
-                },
-            );
-
-            rasterizer.for_each_pixel(|i, a| data[i] = (a * 255.0) as u8);
-        });
+        cache
+            .rasterizer
+            .for_each_pixel(|i, a| data[i] = (a * 255.0) as u8);
 
         let raster_size = Vec2::new(px_width, px_height).cast::<u32>();
 
@@ -173,11 +167,17 @@ impl FontFace {
         })
     }
 
-    pub fn shape(&self, size: f32, text: &str, buf: &mut Vec<ShapedGlyph>) {
+    pub fn shape(
+        &self,
+        cache: &mut ShapingCache,
+        size: f32,
+        text: &str,
+        buf: &mut Vec<ShapedGlyph>,
+    ) {
         let face = self.inner.borrow_face();
         let scale = size / face.units_per_em() as f32;
 
-        let mut buffer = UnicodeBuffer::new();
+        let mut buffer = std::mem::take(&mut cache.buffer);
         buffer.push_str(text);
         buffer.set_direction(Direction::LeftToRight);
 
@@ -189,6 +189,8 @@ impl FontFace {
             offset: Vec2::new(pos.x_offset, pos.y_offset).cast::<f32>() * scale,
             cluster: info.cluster,
         }));
+
+        cache.buffer = glyphs.clear();
     }
 }
 
@@ -227,12 +229,37 @@ impl SubpixelOffset {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ShapedGlyph {
     pub glyph: GlyphId,
     pub advance: Vec2<f32>,
     pub offset: Vec2<f32>,
     pub cluster: u32,
+}
+
+#[derive(Debug)]
+pub struct RasterizationCache {
+    rasterizer: Rasterizer,
+}
+
+impl Default for RasterizationCache {
+    fn default() -> Self {
+        Self {
+            rasterizer: Rasterizer::new(64, 64),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ShapingCache {
+    buffer: UnicodeBuffer,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ShapingCacheKey {
+    font_data: usize,
+    font_index: u32,
+    size: u32,
 }
 
 struct Outliner<'a> {

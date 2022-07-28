@@ -102,13 +102,13 @@ impl<D, C> View<D> for Stack<D, C>
 where
     C: ViewSeq<D> + MetaSeq<Meta>,
 {
-    fn update(&mut self, old: &Self) -> bool {
+    fn update(&mut self, old: &mut Self) -> bool {
         let meta = self.meta.as_mut();
         let old_meta = old.meta.as_ref();
         let mut changed = false;
 
         for (i, (child, old_child)) in meta.iter_mut().zip(old_meta).enumerate() {
-            changed |= self.children.update(&old.children, i);
+            changed |= self.children.update(&mut old.children, i);
             child.size = old_child.size;
             child.pos = old_child.pos;
         }
@@ -116,7 +116,7 @@ where
         changed
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, mut ctx: LayoutCtx) -> LayoutHints {
         let meta = self.meta.as_mut();
         let (maj, min) = self.config.orientation.indices();
 
@@ -135,7 +135,7 @@ where
         res
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, adviced: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, mut ctx: LayoutCtx, adviced: Vec2<f32>) -> Vec2<f32> {
         let meta = self.meta.as_mut();
         let (maj, min) = self.config.orientation.indices();
 

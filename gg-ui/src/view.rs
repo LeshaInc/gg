@@ -1,11 +1,11 @@
 use gg_assets::Assets;
-use gg_graphics::GraphicsEncoder;
+use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
 use gg_math::{Rect, Vec2};
 
 use crate::Event;
 
 pub trait View<D> {
-    fn update(&mut self, old: &Self) -> bool
+    fn update(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
@@ -67,12 +67,16 @@ impl Default for LayoutHints {
 
 pub struct LayoutCtx<'a> {
     pub assets: &'a Assets,
+    pub fonts: &'a FontDb,
+    pub text_layouter: &'a mut TextLayouter,
 }
 
 impl LayoutCtx<'_> {
-    pub fn reborrow(&self) -> LayoutCtx<'_> {
+    pub fn reborrow(&mut self) -> LayoutCtx<'_> {
         LayoutCtx {
             assets: self.assets,
+            fonts: self.fonts,
+            text_layouter: self.text_layouter,
         }
     }
 }

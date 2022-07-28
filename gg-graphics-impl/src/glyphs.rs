@@ -1,5 +1,5 @@
 use gg_assets::{Assets, Id};
-use gg_graphics::{FontFace, GlyphId, SubpixelOffset};
+use gg_graphics::{FontFace, GlyphId, RasterizationCache, SubpixelOffset};
 use gg_math::{Rect, Vec2};
 use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
@@ -9,6 +9,7 @@ use crate::atlas::{AtlasPool, PoolAllocation, PoolImage};
 #[derive(Debug, Default)]
 pub struct Glyphs {
     map: AHashMap<GlyphKey, Option<Glyph>>,
+    cache: RasterizationCache,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -46,7 +47,12 @@ impl Glyphs {
                 size,
                 subpixel_offset,
             } => font
-                .rasterize(key.glyph, f32::from_bits(size), subpixel_offset)
+                .rasterize(
+                    &mut self.cache,
+                    key.glyph,
+                    f32::from_bits(size),
+                    subpixel_offset,
+                )
                 .map(|raster| (raster, TextureFormat::R8Unorm)),
         };
 

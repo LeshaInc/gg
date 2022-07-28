@@ -3,10 +3,7 @@ mod fps_counter;
 use std::time::Instant;
 
 use gg_assets::{Assets, DirSource};
-use gg_graphics::{
-    Backend, Color, FontDb, FontFamily, FontStyle, FontWeight, GraphicsEncoder, TextHAlign,
-    TextLayoutProperties, TextLayouter, TextProperties, TextVAlign,
-};
+use gg_graphics::{Backend, FontDb, GraphicsEncoder, TextLayouter};
 use gg_graphics_impl::BackendImpl;
 use gg_math::{Rect, Vec2};
 use gg_ui::{views, UiContext, View, ViewExt};
@@ -34,11 +31,6 @@ fn main() -> Result<()> {
     fonts.add_collection(&assets.load("fonts/NotoColorEmoji.ttf"));
     fonts.add_collection(&assets.load("fonts/NotoSans-Regular.ttf"));
     fonts.add_collection(&assets.load("fonts/NotoSansJP-Regular.otf"));
-
-    let font_family = FontFamily::new("Open Sans")
-        .push("Noto Color Emoji")
-        .push("Noto Sans")
-        .push("Noto Sans JP");
 
     let window = WindowBuilder::new()
         .with_title("A fantastic window!")
@@ -76,47 +68,12 @@ fn main() -> Result<()> {
             let ui_ctx = UiContext {
                 bounds: ui_bounds,
                 assets: &assets,
+                fonts: &fonts,
+                text_layouter: &mut text_layouter,
                 encoder: &mut encoder,
             };
 
-            ui.run(build_ui(), ui_ctx);
-
-            text_layouter.reset();
-            text_layouter.set_props(&TextLayoutProperties {
-                h_align: TextHAlign::Start,
-                v_align: TextVAlign::Start,
-                ..Default::default()
-            });
-
-            let mut text_props = TextProperties {
-                font_family: font_family.clone(),
-                weight: FontWeight::Normal,
-                style: FontStyle::Normal,
-                size: 20.0,
-                color: Color::WHITE,
-            };
-
-            let text = format!("fps: {}\n\n", fps_counter.fps());
-            text_layouter.append(&text_props, &text);
-
-            let text = "सभमन 日本語\n\n";
-            text_layouter.append(&text_props, &text);
-
-            let text = "kill⁠😀⁠me hello 🤬🪖\n";
-            text_layouter.append(&text_props, &text);
-
-            text_props.style = FontStyle::Italic;
-            text_layouter.append(&text_props, &text);
-
-            text_props.weight = FontWeight::Bold;
-            text_props.style = FontStyle::Normal;
-            text_layouter.append(&text_props, &text);
-
-            text_props.weight = FontWeight::Bold;
-            text_props.style = FontStyle::Italic;
-            text_layouter.append(&text_props, &text);
-
-            text_layouter.draw(&assets, &fonts, &mut encoder, ui_bounds);
+            ui.run(build_ui(fps_counter.fps()), ui_ctx);
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
@@ -131,15 +88,10 @@ fn main() -> Result<()> {
     });
 }
 
-pub fn build_ui() -> impl View<()> {
+pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
-        views::rect([0.05, 0.0, 0.0])
-            .max_width(100.0)
-            .max_height(50.0),
-        views::rect([0.0, 0.05, 0.0]).max_height(300.0),
-        views::rect([0.0, 0.0, 0.05])
-            .max_width(200.0)
-            .max_height(30.0),
+        views::text(format!("fps: {:.0}", fps)),
+        views::hstack((views::text(LIPSUM), views::text(LIPSUM))),
         views::hstack((
             views::rect([0.0, 0.05, 0.05]),
             views::rect([0.05, 0.0, 0.05]),
@@ -152,3 +104,5 @@ pub fn build_ui() -> impl View<()> {
         .max_height(100.0),
     ))
 }
+
+const LIPSUM: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris leo augue, suscipit quis volutpat non, pretium non libero. Praesent maximus nisl diam, quis faucibus odio tempor vel. Mauris eget ullamcorper lectus. Donec sollicitudin felis id mi sollicitudin, id aliquet leo laoreet. Aliquam volutpat a nisl volutpat bibendum.";

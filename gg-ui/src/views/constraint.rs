@@ -16,11 +16,11 @@ where
     V: View<D>,
     C: Constraint,
 {
-    fn update(&mut self, old: &Self) -> bool
+    fn update(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
-        self.view.update(&old.view) || old.constraint != self.constraint
+        self.view.update(&mut old.view) || old.constraint != self.constraint
     }
 
     fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {

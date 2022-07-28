@@ -7,7 +7,7 @@ use unicode_linebreak::BreakOpportunity;
 
 use crate::{
     Color, DrawGlyph, FontDb, FontFace, FontFamily, FontStyle, FontWeight, GraphicsEncoder,
-    ShapedGlyph,
+    ShapedGlyph, ShapingCache,
 };
 
 #[derive(Debug)]
@@ -16,7 +16,9 @@ pub struct TextLayouter {
     segments: Vec<Segment>,
     new_segments: Vec<Segment>,
     glyphs: Vec<ShapedGlyph>,
+    res_glyphs: Vec<DrawGlyph>,
     lines: Vec<Line>,
+    cache: ShapingCache,
     text: String,
 }
 
@@ -91,7 +93,7 @@ struct Line {
     ascender: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextProperties {
     pub font_family: FontFamily,
     pub weight: FontWeight,
@@ -107,8 +109,10 @@ impl TextLayouter {
             segments: Vec::new(),
             new_segments: Vec::new(),
             glyphs: Vec::new(),
+            res_glyphs: Vec::new(),
             lines: Vec::new(),
             text: String::new(),
+            cache: ShapingCache::default(),
         }
     }
 
@@ -116,6 +120,7 @@ impl TextLayouter {
         self.segments.clear();
         self.new_segments.clear();
         self.glyphs.clear();
+        self.res_glyphs.clear();
         self.lines.clear();
         self.text.clear();
     }
@@ -144,15 +149,15 @@ impl TextLayouter {
         assets: &Assets,
         fonts: &FontDb,
         max_size: Vec2<f32>,
-        buf: &mut Vec<DrawGlyph>,
-    ) {
+    ) -> (Vec2<f32>, &[DrawGlyph]) {
         self.find_linebreaks();
         self.shape_segments(assets, fonts);
         self.measure_segments(assets);
         self.flow_segments(max_size.x);
         self.split_lines();
         let size = self.measure_lines();
-        self.place_glyphs(size, max_size, buf);
+        self.place_glyphs(size, max_size);
+        (size, &self.res_glyphs)
     }
 
     pub fn draw(
@@ -162,9 +167,8 @@ impl TextLayouter {
         encoder: &mut GraphicsEncoder,
         bounds: Rect<f32>,
     ) {
-        let mut buf = Vec::new();
-        self.layout(assets, fonts, bounds.extents(), &mut buf);
-        for mut glyph in buf {
+        for glyph in self.layout(assets, fonts, bounds.extents()).1 {
+            let mut glyph = *glyph;
             glyph.pos += bounds.min;
             encoder.glyph(glyph);
         }
@@ -224,17 +228,18 @@ impl TextLayouter {
                 segment.face = Some(face.id());
 
                 let face = &assets[face];
+                let size = segment.props.size;
 
                 let text = &self.text[segment.range.clone()];
                 let text_no_ws = text.trim_end();
                 let text_ws = &text[text_no_ws.len()..];
 
                 let start_idx = self.glyphs.len();
-                face.shape(segment.props.size, text_no_ws, &mut self.glyphs);
+                face.shape(&mut self.cache, size, text_no_ws, &mut self.glyphs);
                 segment.glyph_range = start_idx..self.glyphs.len();
 
                 let start_idx = self.glyphs.len();
-                face.shape(segment.props.size, text_ws, &mut self.glyphs);
+                face.shape(&mut self.cache, size, text_ws, &mut self.glyphs);
                 segment.tws_glyph_range = start_idx..self.glyphs.len();
 
                 let mut missing_idx = usize::MAX;
@@ -381,7 +386,7 @@ impl TextLayouter {
         }
     }
 
-    fn place_glyphs(&mut self, size: Vec2<f32>, max_size: Vec2<f32>, buf: &mut Vec<DrawGlyph>) {
+    fn place_glyphs(&mut self, size: Vec2<f32>, max_size: Vec2<f32>) {
         let mut y = match self.props.v_align {
             TextVAlign::Start => 0.0,
             TextVAlign::Center => (max_size.y - size.y) * 0.5,
@@ -436,7 +441,7 @@ impl TextLayouter {
                 };
 
                 for glyph in &self.glyphs[segment.glyph_range.clone()] {
-                    buf.push(DrawGlyph {
+                    self.res_glyphs.push(DrawGlyph {
                         font,
                         glyph: glyph.glyph,
                         size: segment.props.size,

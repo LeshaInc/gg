@@ -9,7 +9,7 @@ pub trait ViewSeq<D> {
         self.len() == 0
     }
 
-    fn update(&mut self, old: &Self, index: usize) -> bool;
+    fn update(&mut self, old: &mut Self, index: usize) -> bool;
 
     fn pre_layout(&mut self, ctx: LayoutCtx, idx: usize) -> LayoutHints;
 
@@ -38,9 +38,9 @@ macro_rules! impl_tuple {
                 $len
             }
 
-            fn update(&mut self, old: &Self, idx: usize) -> bool {
+            fn update(&mut self, old: &mut Self, idx: usize) -> bool {
                 match idx {
-                    $( $i => self.$i.update(&old.$i), )+
+                    $( $i => self.$i.update(&mut old.$i), )+
                     _ => panic!("index out of bounds"),
                 }
             }

@@ -21,11 +21,11 @@ where
     VT: View<D>,
     VF: View<D>,
 {
-    fn update(&mut self, old: &Self) -> bool {
+    fn update(&mut self, old: &mut Self) -> bool {
         let changed = if self.condition {
-            self.view_t.update(&old.view_t)
+            self.view_t.update(&mut old.view_t)
         } else {
-            self.view_f.update(&old.view_f)
+            self.view_f.update(&mut old.view_f)
         };
 
         self.condition == old.condition || changed
