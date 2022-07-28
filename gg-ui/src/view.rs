@@ -83,6 +83,7 @@ impl LayoutCtx<'_> {
 
 pub struct DrawCtx<'a> {
     pub assets: &'a Assets,
+    pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
 }
 
@@ -90,6 +91,7 @@ impl DrawCtx<'_> {
     pub fn reborrow(&mut self) -> DrawCtx<'_> {
         DrawCtx {
             assets: self.assets,
+            text_layouter: self.text_layouter,
             encoder: self.encoder,
         }
     }

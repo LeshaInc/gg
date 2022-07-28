@@ -15,5 +15,6 @@ pub use self::encoder::GraphicsEncoder;
 pub use self::font::*;
 pub use self::image::{Image, NinePatchImage, PngLoader};
 pub use self::text_layout::{
-    TextHAlign, TextLayoutProperties, TextLayouter, TextProperties, TextVAlign,
+    ShapedText, Text, TextHAlign, TextLayouter, TextProperties, TextSegment, TextSegmentProperties,
+    TextVAlign,
 };

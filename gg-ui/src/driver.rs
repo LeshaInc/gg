@@ -38,6 +38,7 @@ impl<D: 'static> Driver<D> {
         let d_ctx = DrawCtx {
             assets: ctx.assets,
             encoder: ctx.encoder,
+            text_layouter: ctx.text_layouter,
         };
 
         view.draw(d_ctx, Rect::from_pos_extents(ctx.bounds.min, self.size));

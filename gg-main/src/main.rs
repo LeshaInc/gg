@@ -90,8 +90,8 @@ fn main() -> Result<()> {
 
 pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
-        views::text(format!("fps: {:.0}", fps)),
-        views::hstack((views::text(LIPSUM), views::text(LIPSUM))),
+        views::text(format!("fps: {}", fps)),
+        views::hstack((views::text(LEFT), views::text(RIGHT))),
         views::hstack((
             views::rect([0.0, 0.05, 0.05]),
             views::rect([0.05, 0.0, 0.05]),
@@ -105,4 +105,6 @@ pub fn build_ui(fps: f32) -> impl View<()> {
     ))
 }
 
-const LIPSUM: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris leo augue, suscipit quis volutpat non, pretium non libero. Praesent maximus nisl diam, quis faucibus odio tempor vel. Mauris eget ullamcorper lectus. Donec sollicitudin felis id mi sollicitudin, id aliquet leo laoreet. Aliquam volutpat a nisl volutpat bibendum.";
+const LEFT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris leo augue, suscipit quis volutpat non, pretium non libero. Praesent maximus nisl diam, quis faucibus odio tempor vel. Mauris eget ullamcorper lectus. Donec sollicitudin felis id mi sollicitudin, id aliquet leo laoreet. Aliquam volutpat a nisl volutpat bibendum.";
+
+const RIGHT: &str = "Sed feugiat sagittis neque eleifend sodales. Nulla eu vehicula tortor. Ut iaculis, quam eget dignissim dictum, augue lectus blandit lectus, ac accumsan ipsum ipsum finibus nunc. Maecenas dapibus neque at nibh faucibus pulvinar. Maecenas porta efficitur malesuada. Nullam vitae luctus sapien. In id pulvinar mauris. Pellentesque tempus facilisis est, bibendum iaculis lacus feugiat eget. Donec malesuada metus risus, vitae consequat ligula sollicitudin a.";

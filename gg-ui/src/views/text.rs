@@ -1,34 +1,35 @@
+use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use gg_graphics::{
-    Color, DrawGlyph, FontFamily, FontStyle, FontWeight, TextHAlign, TextLayoutProperties,
-    TextProperties, TextVAlign,
+    Color, FontFamily, FontStyle, FontWeight, ShapedText, Text, TextHAlign, TextProperties,
+    TextSegment, TextSegmentProperties, TextVAlign,
 };
 use gg_math::{Rect, Vec2};
 
 use crate::{DrawCtx, LayoutCtx, View};
 
-pub fn text<D>(text: impl Into<String>) -> Text<D> {
-    Text {
+pub fn text<D>(text: impl Into<String>) -> TextView<D> {
+    TextView {
         phantom: PhantomData,
         text: text.into(),
-        glyphs: Vec::new(),
+        shaped_text: None,
     }
 }
 
-pub struct Text<D> {
+pub struct TextView<D> {
     phantom: PhantomData<D>,
     text: String,
-    glyphs: Vec<DrawGlyph>,
+    shaped_text: Option<ShapedText>,
 }
 
-impl<D> View<D> for Text<D> {
+impl<D> View<D> for TextView<D> {
     fn update(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
         if self.text == old.text {
-            std::mem::swap(&mut self.glyphs, &mut old.glyphs);
+            self.shaped_text = old.shaped_text.take();
             false
         } else {
             true
@@ -36,38 +37,45 @@ impl<D> View<D> for Text<D> {
     }
 
     fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
-        ctx.text_layouter.set_props(&TextLayoutProperties {
-            line_height: 1.2,
-            h_align: TextHAlign::Start,
-            v_align: TextVAlign::Start,
+        let shaped_text = self.shaped_text.get_or_insert_with(|| {
+            let segments = [TextSegment {
+                text: Cow::Borrowed(&self.text),
+                props: TextSegmentProperties {
+                    font_family: FontFamily::new("Open Sans")
+                        .push("Noto Color Emoji")
+                        .push("Noto Sans")
+                        .push("Noto Sans JP"),
+                    weight: FontWeight::Normal,
+                    style: FontStyle::Normal,
+                    size: 20.0,
+                    color: Color::WHITE,
+                },
+            }];
+
+            let text = Text {
+                segments: Cow::Borrowed(&segments),
+                props: TextProperties {
+                    line_height: 1.2,
+                    h_align: TextHAlign::Start,
+                    v_align: TextVAlign::Start,
+                },
+            };
+
+            ctx.text_layouter.shape(ctx.assets, ctx.fonts, &text)
         });
 
-        let props = TextProperties {
-            font_family: FontFamily::new("Open Sans")
-                .push("Noto Color Emoji")
-                .push("Noto Sans")
-                .push("Noto Sans JP"),
-            weight: FontWeight::Normal,
-            style: FontStyle::Normal,
-            size: 20.0,
-            color: Color::WHITE,
-        };
-
-        ctx.text_layouter.reset();
-        ctx.text_layouter.append(&props, &self.text);
-        let (size, glyphs) = ctx.text_layouter.layout(ctx.assets, ctx.fonts, size);
-
-        self.glyphs.clear();
-        self.glyphs.extend_from_slice(glyphs);
-
-        size
+        ctx.text_layouter.measure(shaped_text, size)
     }
 
     fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
-        for glyph in &self.glyphs {
-            let mut glyph = *glyph;
-            glyph.pos += bounds.min;
-            ctx.encoder.glyph(glyph);
+        if let Some(text) = &mut self.shaped_text {
+            let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.extents());
+
+            for glyph in glyphs {
+                let mut glyph = *glyph;
+                glyph.pos += bounds.min;
+                ctx.encoder.glyph(glyph);
+            }
         }
     }
 }

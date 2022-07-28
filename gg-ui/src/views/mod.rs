@@ -14,4 +14,4 @@ pub use self::constraint::{
 pub use self::nothing::{nothing, Nothing};
 pub use self::rect::{rect, RectView as Rect};
 pub use self::stack::{hstack, vstack, MajorAlign, MinorAlign, Orientation, Stack, StackConfig};
-pub use self::text::{text, Text};
+pub use self::text::{text, TextView};
