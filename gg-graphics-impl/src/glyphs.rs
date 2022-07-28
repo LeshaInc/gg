@@ -1,5 +1,5 @@
 use gg_assets::{Assets, Id};
-use gg_graphics::{Font, GlyphId, SubpixelOffset};
+use gg_graphics::{FontFace, GlyphId, SubpixelOffset};
 use gg_math::{Rect, Vec2};
 use gg_util::ahash::AHashMap;
 use wgpu::TextureFormat;
@@ -78,7 +78,7 @@ impl Glyphs {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct GlyphKey {
-    pub font: Id<Font>,
+    pub font: Id<FontFace>,
     pub glyph: GlyphId,
     pub kind: GlyphKeyKind,
 }
@@ -90,6 +90,6 @@ pub enum GlyphKeyKind {
         subpixel_offset: SubpixelOffset,
     },
     Image {
-        size: u32
-    }
+        size: u32,
+    },
 }

@@ -16,7 +16,7 @@ use crate::loaders::AssetLoaders;
 use crate::metadata::MetadataStorage;
 use crate::sync_any::SyncAny;
 use crate::task::TaskSender;
-use crate::{Asset, AssetLoader, Handle, Id, Input, Source};
+use crate::{Asset, AssetLoader, Handle, Input, Source};
 
 #[derive(Debug)]
 pub struct SharedData {
@@ -31,12 +31,8 @@ pub struct SharedData {
 }
 
 impl SharedData {
-    pub fn send_event<A: Asset>(&self, kind: EventKind, id: Id<A>) {
-        self.event_senders.read().send(kind, id)
-    }
-
-    pub fn send_event_untyped(&self, kind: EventKind, id: UntypedId, ty: TypeId) {
-        self.event_senders.read().send_untyped(kind, id, ty)
+    pub fn send_event(&self, kind: EventKind, id: UntypedId, ty: TypeId) {
+        self.event_senders.read().send(kind, id, ty)
     }
 
     pub fn set_path(&self, handle: &UntypedHandle, path: Arc<Path>) {
@@ -59,6 +55,13 @@ impl SharedData {
             meta.available.clone()
         };
         flag.wait(true).await;
+    }
+
+    pub fn insert<A: Asset>(&self, asset: A) -> Handle<A> {
+        gg_util::rtti::register::<A>();
+        let handle = self.handle_allocator.alloc();
+        self.command_sender.insert(handle.id(), asset);
+        handle
     }
 
     pub fn load<A, P>(&self, path: P) -> Handle<A>

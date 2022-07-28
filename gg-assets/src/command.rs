@@ -23,7 +23,7 @@ impl Command {
                 };
 
                 assets.storage.insert_any(id, ty, value);
-                assets.shared.send_event_untyped(event_kind, id, ty);
+                assets.shared.send_event(event_kind, id, ty);
 
                 let meta_storage = assets.shared.metadata.read();
                 if let Some(meta) = meta_storage.get(id) {
@@ -34,7 +34,7 @@ impl Command {
             Command::Remove(id, ty) => {
                 assets.storage.remove(id, ty);
                 assets.shared.metadata.write().remove(id);
-                assets.shared.send_event_untyped(EventKind::Removed, id, ty);
+                assets.shared.send_event(EventKind::Removed, id, ty);
             }
 
             Command::Closure(closure) => {

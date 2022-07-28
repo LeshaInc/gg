@@ -7,7 +7,7 @@ use gg_util::parking_lot::{Mutex, RwLock};
 use gg_util::rtti::TypeId;
 
 use crate::command::{new_command_channel, CommandReceiver};
-use crate::event::{EventKind, EventSenders};
+use crate::event::EventSenders;
 use crate::handle_allocator::HandleAllocator;
 use crate::loader::AssetLoaderObject;
 use crate::loaders::AssetLoaders;
@@ -15,7 +15,7 @@ use crate::metadata::MetadataStorage;
 use crate::shared::SharedData;
 use crate::storage::Storage;
 use crate::task::{new_task_channel, spawn_workers};
-use crate::{Asset, AssetLoader, EventReceiver, Handle, Id, Input, Source};
+use crate::{Asset, AssetLoader, EventKind, EventReceiver, Handle, Id, Input, Source};
 
 #[derive(Debug)]
 pub struct Assets {
@@ -61,19 +61,24 @@ impl Assets {
         gg_util::rtti::register::<A>();
         let handle = self.shared.handle_allocator.alloc();
         self.storage.insert(handle.id(), asset);
-        self.shared.send_event(EventKind::Created, handle.id());
+        self.shared.send_event(
+            EventKind::Created,
+            handle.id().into_untyped(),
+            TypeId::of::<A>(),
+        );
         handle
     }
 
     pub fn insert_defer<A: Asset>(&self, asset: A) -> Handle<A> {
-        gg_util::rtti::register::<A>();
-        let handle = self.shared.handle_allocator.alloc();
-        self.shared.command_sender.insert(handle.id(), asset);
-        handle
+        self.shared.insert(asset)
     }
 
     pub async fn wait_available<A: Asset>(&self, handle: &Handle<A>) {
         self.shared.wait_available(handle).await;
+    }
+
+    pub fn wait_available_sync<A: Asset>(&self, handle: &Handle<A>) {
+        pollster::block_on(self.wait_available(handle));
     }
 
     pub fn set_path<A, P>(&self, handle: &Handle<A>, path: P)

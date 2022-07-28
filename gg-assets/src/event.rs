@@ -74,11 +74,7 @@ impl EventSenders {
         receiver
     }
 
-    pub fn send<A: Asset>(&self, kind: EventKind, id: Id<A>) {
-        self.send_untyped(kind, id.into_untyped(), TypeId::of::<A>())
-    }
-
-    pub fn send_untyped(&self, kind: EventKind, id: UntypedId, ty: TypeId) {
+    pub fn send(&self, kind: EventKind, id: UntypedId, ty: TypeId) {
         if let Some(senders) = self.map.get(&ty) {
             for sender in senders {
                 sender.send(kind, id);

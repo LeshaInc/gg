@@ -4,15 +4,13 @@ use std::time::Instant;
 
 use gg_assets::{Assets, DirSource, Handle};
 use gg_graphics::{
-    Backend, Color, Font, GraphicsEncoder, TextHAlign, TextLayoutProperties, TextLayouter,
-    TextProperties, TextVAlign,
+    Backend, Color, FontCollection, GraphicsEncoder, TextHAlign, TextLayoutProperties,
+    TextLayouter, TextProperties, TextVAlign,
 };
 use gg_graphics_impl::BackendImpl;
 use gg_math::{Rect, Vec2};
 use gg_ui::{views, UiContext, View, ViewExt};
 use gg_util::eyre::Result;
-use rand::prelude::StdRng;
-use rand::{Rng, SeedableRng};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -28,7 +26,13 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
-    let font: Handle<Font> = assets.load("NotoColorEmoji.ttf");
+    let font_collection: Handle<FontCollection> = assets.load("NotoColorEmoji.ttf");
+
+    while !assets.contains(&font_collection) {
+        assets.maintain();
+    }
+
+    let font = assets[&font_collection].faces[0].clone();
 
     let window = WindowBuilder::new()
         .with_title("A fantastic window!")

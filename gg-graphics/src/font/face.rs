@@ -1,28 +1,36 @@
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use ab_glyph_rasterizer::{point, Point, Rasterizer};
-use gg_assets::{Asset, BytesAssetLoader, LoaderCtx, LoaderRegistry};
+use gg_assets::Asset;
 use gg_math::{Rect, Vec2};
-use gg_util::async_trait;
 use gg_util::eyre::{eyre, Result};
 use image::imageops::FilterType;
 use rustybuzz::{Direction, Face, UnicodeBuffer};
 pub use ttf_parser::GlyphId;
 use ttf_parser::OutlineBuilder;
 
-pub struct Font {
+pub struct FontFace {
     inner: Inner,
 }
 
 #[ouroboros::self_referencing]
 struct Inner {
-    data: Vec<u8>,
+    data: Arc<[u8]>,
     #[covariant]
     #[borrows(mut data)]
     face: Face<'this>,
 }
 
-impl Font {
+impl FontFace {
+    pub fn new(data: Arc<[u8]>, index: u32) -> Result<FontFace> {
+        Ok(FontFace {
+            inner: Inner::try_new(data, |data| {
+                Face::from_slice(data, index).ok_or_else(|| eyre!("font parsing error"))
+            })?,
+        })
+    }
+
     pub fn lookup_glyph(&self, ch: char) -> GlyphId {
         let face = self.inner.borrow_face();
         face.glyph_index(ch).unwrap_or(GlyphId(0))
@@ -158,11 +166,7 @@ impl Font {
     }
 }
 
-impl Asset for Font {
-    fn register_loaders(registry: &mut LoaderRegistry) {
-        registry.add(FontLoader);
-    }
-}
+impl Asset for FontFace {}
 
 #[derive(Clone, Copy, Debug)]
 pub struct LineMetrics {
@@ -255,18 +259,5 @@ impl OutlineBuilder for Outliner<'_> {
         if let Some(pos) = self.last_move.take() {
             self.rasterizer.draw_line(self.last_pos, pos);
         }
-    }
-}
-
-pub struct FontLoader;
-
-#[async_trait]
-impl BytesAssetLoader<Font> for FontLoader {
-    async fn load(&self, _: &mut LoaderCtx, bytes: Vec<u8>) -> Result<Font> {
-        Ok(Font {
-            inner: Inner::try_new(bytes, |bytes| {
-                Face::from_slice(bytes, 0).ok_or_else(|| eyre!("font loading error"))
-            })?,
-        })
     }
 }

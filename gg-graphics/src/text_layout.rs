@@ -4,7 +4,7 @@ use gg_assets::{Assets, Id};
 use gg_math::{Rect, Vec2};
 use unicode_linebreak::BreakOpportunity;
 
-use crate::{Color, DrawGlyph, Font, GraphicsEncoder, ShapedGlyph};
+use crate::{Color, DrawGlyph, FontFace, GraphicsEncoder, ShapedGlyph};
 
 #[derive(Debug)]
 pub struct TextLayouter {
@@ -87,7 +87,7 @@ struct Line {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TextProperties {
-    pub font: Id<Font>,
+    pub font: Id<FontFace>,
     pub size: f32,
     pub color: Color,
 }

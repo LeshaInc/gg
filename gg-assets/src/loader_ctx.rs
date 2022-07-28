@@ -46,6 +46,10 @@ impl LoaderCtx {
         Ok(data)
     }
 
+    pub fn insert<A: Asset>(&self, asset: A) -> Handle<A> {
+        self.shared.insert(asset)
+    }
+
     pub fn load<A, P>(&self, path: P) -> Handle<A>
     where
         A: Asset,

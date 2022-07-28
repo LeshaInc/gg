@@ -13,6 +13,7 @@ ouroboros = "0.15.0"
 rustybuzz = "0.5.1"
 ttf-parser = "0.15.2"
 unicode-linebreak = "0.1.2"
+tracing = "0.1.35"
 
 [dependencies.image]
 version = "0.24.2"

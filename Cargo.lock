@@ -516,6 +516,7 @@ dependencies = [
  "crossbeam-channel",
  "gg-util",
  "notify",
+ "pollster",
  "serde",
  "serde_json",
  "smallvec",
@@ -534,6 +535,7 @@ dependencies = [
  "image",
  "ouroboros",
  "rustybuzz",
+ "tracing",
  "ttf-parser",
  "unicode-linebreak",
 ]
