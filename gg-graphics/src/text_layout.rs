@@ -2,9 +2,13 @@ use std::ops::Range;
 
 use gg_assets::{Assets, Id};
 use gg_math::{Rect, Vec2};
+use ttf_parser::GlyphId;
 use unicode_linebreak::BreakOpportunity;
 
-use crate::{Color, DrawGlyph, FontFace, GraphicsEncoder, ShapedGlyph};
+use crate::{
+    Color, DrawGlyph, FontDb, FontFace, FontFamily, FontStyle, FontWeight, GraphicsEncoder,
+    ShapedGlyph,
+};
 
 #[derive(Debug)]
 pub struct TextLayouter {
@@ -50,6 +54,7 @@ impl Default for TextLayoutProperties {
 
 #[derive(Clone, Debug)]
 struct Segment {
+    face: Option<Id<FontFace>>,
     range: Range<usize>,
     glyph_range: Range<usize>,
     tws_glyph_range: Range<usize>,
@@ -64,6 +69,7 @@ struct Segment {
 impl Segment {
     fn new(props: TextProperties) -> Segment {
         Segment {
+            face: None,
             range: 0..0,
             glyph_range: 0..0,
             tws_glyph_range: 0..0,
@@ -85,9 +91,11 @@ struct Line {
     ascender: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct TextProperties {
-    pub font: Id<FontFace>,
+    pub font_family: FontFamily,
+    pub weight: FontWeight,
+    pub style: FontStyle,
     pub size: f32,
     pub color: Color,
 }
@@ -112,7 +120,7 @@ impl TextLayouter {
         self.text.clear();
     }
 
-    pub fn append(&mut self, props: TextProperties, text: &str) {
+    pub fn append(&mut self, props: &TextProperties, text: &str) {
         if text.is_empty() {
             return;
         }
@@ -123,7 +131,7 @@ impl TextLayouter {
 
         self.segments.push(Segment {
             range,
-            ..Segment::new(props)
+            ..Segment::new(props.clone())
         });
     }
 
@@ -131,18 +139,31 @@ impl TextLayouter {
         self.props = *props;
     }
 
-    pub fn layout(&mut self, assets: &Assets, max_size: Vec2<f32>, buf: &mut Vec<DrawGlyph>) {
+    pub fn layout(
+        &mut self,
+        assets: &Assets,
+        fonts: &FontDb,
+        max_size: Vec2<f32>,
+        buf: &mut Vec<DrawGlyph>,
+    ) {
         self.find_linebreaks();
-        self.shape_segments(assets);
+        self.shape_segments(assets, fonts);
+        self.measure_segments(assets);
         self.flow_segments(max_size.x);
         self.split_lines();
-        let size = self.measure();
+        let size = self.measure_lines();
         self.place_glyphs(size, max_size, buf);
     }
 
-    pub fn draw(&mut self, assets: &Assets, encoder: &mut GraphicsEncoder, bounds: Rect<f32>) {
+    pub fn draw(
+        &mut self,
+        assets: &Assets,
+        fonts: &FontDb,
+        encoder: &mut GraphicsEncoder,
+        bounds: Rect<f32>,
+    ) {
         let mut buf = Vec::new();
-        self.layout(assets, bounds.extents(), &mut buf);
+        self.layout(assets, fonts, bounds.extents(), &mut buf);
         for mut glyph in buf {
             glyph.pos += bounds.min;
             encoder.glyph(glyph);
@@ -172,7 +193,7 @@ impl TextLayouter {
                 self.new_segments.push(Segment {
                     range: segment.range.start..i,
                     linebreak: Some(linebreak),
-                    ..Segment::new(segment.props)
+                    ..Segment::new(segment.props.clone())
                 });
 
                 segment.range.start = i;
@@ -186,36 +207,96 @@ impl TextLayouter {
         std::mem::swap(&mut self.segments, &mut self.new_segments);
     }
 
-    fn shape_segments(&mut self, assets: &Assets) {
+    fn shape_segments(&mut self, assets: &Assets, fonts: &FontDb) {
         self.glyphs.clear();
 
+        let mut segment_i = 0;
+
+        while segment_i < self.segments.len() {
+            let mut segment = &mut self.segments[segment_i];
+            segment_i += 1;
+
+            let it = segment.props.font_family.names();
+            let mut faces =
+                it.flat_map(|name| fonts.find(name, segment.props.weight, segment.props.style));
+
+            'outer: while let Some(face) = faces.next() {
+                segment.face = Some(face.id());
+
+                let face = &assets[face];
+
+                let text = &self.text[segment.range.clone()];
+                let text_no_ws = text.trim_end();
+                let text_ws = &text[text_no_ws.len()..];
+
+                let start_idx = self.glyphs.len();
+                face.shape(segment.props.size, text_no_ws, &mut self.glyphs);
+                segment.glyph_range = start_idx..self.glyphs.len();
+
+                let start_idx = self.glyphs.len();
+                face.shape(segment.props.size, text_ws, &mut self.glyphs);
+                segment.tws_glyph_range = start_idx..self.glyphs.len();
+
+                let mut missing_idx = usize::MAX;
+
+                for glyph in &self.glyphs[segment.glyph_range.clone()] {
+                    if glyph.glyph == GlyphId(0) {
+                        if glyph.cluster == 0 && text_ws.is_empty() {
+                            continue 'outer;
+                        }
+
+                        missing_idx = glyph.cluster as usize;
+                        break;
+                    }
+                }
+
+                if missing_idx == usize::MAX {
+                    break;
+                }
+
+                let split_idx = segment.range.start + missing_idx;
+
+                let new_segment = Segment {
+                    range: split_idx..segment.range.end - text_ws.len(),
+                    linebreak: None,
+                    ..segment.clone()
+                };
+
+                let ws_segment = Segment {
+                    range: (segment.range.end - text_ws.len())..segment.range.end,
+                    linebreak: segment.linebreak.take(),
+                    ..segment.clone()
+                };
+
+                segment.range.end = split_idx;
+
+                drop(faces);
+                self.segments.insert(segment_i, new_segment);
+                self.segments.insert(segment_i + 1, ws_segment);
+                segment_i -= 1;
+                break;
+            }
+        }
+    }
+
+    fn measure_segments(&mut self, assets: &Assets) {
         for segment in &mut self.segments {
-            let font = &assets[segment.props.font];
-            let metrics = font.line_metrics(segment.props.size);
+            let face = match segment.face.map(|v| &assets[v]) {
+                Some(v) => v,
+                None => continue,
+            };
 
-            let text = &self.text[segment.range.clone()];
-            let text_no_ws = text.trim_end();
-            let text_ws = &text[text_no_ws.len()..];
-
-            let start_idx = self.glyphs.len();
-            font.shape(segment.props.size, text_no_ws, &mut self.glyphs);
-            segment.glyph_range = start_idx..self.glyphs.len();
-
-            let start_idx = self.glyphs.len();
-            font.shape(segment.props.size, text_ws, &mut self.glyphs);
-            segment.tws_glyph_range = start_idx..self.glyphs.len();
+            let metrics = face.line_metrics(segment.props.size);
 
             segment.height = self.props.line_height * segment.props.size;
             segment.ascender =
                 metrics.ascender + (segment.height - metrics.ascender + metrics.descender) * 0.5;
 
-            for i in segment.glyph_range.clone() {
-                let glyph = &self.glyphs[i];
+            for glyph in &self.glyphs[segment.glyph_range.clone()] {
                 segment.width += glyph.advance.x;
             }
 
-            for i in segment.tws_glyph_range.clone() {
-                let glyph = &self.glyphs[i];
+            for glyph in &self.glyphs[segment.tws_glyph_range.clone()] {
                 segment.tws_width += glyph.advance.x;
             }
         }
@@ -254,7 +335,7 @@ impl TextLayouter {
         }
     }
 
-    fn measure(&self) -> Vec2<f32> {
+    fn measure_lines(&self) -> Vec2<f32> {
         let mut size = Vec2::zero();
 
         for line in &self.lines {
@@ -349,9 +430,14 @@ impl TextLayouter {
             cursor.y += line.ascender;
 
             for segment in &self.segments[line.range.clone()] {
+                let font = match segment.face {
+                    Some(v) => v,
+                    None => continue,
+                };
+
                 for glyph in &self.glyphs[segment.glyph_range.clone()] {
                     buf.push(DrawGlyph {
-                        font: segment.props.font,
+                        font,
                         glyph: glyph.glyph,
                         size: segment.props.size,
                         pos: cursor + glyph.offset,

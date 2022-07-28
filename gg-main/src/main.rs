@@ -2,10 +2,10 @@ mod fps_counter;
 
 use std::time::Instant;
 
-use gg_assets::{Assets, DirSource, Handle};
+use gg_assets::{Assets, DirSource};
 use gg_graphics::{
-    Backend, Color, FontCollection, GraphicsEncoder, TextHAlign, TextLayoutProperties,
-    TextLayouter, TextProperties, TextVAlign,
+    Backend, Color, FontDb, FontFamily, FontStyle, FontWeight, GraphicsEncoder, TextHAlign,
+    TextLayoutProperties, TextLayouter, TextProperties, TextVAlign,
 };
 use gg_graphics_impl::BackendImpl;
 use gg_math::{Rect, Vec2};
@@ -26,13 +26,19 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
 
-    let font_collection: Handle<FontCollection> = assets.load("NotoColorEmoji.ttf");
+    let mut fonts = FontDb::new();
+    fonts.add_collection(&assets.load("fonts/OpenSans-Regular.ttf"));
+    fonts.add_collection(&assets.load("fonts/OpenSans-Italic.ttf"));
+    fonts.add_collection(&assets.load("fonts/OpenSans-Bold.ttf"));
+    fonts.add_collection(&assets.load("fonts/OpenSans-BoldItalic.ttf"));
+    fonts.add_collection(&assets.load("fonts/NotoColorEmoji.ttf"));
+    fonts.add_collection(&assets.load("fonts/NotoSans-Regular.ttf"));
+    fonts.add_collection(&assets.load("fonts/NotoSansJP-Regular.otf"));
 
-    while !assets.contains(&font_collection) {
-        assets.maintain();
-    }
-
-    let font = assets[&font_collection].faces[0].clone();
+    let font_family = FontFamily::new("Open Sans")
+        .push("Noto Color Emoji")
+        .push("Noto Sans")
+        .push("Noto Sans JP");
 
     let window = WindowBuilder::new()
         .with_title("A fantastic window!")
@@ -46,7 +52,6 @@ fn main() -> Result<()> {
     let mut frame_start = Instant::now();
 
     let mut ui = gg_ui::Driver::new();
-
     let mut text_layouter = TextLayouter::new();
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -56,6 +61,7 @@ fn main() -> Result<()> {
         } => *control_flow = ControlFlow::Exit,
         Event::RedrawRequested(_) => {
             assets.maintain();
+            fonts.update(&assets);
 
             let size = window.inner_size();
             let size = Vec2::new(size.width, size.height);
@@ -77,27 +83,40 @@ fn main() -> Result<()> {
 
             text_layouter.reset();
             text_layouter.set_props(&TextLayoutProperties {
-                h_align: TextHAlign::Justify,
+                h_align: TextHAlign::Start,
                 v_align: TextVAlign::Start,
                 ..Default::default()
             });
 
             let mut text_props = TextProperties {
-                font: font.id(),
+                font_family: font_family.clone(),
+                weight: FontWeight::Normal,
+                style: FontStyle::Normal,
                 size: 20.0,
                 color: Color::WHITE,
             };
 
             let text = format!("fps: {}\n\n", fps_counter.fps());
-            text_layouter.append(text_props, &text);
+            text_layouter.append(&text_props, &text);
 
-            let text = "😀😡🤯👺\n";
-            text_layouter.append(text_props, &text);
+            let text = "सभमन 日本語\n\n";
+            text_layouter.append(&text_props, &text);
 
-            text_props.size = 128.0;
-            text_layouter.append(text_props, &text);
+            let text = "kill⁠😀⁠me hello 🤬🪖\n";
+            text_layouter.append(&text_props, &text);
 
-            text_layouter.draw(&assets, &mut encoder, ui_bounds);
+            text_props.style = FontStyle::Italic;
+            text_layouter.append(&text_props, &text);
+
+            text_props.weight = FontWeight::Bold;
+            text_props.style = FontStyle::Normal;
+            text_layouter.append(&text_props, &text);
+
+            text_props.weight = FontWeight::Bold;
+            text_props.style = FontStyle::Italic;
+            text_layouter.append(&text_props, &text);
+
+            text_layouter.draw(&assets, &fonts, &mut encoder, ui_bounds);
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
