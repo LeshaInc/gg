@@ -25,7 +25,15 @@ use crate::glyphs::{GlyphKey, GlyphKeyKind, Glyphs};
 use crate::images::Images;
 use crate::pipeline::Pipelines;
 
+#[derive(Clone, Copy, Debug)]
+pub struct BackendSettings {
+    pub vsync: bool,
+    pub prefer_low_power_gpu: bool,
+    pub image_cell_size: Vec2<u16>,
+}
+
 pub struct BackendImpl {
+    settings: BackendSettings,
     device: Device,
     queue: Queue,
     surface: Surface,
@@ -41,7 +49,7 @@ pub struct BackendImpl {
 }
 
 impl BackendImpl {
-    pub fn new(assets: &Assets, window: &Window) -> Result<BackendImpl> {
+    pub fn new(settings: BackendSettings, assets: &Assets, window: &Window) -> Result<BackendImpl> {
         let backend = backend_bits_from_env().unwrap_or(Backends::PRIMARY);
         let instance = Instance::new(backend);
         let surface = unsafe { instance.create_surface(window) };
@@ -49,7 +57,11 @@ impl BackendImpl {
         let resolution = Vec2::new(size.width, size.height);
 
         let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
-            power_preference: PowerPreference::LowPower,
+            power_preference: if settings.prefer_low_power_gpu {
+                PowerPreference::LowPower
+            } else {
+                PowerPreference::HighPerformance
+            },
             force_fallback_adapter: false,
             compatible_surface: Some(&surface),
         }))
@@ -71,13 +83,14 @@ impl BackendImpl {
             max_size: Vec2::splat(limits.max_texture_dimension_2d.min(8192)),
         });
 
-        let images = Images::new(assets, Vec2::splat(8)); // TODO: configure separately
+        let images = Images::new(assets, settings.image_cell_size);
         let glyphs = Glyphs::new();
         let canvases = Canvases::new();
         let bindings = Bindings::new(&device, &queue);
         let pipelines = Pipelines::new(&device, &bindings);
 
         let mut backend = BackendImpl {
+            settings,
             device,
             queue,
             surface,
@@ -171,6 +184,23 @@ impl Backend for BackendImpl {
 }
 
 impl BackendImpl {
+    fn configure_surface(&mut self) {
+        self.surface.configure(
+            &self.device,
+            &SurfaceConfiguration {
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                format: TextureFormat::Bgra8UnormSrgb,
+                width: self.resolution.x,
+                height: self.resolution.y,
+                present_mode: if self.settings.vsync {
+                    PresentMode::AutoVsync
+                } else {
+                    PresentMode::AutoNoVsync
+                },
+            },
+        )
+    }
+
     fn alloc_list(&mut self, assets: &mut Assets, commands: &CommandList) {
         for command in &commands.list {
             match command {
@@ -236,19 +266,6 @@ impl BackendImpl {
         if let Some(key) = Self::get_glyph_key(assets, cmd) {
             self.glyphs.alloc(&mut self.atlases, assets, key);
         }
-    }
-
-    fn configure_surface(&mut self) {
-        self.surface.configure(
-            &self.device,
-            &SurfaceConfiguration {
-                usage: TextureUsages::RENDER_ATTACHMENT,
-                format: TextureFormat::Bgra8UnormSrgb,
-                width: self.resolution.x,
-                height: self.resolution.y,
-                present_mode: PresentMode::AutoNoVsync,
-            },
-        )
     }
 
     fn batch_list(&mut self, assets: &Assets, commands: &CommandList) -> Option<Color> {

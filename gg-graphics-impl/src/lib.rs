@@ -7,4 +7,4 @@ mod glyphs;
 mod images;
 mod pipeline;
 
-pub use self::backend::BackendImpl;
+pub use self::backend::{BackendImpl, BackendSettings};

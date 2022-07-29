@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use gg_assets::{Assets, DirSource};
 use gg_graphics::{Backend, FontDb, GraphicsEncoder, TextLayouter};
-use gg_graphics_impl::BackendImpl;
+use gg_graphics_impl::{BackendImpl, BackendSettings};
 use gg_math::{Rect, Vec2};
 use gg_ui::{views, UiContext, View, ViewExt};
 use gg_util::eyre::Result;
@@ -37,10 +37,16 @@ fn main() -> Result<()> {
         .with_inner_size(LogicalSize::new(128.0, 128.0))
         .build(&event_loop)?;
 
-    let mut backend = BackendImpl::new(&assets, &window)?;
+    let settings = BackendSettings {
+        vsync: true,
+        prefer_low_power_gpu: true,
+        image_cell_size: Vec2::splat(8),
+    };
+
+    let mut backend = BackendImpl::new(settings, &assets, &window)?;
     let main_canvas = backend.get_main_canvas();
 
-    let mut fps_counter = FpsCounter::new(100);
+    let mut fps_counter = FpsCounter::new(300);
     let mut frame_start = Instant::now();
 
     let mut ui = gg_ui::Driver::new();
@@ -73,9 +79,7 @@ fn main() -> Result<()> {
                 encoder: &mut encoder,
             };
 
-            let t = std::time::Instant::now();
             ui.run(build_ui(fps_counter.fps()), ui_ctx);
-            println!("{:?}", t.elapsed());
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
@@ -92,7 +96,7 @@ fn main() -> Result<()> {
 
 pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
-        views::text(format!("fps")),
+        views::text(format!("fps: {:.2}", fps)),
         views::hstack((
             views::text(LEFT).set_stetch(1.0),
             views::text(RIGHT).set_stetch(1.0),
