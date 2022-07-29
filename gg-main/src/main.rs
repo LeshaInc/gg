@@ -73,7 +73,9 @@ fn main() -> Result<()> {
                 encoder: &mut encoder,
             };
 
+            let t = std::time::Instant::now();
             ui.run(build_ui(fps_counter.fps()), ui_ctx);
+            println!("{:?}", t.elapsed());
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
@@ -90,8 +92,11 @@ fn main() -> Result<()> {
 
 pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
-        views::text(format!("fps: {}", fps)),
-        views::hstack((views::text(LEFT), views::text(RIGHT))),
+        views::text(format!("fps")),
+        views::hstack((
+            views::text(LEFT).set_stetch(1.0),
+            views::text(RIGHT).set_stetch(1.0),
+        )),
         views::hstack((
             views::rect([0.0, 0.05, 0.05]),
             views::rect([0.05, 0.0, 0.05]),
@@ -105,6 +110,6 @@ pub fn build_ui(fps: f32) -> impl View<()> {
     ))
 }
 
-const LEFT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris leo augue, suscipit quis volutpat non, pretium non libero. Praesent maximus nisl diam, quis faucibus odio tempor vel. Mauris eget ullamcorper lectus. Donec sollicitudin felis id mi sollicitudin, id aliquet leo laoreet. Aliquam volutpat a nisl volutpat bibendum.";
+const LEFT: &str = "But 🐬😅 I must explain to 💦🙅 you 👉 how all 😱😎 this mistaken idea 👌 of 🎆😂 denouncing pleasure 💋 and 💰 praising pain 😧 was 👏💮 born and I 👁 will 😩 give you 🚫 a complete ✅ account of 🌈 the system, 🤣 and 👏 expound the 👧👌 actual teachings of 👨💦 the great explorer of 🌈💦 the truth, 🙌 the master-builder 🥇🥇 of 👏🚨 human ♀ happiness. 🙏😁 No one ♿☝ rejects, dislikes, or 🅱 avoids pleasure 😝 itself, 👈👈 because it 😂 is 💦👊 pleasure, 😩💦 but ";
 
-const RIGHT: &str = "Sed feugiat sagittis neque eleifend sodales. Nulla eu vehicula tortor. Ut iaculis, quam eget dignissim dictum, augue lectus blandit lectus, ac accumsan ipsum ipsum finibus nunc. Maecenas dapibus neque at nibh faucibus pulvinar. Maecenas porta efficitur malesuada. Nullam vitae luctus sapien. In id pulvinar mauris. Pellentesque tempus facilisis est, bibendum iaculis lacus feugiat eget. Donec malesuada metus risus, vitae consequat ligula sollicitudin a.";
+const RIGHT: &str = "Nor 🙅🍺 again 😩😳 is 🤔 there anyone who 🔭 loves 💕🍑 or 💁💁 pursues or 😣💰 desires to 💰💰 obtain pain 😞😞 of 👏📰 itself, 👏👈 because it is 🏻 pain, 😩 but because 🚱💁 occasionally 🐶 circumstances ❌ occur 👻👻 in ⏬ which toil and 💮 pain 💥😩 can 💦🗑 procure him 👦 some 👨 great 🤤🌍 pleasure. 💦💦 To 💦 take 👀🐤 a 👌👌 trivial example, which 🎓 of 📆💰 us 💼 ever undertakes laborious physical 👊 exercise, except 😮 to 💦🚶 obtain some 🤔🈯 advantage from 💦 it? 😂💕";

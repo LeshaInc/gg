@@ -7,7 +7,7 @@ use gg_graphics::{
 };
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, LayoutCtx, View};
+use crate::{DrawCtx, LayoutCtx, LayoutHints, View};
 
 pub fn text<D>(text: impl Into<String>) -> TextView<D> {
     TextView {
@@ -33,6 +33,13 @@ impl<D> View<D> for TextView<D> {
             false
         } else {
             true
+        }
+    }
+
+    fn pre_layout(&mut self, _ctx: LayoutCtx) -> LayoutHints {
+        LayoutHints {
+            stretch: 0.0,
+            ..Default::default()
         }
     }
 
@@ -64,17 +71,10 @@ impl<D> View<D> for TextView<D> {
             ctx.text_layouter.shape(ctx.assets, ctx.fonts, &text)
         });
 
-        ctx.text_layouter
-            .measure(shaped_text, size - Vec2::splat(20.0))
-            .fmax(size)
+        ctx.text_layouter.measure(shaped_text, size).fmax(size)
     }
 
     fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
-        let pad = Vec2::splat(10.0);
-
-        let bounds = Rect::new(bounds.min + pad, bounds.max - pad);
-        ctx.encoder.rect(bounds).fill_color([0.03; 3]);
-
         if let Some(text) = &mut self.shaped_text {
             let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.extents());
 

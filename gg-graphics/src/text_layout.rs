@@ -364,7 +364,11 @@ fn flow_segments(segments: &mut [RawSegment], max_width: f32) {
     let mut i = 1;
 
     while i < segments.len() {
-        line_width += segments[i - 1].tws_width + segments[i].width;
+        if !segments[i - 1].flow_break {
+            line_width += segments[i - 1].tws_width;
+        }
+
+        line_width += segments[i].width;
 
         if line_width > max_width
             && segments[last_opportunity].linebreak == Some(BreakOpportunity::Allowed)
@@ -377,7 +381,7 @@ fn flow_segments(segments: &mut [RawSegment], max_width: f32) {
         }
 
         match segments[i].linebreak {
-            Some(BreakOpportunity::Allowed) => last_opportunity = i - 1,
+            Some(BreakOpportunity::Allowed) => last_opportunity = i,
             Some(BreakOpportunity::Mandatory) => line_width = 0.0,
             _ => {}
         }

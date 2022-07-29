@@ -144,7 +144,11 @@ where
 
         used[maj] = meta.iter().map(|v| v.size[maj]).sum();
 
-        for _ in 0..10 {
+        let mut rem_iters = self.children.len() + 1;
+
+        while rem_iters > 0 {
+            rem_iters -= 1;
+
             let mut remaining = (adviced[maj] - used[maj]).max(0.0);
             let stretch_unit = remaining / total_stretch.max(1.0);
 
@@ -173,8 +177,8 @@ where
                 used[min] = used[min].max(child.size[min]);
             }
 
-            if used[maj] >= adviced[maj] - 0.5 {
-                break;
+            if used[maj] >= adviced[maj] - 0.5 && rem_iters > 1 {
+                rem_iters = 1;
             }
         }
 
