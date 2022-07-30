@@ -98,8 +98,8 @@ pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
         views::text(format!("fps: {:.2}", fps)),
         views::hstack((
-            views::text(LEFT).set_stetch(1.0),
-            views::text(RIGHT).set_stetch(1.0),
+            views::padding([10.0, 5.0, 10.0, 0.0], views::text(LEFT)).set_stetch(1.0),
+            views::padding([10.0, 0.0, 10.0, 5.0], views::text(RIGHT)).set_stetch(1.0),
         )),
         views::hstack((
             views::rect([0.0, 0.05, 0.05]),

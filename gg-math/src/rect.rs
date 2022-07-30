@@ -1,6 +1,6 @@
 use num_traits::{Num, NumCast};
 
-use crate::Vec2;
+use crate::{SideOffsets, Vec2};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
@@ -69,6 +69,23 @@ impl<T: Num + Copy> Rect<T> {
         self.width() * self.height()
     }
 
+    #[inline]
+    pub fn shrink(&self, offsets: &SideOffsets<T>) -> Rect<T> {
+        Rect::new(
+            self.min + offsets.top_left(),
+            self.max - offsets.bottom_right(),
+        )
+    }
+
+    #[inline]
+    pub fn grow(&self, offsets: &SideOffsets<T>) -> Rect<T> {
+        Rect::new(
+            self.min - offsets.top_left(),
+            self.max + offsets.bottom_right(),
+        )
+    }
+
+    #[inline]
     pub fn vertices(&self) -> [Vec2<T>; 4] {
         [
             self.min,
@@ -80,6 +97,7 @@ impl<T: Num + Copy> Rect<T> {
 }
 
 impl<T: Ord + Copy> Rect<T> {
+    #[inline]
     pub fn intersect(&self, rhs: &Rect<T>) -> Rect<T> {
         let min = self.min.max(rhs.min);
         let max = self.max.min(rhs.max).max(min);
@@ -88,6 +106,7 @@ impl<T: Ord + Copy> Rect<T> {
 }
 
 impl<T: Num + Copy> From<[T; 4]> for Rect<T> {
+    #[inline]
     fn from([x, y, w, h]: [T; 4]) -> Self {
         Rect::from_pos_extents(Vec2::new(x, y), Vec2::new(w, h))
     }
