@@ -40,8 +40,11 @@ where
         let mut changed = false;
 
         for (i, (child, old_child)) in meta.iter_mut().zip(old_meta).enumerate() {
-            changed |= self.children.update(&mut old.children, i);
-            *child = *old_child;
+            if self.children.update(&mut old.children, i) {
+                changed = true;
+            } else {
+                *child = *old_child;
+            }
         }
 
         changed

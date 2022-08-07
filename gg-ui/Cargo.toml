@@ -9,3 +9,4 @@ gg-graphics = { version = "0.1.0", path = "../gg-graphics" }
 gg-input = { version = "0.1.0", path = "../gg-input" }
 gg-math = { version = "0.1.0", path = "../gg-math" }
 gg-util = { version = "0.1.0", path = "../gg-util" }
+take_mut = "0.2.2"

@@ -109,9 +109,9 @@ pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
         views::text(format!("fps: {:.2}", fps)),
         views::hstack((
-            views::button("Press me", |_| println!("A")),
-            views::button("Press me", |_| println!("B")),
-            views::button("Press me", |_| println!("C")),
+            views::button("Button A", |_| println!("A")),
+            views::button("Button B", |_| println!("B")),
+            views::button("Button C", |_| println!("C")),
         )),
         views::hstack((
             views::padding([10.0, 5.0, 10.0, 0.0], views::text(LEFT)).set_stretch(1.0),

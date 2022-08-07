@@ -13,7 +13,7 @@ pub fn rect<D>(color: impl Into<Color>) -> RectView<D> {
 }
 
 pub struct RectView<D> {
-    phantom: PhantomData<fn(D)>,
+    phantom: PhantomData<fn(&mut D)>,
     color: Color,
 }
 

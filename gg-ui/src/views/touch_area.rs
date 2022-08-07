@@ -1,27 +1,23 @@
-use std::marker::PhantomData;
-
 use gg_math::Rect;
 
 use crate::{Event, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
 
-pub fn touch_area<D, F>(callback: F) -> TouchArea<D, F>
+pub fn touch_area<D, F>(callback: F) -> TouchArea<F>
 where
-    F: FnMut(&mut D),
+    F: FnOnce(&mut D),
 {
     TouchArea {
-        phantom: PhantomData,
-        callback,
+        callback: Some(callback),
     }
 }
 
-pub struct TouchArea<D, F> {
-    phantom: PhantomData<fn(D)>,
-    callback: F,
+pub struct TouchArea<F> {
+    callback: Option<F>,
 }
 
-impl<D, F> View<D> for TouchArea<D, F>
+impl<D, F> View<D> for TouchArea<F>
 where
-    F: FnMut(&mut D),
+    F: FnOnce(&mut D),
 {
     fn pre_layout(&mut self, _ctx: LayoutCtx) -> LayoutHints {
         LayoutHints {
@@ -32,7 +28,9 @@ where
 
     fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
         if event.pressed_action(UiAction::Touch) && bounds.contains(ctx.input.mouse_pos()) {
-            (self.callback)(ctx.data);
+            if let Some(callback) = self.callback.take() {
+                callback(ctx.data);
+            }
         }
     }
 }

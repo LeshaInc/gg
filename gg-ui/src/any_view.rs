@@ -24,7 +24,7 @@ impl<D: 'static, V: Any + View<D>> AnyView<D> for V {
     }
 }
 
-impl<D: 'static> View<D> for Box<dyn AnyView<D>> {
+impl<'a, D: 'static> View<D> for Box<dyn AnyView<D>> {
     fn update(&mut self, old: &mut Self) -> bool {
         (**self).update_dyn(&mut **old)
     }

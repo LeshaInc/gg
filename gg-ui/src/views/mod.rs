@@ -6,6 +6,7 @@ mod overlay;
 mod padding;
 mod rect;
 mod stack;
+mod stateful;
 mod text;
 mod touch_area;
 
@@ -19,5 +20,6 @@ pub use self::overlay::{overlay, Overlay};
 pub use self::padding::{padding, Padding};
 pub use self::rect::{rect, RectView as Rect};
 pub use self::stack::{hstack, vstack, MajorAlign, MinorAlign, Orientation, Stack, StackConfig};
+pub use self::stateful::{stateful, Stateful};
 pub use self::text::{text, TextView};
 pub use self::touch_area::{touch_area, TouchArea};
