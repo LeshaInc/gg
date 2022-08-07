@@ -5,6 +5,7 @@ members = [
     "gg-assets",
     "gg-graphics",
     "gg-graphics-impl",
+    "gg-input",
     "gg-main",
     "gg-math",
     "gg-ui",

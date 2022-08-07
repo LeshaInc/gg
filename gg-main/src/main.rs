@@ -5,6 +5,7 @@ use std::time::Instant;
 use gg_assets::{Assets, DirSource};
 use gg_graphics::{Backend, FontDb, GraphicsEncoder, TextLayouter};
 use gg_graphics_impl::{BackendImpl, BackendSettings};
+use gg_input::Input;
 use gg_math::{Rect, Vec2};
 use gg_ui::{views, UiContext, View, ViewExt};
 use gg_util::eyre::Result;
@@ -22,6 +23,7 @@ fn main() -> Result<()> {
 
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
+    let mut input = Input::new();
 
     let mut fonts = FontDb::new();
     fonts.add_collection(&assets.load("fonts/OpenSans-Regular.ttf"));
@@ -53,11 +55,21 @@ fn main() -> Result<()> {
     let mut text_layouter = TextLayouter::new();
 
     event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => *control_flow = ControlFlow::Exit,
+        Event::NewEvents(_) => {
+            input.begin_frame();
+        }
+        Event::WindowEvent { event, .. } => {
+            if event == WindowEvent::CloseRequested {
+                *control_flow = ControlFlow::Exit;
+            }
+
+            input.process_event(event);
+        }
         Event::RedrawRequested(_) => {
+            for event in input.events() {
+                dbg!(event);
+            }
+
             assets.maintain();
             fonts.update(&assets);
 

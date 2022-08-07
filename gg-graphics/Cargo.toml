@@ -8,14 +8,14 @@ gg-assets = { version = "0.1.0", path = "../gg-assets" }
 gg-math = { version = "0.1.0", path = "../gg-math" }
 gg-util = { version = "0.1.0", path = "../gg-util" }
 
-ab_glyph_rasterizer = "0.1.5"
-ouroboros = "0.15.0"
-rustybuzz = "0.5.1"
-ttf-parser = "0.15.2"
-unicode-linebreak = "0.1.2"
-tracing = "0.1.35"
+ab_glyph_rasterizer = "0.1"
+ouroboros = "0.15"
+rustybuzz = "0.5"
+ttf-parser = "0.15"
+unicode-linebreak = "0.1"
+tracing = "0.1"
 
 [dependencies.image]
-version = "0.24.2"
+version = "0.24"
 default-features = false
 features = ["png"]

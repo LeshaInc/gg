@@ -17,3 +17,4 @@ wgpu = "0.13.1"
 [dependencies.winit]
 version = "0.26.1"
 default-features = false
+features = ["x11"]
