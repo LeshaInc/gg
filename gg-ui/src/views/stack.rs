@@ -3,23 +3,23 @@ use std::marker::PhantomData;
 use gg_math::{Rect, Vec2};
 
 use crate::view_seq::MetaSeq;
-use crate::{DrawCtx, LayoutCtx, LayoutHints, View, ViewSeq};
+use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View, ViewSeq};
 
-pub fn stack<D, S>(config: StackConfig, children: S) -> Stack<D, S>
+pub fn stack<D, C>(config: StackConfig, children: C) -> Stack<D, C>
 where
-    S: ViewSeq<D> + MetaSeq<Meta>,
+    C: ViewSeq<D> + MetaSeq<Meta>,
 {
     Stack {
         phantom: PhantomData,
         children,
-        meta: S::new_meta_seq(Meta::default),
+        meta: C::new_meta_seq(Meta::default),
         config,
     }
 }
 
-pub fn vstack<D, S>(children: S) -> Stack<D, S>
+pub fn vstack<D, C>(children: C) -> Stack<D, C>
 where
-    S: ViewSeq<D> + MetaSeq<Meta>,
+    C: ViewSeq<D> + MetaSeq<Meta>,
 {
     stack(
         StackConfig {
@@ -31,9 +31,9 @@ where
     )
 }
 
-pub fn hstack<D, S>(children: S) -> Stack<D, S>
+pub fn hstack<D, C>(children: C) -> Stack<D, C>
 where
-    S: ViewSeq<D> + MetaSeq<Meta>,
+    C: ViewSeq<D> + MetaSeq<Meta>,
 {
     stack(
         StackConfig {
@@ -125,8 +125,8 @@ where
         for (i, child) in meta.iter_mut().enumerate() {
             let hints = self.children.pre_layout(ctx.reborrow(), i);
 
-            res.min_size[min] += hints.min_size[min];
-            res.min_size[maj] = res.min_size[maj].max(hints.min_size[maj]);
+            res.min_size[maj] += hints.min_size[maj];
+            res.min_size[min] = res.min_size[min].max(hints.min_size[min]);
 
             child.hints = hints;
             child.size = hints.min_size;
@@ -204,6 +204,15 @@ where
         for (i, child) in meta.iter().enumerate() {
             let bounds = Rect::from_pos_extents(child.pos + bounds.min, child.size);
             self.children.draw(ctx.reborrow(), bounds, i);
+        }
+    }
+
+    fn handle(&mut self, mut ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+        let meta = self.meta.as_ref();
+
+        for (i, child) in meta.iter().enumerate() {
+            let bounds = Rect::from_pos_extents(child.pos + bounds.min, child.size);
+            self.children.handle(ctx.reborrow(), bounds, event, i);
         }
     }
 }

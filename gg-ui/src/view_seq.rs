@@ -1,6 +1,6 @@
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, Event, LayoutCtx, LayoutHints, View};
+use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub trait ViewSeq<D> {
     fn len(&self) -> usize;
@@ -17,7 +17,7 @@ pub trait ViewSeq<D> {
 
     fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>, idx: usize);
 
-    fn handle(&mut self, event: Event, data: &mut D, idx: usize);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event, idx: usize);
 }
 
 pub trait MetaSeq<T> {
@@ -66,9 +66,9 @@ macro_rules! impl_tuple {
                 }
             }
 
-            fn handle(&mut self, event: Event, data: &mut D, idx: usize) {
+            fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event, idx: usize) {
                 match idx {
-                    $( $i => self.$i.handle(event, data), )+
+                    $( $i => self.$i.handle(ctx, bounds, event), )+
                     _ => panic!("index out of bounds"),
                 }
             }
@@ -90,6 +90,7 @@ macro_rules! impl_tuple {
     }
 }
 
+impl_tuple!(1, 0 => V0);
 impl_tuple!(2, 0 => V0, 1 => V1);
 impl_tuple!(3, 0 => V0, 1 => V1, 2 => V2);
 impl_tuple!(4, 0 => V0, 1 => V1, 2 => V2, 3 => V3);

@@ -1,6 +1,6 @@
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, Event, LayoutCtx, LayoutHints, View};
+use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn constrain<V, C>(view: V, constraint: C) -> ConstraintView<V, C> {
     ConstraintView { view, constraint }
@@ -37,8 +37,8 @@ where
         self.view.draw(ctx, bounds);
     }
 
-    fn handle(&mut self, event: Event, data: &mut D) {
-        self.view.handle(event, data);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+        self.view.handle(ctx, bounds, event);
     }
 }
 

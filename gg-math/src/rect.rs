@@ -105,6 +105,13 @@ impl<T: Ord + Copy> Rect<T> {
     }
 }
 
+impl<T: PartialOrd + Copy> Rect<T> {
+    #[inline]
+    pub fn contains(&self, point: Vec2<T>) -> bool {
+        self.min.cmp_le(point).all() && self.max.cmp_ge(point).all()
+    }
+}
+
 impl<T: Num + Copy> From<[T; 4]> for Rect<T> {
     #[inline]
     fn from([x, y, w, h]: [T; 4]) -> Self {

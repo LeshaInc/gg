@@ -7,7 +7,7 @@ use gg_graphics::{
 };
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, LayoutCtx, LayoutHints, View};
+use crate::{DrawCtx, LayoutCtx, View};
 
 pub fn text<D>(text: impl Into<String>) -> TextView<D> {
     TextView {
@@ -18,7 +18,7 @@ pub fn text<D>(text: impl Into<String>) -> TextView<D> {
 }
 
 pub struct TextView<D> {
-    phantom: PhantomData<D>,
+    phantom: PhantomData<fn(D)>,
     text: String,
     shaped_text: Option<ShapedText>,
 }
@@ -33,13 +33,6 @@ impl<D> View<D> for TextView<D> {
             false
         } else {
             true
-        }
-    }
-
-    fn pre_layout(&mut self, _ctx: LayoutCtx) -> LayoutHints {
-        LayoutHints {
-            stretch: 0.0,
-            ..Default::default()
         }
     }
 

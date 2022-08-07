@@ -1,3 +1,5 @@
+use gg_math::SideOffsets;
+
 use crate::views::*;
 use crate::View;
 
@@ -26,8 +28,12 @@ pub trait ViewExt<D>: View<D> + Sized {
         self.constrain(MaxHeight(height))
     }
 
-    fn set_stetch(self, stretch: f32) -> ConstraintView<Self, SetStretch> {
+    fn set_stretch(self, stretch: f32) -> ConstraintView<Self, SetStretch> {
         self.constrain(SetStretch(stretch))
+    }
+
+    fn padding<O: Into<SideOffsets<f32>>>(self, offsets: O) -> Padding<Self> {
+        padding(offsets, self)
     }
 }
 

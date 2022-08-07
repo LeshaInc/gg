@@ -18,6 +18,10 @@ pub struct RectView<D> {
 }
 
 impl<D> View<D> for RectView<D> {
+    fn update(&mut self, old: &mut Self) -> bool {
+        self.color != old.color
+    }
+
     fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
         ctx.encoder.rect(bounds).fill_color(self.color);
     }

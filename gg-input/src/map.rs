@@ -12,10 +12,6 @@ pub struct InputMap {
 }
 
 impl InputMap {
-    pub fn new() -> InputMap {
-        InputMap::default()
-    }
-
     pub fn parse(&mut self, actions: &ActionRegistry, data: &str) -> Result<()> {
         let list: Vec<(String, Binding)> = serde_json::from_str(data)?;
 

@@ -1,8 +1,9 @@
 use gg_assets::Assets;
 use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
+use gg_input::Input;
 use gg_math::{Rect, Vec2};
 
-use crate::{AnyView, DrawCtx, LayoutCtx, View};
+use crate::{AnyView, DrawCtx, HandleCtx, LayoutCtx, View};
 
 pub struct Driver<D> {
     old_view: Option<Box<dyn AnyView<D>>>,
@@ -17,7 +18,7 @@ impl<D: 'static> Driver<D> {
         }
     }
 
-    pub fn run<V: AnyView<D>>(&mut self, view: V, ctx: UiContext) {
+    pub fn run<V: AnyView<D>>(&mut self, view: V, ctx: UiContext, data: &mut D) {
         let mut view: Box<dyn AnyView<D>> = Box::new(view);
 
         let changed = match self.old_view.take() {
@@ -35,13 +36,24 @@ impl<D: 'static> Driver<D> {
             self.size = view.layout(l_ctx, ctx.bounds.extents());
         }
 
+        let bounds = Rect::from_pos_extents(ctx.bounds.min, self.size);
+        for event in ctx.input.events() {
+            let h_ctx = HandleCtx {
+                assets: ctx.assets,
+                input: ctx.input,
+                data,
+            };
+
+            view.handle(h_ctx, bounds, event);
+        }
+
         let d_ctx = DrawCtx {
             assets: ctx.assets,
             text_layouter: ctx.text_layouter,
             encoder: ctx.encoder,
         };
 
-        view.draw(d_ctx, Rect::from_pos_extents(ctx.bounds.min, self.size));
+        view.draw(d_ctx, bounds);
 
         self.old_view = Some(view);
     }
@@ -53,4 +65,5 @@ pub struct UiContext<'a> {
     pub fonts: &'a FontDb,
     pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
+    pub input: &'a Input,
 }

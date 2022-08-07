@@ -7,7 +7,7 @@ use gg_graphics::{Backend, FontDb, GraphicsEncoder, TextLayouter};
 use gg_graphics_impl::{BackendImpl, BackendSettings};
 use gg_input::Input;
 use gg_math::{Rect, Vec2};
-use gg_ui::{views, UiContext, View, ViewExt};
+use gg_ui::{views, UiAction, UiContext, View, ViewExt};
 use gg_util::eyre::Result;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -24,6 +24,8 @@ fn main() -> Result<()> {
     let source = DirSource::new("assets")?;
     let mut assets = Assets::new(source);
     let mut input = Input::new();
+    input.register_action::<UiAction>();
+    input.load("input.json")?;
 
     let mut fonts = FontDb::new();
     fonts.add_collection(&assets.load("fonts/OpenSans-Regular.ttf"));
@@ -66,10 +68,6 @@ fn main() -> Result<()> {
             input.process_event(event);
         }
         Event::RedrawRequested(_) => {
-            for event in input.events() {
-                dbg!(event);
-            }
-
             assets.maintain();
             fonts.update(&assets);
 
@@ -89,9 +87,10 @@ fn main() -> Result<()> {
                 fonts: &fonts,
                 text_layouter: &mut text_layouter,
                 encoder: &mut encoder,
+                input: &input,
             };
 
-            ui.run(build_ui(fps_counter.fps()), ui_ctx);
+            ui.run(build_ui(fps_counter.fps()), ui_ctx, &mut ());
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
@@ -110,19 +109,31 @@ pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack((
         views::text(format!("fps: {:.2}", fps)),
         views::hstack((
-            views::padding([10.0, 5.0, 10.0, 0.0], views::text(LEFT)).set_stetch(1.0),
-            views::padding([10.0, 0.0, 10.0, 5.0], views::text(RIGHT)).set_stetch(1.0),
+            views::button("Press me", |_| println!("A")),
+            views::button("Press me", |_| println!("B")),
+            views::button("Press me", |_| println!("C")),
         )),
         views::hstack((
-            views::rect([0.0, 0.05, 0.05]),
-            views::rect([0.05, 0.0, 0.05]),
+            views::padding([10.0, 5.0, 10.0, 0.0], views::text(LEFT)).set_stretch(1.0),
+            views::padding([10.0, 0.0, 10.0, 5.0], views::text(RIGHT)).set_stretch(1.0),
+        )),
+        views::hstack((
+            views::rect([0.0, 0.05, 0.05]).set_stretch(1.0),
+            views::rect([0.05, 0.0, 0.05]).set_stretch(1.0),
             views::vstack((
-                views::rect([0.05, 0.05, 0.05]).max_height(10.0),
-                views::rect([0.05, 0.05, 0.05]).max_height(10.0),
-                views::rect([0.05, 0.05, 0.05]).max_height(10.0),
-            )),
+                views::rect([0.05, 0.05, 0.05])
+                    .set_stretch(1.0)
+                    .max_height(10.0),
+                views::rect([0.05, 0.05, 0.05])
+                    .set_stretch(1.0)
+                    .max_height(10.0),
+                views::rect([0.05, 0.05, 0.05])
+                    .set_stretch(1.0)
+                    .max_height(10.0),
+            ))
+            .set_stretch(1.0),
         ))
-        .max_height(100.0),
+        .set_stretch(1.0),
     ))
 }
 

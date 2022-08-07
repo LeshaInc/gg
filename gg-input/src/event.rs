@@ -34,3 +34,17 @@ pub struct ActionEvent {
     pub state: ElementState,
     pub action: Action,
 }
+
+impl Event {
+    pub fn pressed_action(&self, action: impl Into<Action>) -> bool {
+        match self {
+            Event::Action(
+                ev @ ActionEvent {
+                    state: ElementState::Pressed,
+                    ..
+                },
+            ) => ev.action == action.into(),
+            _ => false,
+        }
+    }
+}

@@ -1,6 +1,6 @@
 use gg_math::{Rect, SideOffsets, Vec2};
 
-use crate::{DrawCtx, Event, LayoutCtx, LayoutHints, View};
+use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn padding<O, V>(offsets: O, view: V) -> Padding<V>
 where
@@ -22,7 +22,7 @@ impl<D, V: View<D>> View<D> for Padding<V> {
     where
         Self: Sized,
     {
-        self.view.update(&mut old.view)
+        (self.offsets != old.offsets) | self.view.update(&mut old.view)
     }
 
     fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
@@ -40,7 +40,7 @@ impl<D, V: View<D>> View<D> for Padding<V> {
         self.view.draw(ctx, bounds.shrink(&self.offsets));
     }
 
-    fn handle(&mut self, event: Event, data: &mut D) {
-        self.view.handle(event, data);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+        self.view.handle(ctx, bounds.shrink(&self.offsets), event);
     }
 }

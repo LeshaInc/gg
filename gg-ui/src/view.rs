@@ -1,5 +1,6 @@
 use gg_assets::Assets;
 use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
+use gg_input::Input;
 use gg_math::{Rect, Vec2};
 
 use crate::Event;
@@ -27,8 +28,8 @@ pub trait View<D> {
         let _ = (ctx, bounds);
     }
 
-    fn handle(&mut self, event: Event, data: &mut D) {
-        let _ = (event, data);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+        let _ = (ctx, bounds, event);
     }
 }
 
@@ -58,7 +59,7 @@ pub struct LayoutHints {
 impl Default for LayoutHints {
     fn default() -> Self {
         LayoutHints {
-            stretch: 1.0,
+            stretch: 0.0,
             min_size: Vec2::splat(0.0),
             max_size: Vec2::splat(f32::INFINITY),
         }
@@ -93,6 +94,21 @@ impl DrawCtx<'_> {
             assets: self.assets,
             text_layouter: self.text_layouter,
             encoder: self.encoder,
+        }
+    }
+}
+pub struct HandleCtx<'a, D> {
+    pub assets: &'a Assets,
+    pub input: &'a Input,
+    pub data: &'a mut D,
+}
+
+impl<D> HandleCtx<'_, D> {
+    pub fn reborrow(&mut self) -> HandleCtx<'_, D> {
+        HandleCtx {
+            assets: self.assets,
+            input: self.input,
+            data: self.data,
         }
     }
 }

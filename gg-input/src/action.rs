@@ -47,8 +47,8 @@ macro_rules! action {
             $($variant,)+
         }
 
-        impl ActionKind for $enum {
-            const ACTIONS: &'static [&'static str] = [
+        impl gg_input::ActionKind for $enum {
+            const ACTIONS: &'static [&'static str] = &[
                 $($name,)+
             ];
 
@@ -57,7 +57,7 @@ macro_rules! action {
             }
 
             fn from_ordinal(v: u32) -> Option<Self> {
-                if v < action!(@count $($variant,)+) {
+                if v < $crate::action!(@count $($variant,)+) {
                     Some(unsafe { std::mem::transmute(v) })
                 } else {
                     None
@@ -66,7 +66,7 @@ macro_rules! action {
         }
     };
 
-    (@count $head:ident) => {
+    (@count $head:ident,) => {
         1
     };
 
@@ -81,10 +81,6 @@ pub struct ActionRegistry {
 }
 
 impl ActionRegistry {
-    pub fn new() -> ActionRegistry {
-        ActionRegistry::default()
-    }
-
     pub fn register<A: ActionKind>(&mut self) {
         let type_id = TypeId::of::<A>();
 
