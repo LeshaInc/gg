@@ -2,21 +2,22 @@ use std::marker::PhantomData;
 
 use gg_math::{Rect, Vec2};
 
-use crate::view_seq::MetaSeq;
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View, ViewSeq};
+use crate::view_seq::HasMetaSeq;
+use crate::{DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, View, ViewSeq};
 
-pub fn overlay<D, C>(children: C) -> Overlay<D, C>
+pub fn overlay<D, C>(children: C) -> Overlay<D, C::ViewSeq>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
 {
     Overlay {
         phantom: PhantomData,
-        children,
-        meta: C::new_meta_seq(Meta::default),
+        children: children.into_view_seq(),
+        meta: C::ViewSeq::new_meta_seq(Meta::default),
     }
 }
 
-pub struct Overlay<D, C: MetaSeq<Meta>> {
+pub struct Overlay<D, C: HasMetaSeq<Meta>> {
     phantom: PhantomData<fn(D)>,
     children: C,
     meta: C::MetaSeq,
@@ -31,7 +32,7 @@ pub struct Meta {
 
 impl<D, C> View<D> for Overlay<D, C>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: ViewSeq<D> + HasMetaSeq<Meta>,
 {
     fn update(&mut self, old: &mut Self) -> bool {
         let meta = self.meta.as_mut();

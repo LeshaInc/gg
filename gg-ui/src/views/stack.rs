@@ -2,25 +2,27 @@ use std::marker::PhantomData;
 
 use gg_math::{Rect, Vec2};
 
-use crate::view_seq::MetaSeq;
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View, ViewSeq};
+use crate::view_seq::HasMetaSeq;
+use crate::{DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, View, ViewSeq};
 
-pub fn stack<D, C>(config: StackConfig, children: C) -> Stack<D, C>
+pub fn stack<D, C>(config: StackConfig, children: C) -> Stack<D, C::ViewSeq>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
 {
     Stack {
         phantom: PhantomData,
-        children,
-        meta: C::new_meta_seq(Meta::default),
+        children: children.into_view_seq(),
+        meta: C::ViewSeq::new_meta_seq(Meta::default),
         config,
         size: Vec2::zero(),
     }
 }
 
-pub fn vstack<D, C>(children: C) -> Stack<D, C>
+pub fn vstack<D, C>(children: C) -> Stack<D, C::ViewSeq>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
 {
     stack(
         StackConfig {
@@ -32,9 +34,10 @@ where
     )
 }
 
-pub fn hstack<D, C>(children: C) -> Stack<D, C>
+pub fn hstack<D, C>(children: C) -> Stack<D, C::ViewSeq>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
 {
     stack(
         StackConfig {
@@ -85,7 +88,7 @@ pub struct StackConfig {
     pub minor_align: MinorAlign,
 }
 
-pub struct Stack<D, C: MetaSeq<Meta>> {
+pub struct Stack<D, C: HasMetaSeq<Meta>> {
     phantom: PhantomData<fn(D)>,
     children: C,
     meta: C::MetaSeq,
@@ -116,7 +119,7 @@ impl Default for Meta {
 
 impl<D, C> View<D> for Stack<D, C>
 where
-    C: ViewSeq<D> + MetaSeq<Meta>,
+    C: ViewSeq<D> + HasMetaSeq<Meta>,
 {
     fn update(&mut self, old: &mut Self) -> bool {
         let meta = self.meta.as_mut();
