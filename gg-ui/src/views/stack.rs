@@ -2,51 +2,36 @@ use std::marker::PhantomData;
 
 use gg_math::{Rect, Vec2};
 
-use crate::view_seq::HasMetaSeq;
-use crate::{DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, View, ViewSeq};
+use crate::view_seq::{Append, HasMetaSeq};
+use crate::{
+    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
+    ViewSeq,
+};
 
-pub fn stack<D, C>(config: StackConfig, children: C) -> Stack<D, C::ViewSeq>
-where
-    C: IntoViewSeq<D>,
-    C::ViewSeq: HasMetaSeq<Meta>,
-{
+pub fn stack<D>(config: StackConfig) -> Stack<D, ()> {
     Stack {
         phantom: PhantomData,
-        children: children.into_view_seq(),
-        meta: C::ViewSeq::new_meta_seq(Meta::default),
+        children: (),
+        meta: <()>::new_meta_seq(Meta::default),
         config,
         size: Vec2::zero(),
     }
 }
 
-pub fn vstack<D, C>(children: C) -> Stack<D, C::ViewSeq>
-where
-    C: IntoViewSeq<D>,
-    C::ViewSeq: HasMetaSeq<Meta>,
-{
-    stack(
-        StackConfig {
-            orientation: Orientation::Vertical,
-            major_align: MajorAlign::SpaceEvenly,
-            minor_align: MinorAlign::Center,
-        },
-        children,
-    )
+pub fn vstack<D>() -> Stack<D, ()> {
+    stack(StackConfig {
+        orientation: Orientation::Vertical,
+        major_align: MajorAlign::SpaceEvenly,
+        minor_align: MinorAlign::Center,
+    })
 }
 
-pub fn hstack<D, C>(children: C) -> Stack<D, C::ViewSeq>
-where
-    C: IntoViewSeq<D>,
-    C::ViewSeq: HasMetaSeq<Meta>,
-{
-    stack(
-        StackConfig {
-            orientation: Orientation::Horizontal,
-            major_align: MajorAlign::SpaceEvenly,
-            minor_align: MinorAlign::Center,
-        },
-        children,
-    )
+pub fn hstack<D>() -> Stack<D, ()> {
+    stack(StackConfig {
+        orientation: Orientation::Horizontal,
+        major_align: MajorAlign::SpaceEvenly,
+        minor_align: MinorAlign::Center,
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,7 +74,7 @@ pub struct StackConfig {
 }
 
 pub struct Stack<D, C: HasMetaSeq<Meta>> {
-    phantom: PhantomData<fn(D)>,
+    phantom: PhantomData<fn(&mut D)>,
     children: C,
     meta: C::MetaSeq,
     config: StackConfig,
@@ -113,6 +98,44 @@ impl Default for Meta {
             pos: Vec2::zero(),
             size: Vec2::zero(),
             changed: true,
+        }
+    }
+}
+
+impl<D, C, V> AppendChild<D, V> for Stack<D, C>
+where
+    C: HasMetaSeq<Meta>,
+    C: Append<V>,
+    C::Output: ViewSeq<D> + HasMetaSeq<Meta>,
+    V: View<D>,
+{
+    type Output = Stack<D, C::Output>;
+
+    fn child(self, child: V) -> Self::Output {
+        Stack {
+            phantom: PhantomData,
+            children: self.children.append(child),
+            meta: C::Output::new_meta_seq(Meta::default),
+            config: self.config,
+            size: self.size,
+        }
+    }
+}
+
+impl<D, C> SetChildren<D, C> for Stack<D, ()>
+where
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
+{
+    type Output = Stack<D, C::ViewSeq>;
+
+    fn children(self, children: C) -> Self::Output {
+        Stack {
+            phantom: PhantomData,
+            children: children.into_view_seq(),
+            meta: C::ViewSeq::new_meta_seq(Meta::default),
+            config: self.config,
+            size: self.size,
         }
     }
 }

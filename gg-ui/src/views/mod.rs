@@ -14,7 +14,7 @@ mod touch_area;
 pub use self::button::button;
 pub use self::choice::{choose, Choice};
 pub use self::constraint::{
-    constrain, Constraint, ConstraintView, MaxHeight, MaxWidth, MinHeight, MinWidth, SetStretch,
+    constrain, Constraint, ConstraintView, MaxHeight, MaxWidth, MinHeight, MinWidth, Stretch,
 };
 pub use self::nothing::{nothing, Nothing};
 pub use self::overlay::{overlay, Overlay};

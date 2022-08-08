@@ -210,7 +210,9 @@ pub trait IntoViewSeq<D> {
 }
 
 macro_rules! impl_tuple {
-    () => {};
+    () => {
+        impl_tuple!(@impl);
+    };
 
     ($V:ident, $( $VS:ident, )*) => {
         impl_tuple!($( $VS, )*);
@@ -230,6 +232,10 @@ macro_rules! impl_tuple {
                 impl_tuple!(@cons $( $VS, )*)
             }
         }
+    };
+
+    (@cons) => {
+        ()
     };
 
     (@cons $V:ident,) => {

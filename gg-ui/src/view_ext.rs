@@ -1,11 +1,23 @@
 use gg_math::SideOffsets;
 
 use crate::views::*;
-use crate::View;
+use crate::{IntoViewSeq, View};
+
+pub trait AppendChild<D, V: View<D>> {
+    type Output: View<D>;
+
+    fn child(self, child: V) -> Self::Output;
+}
+
+pub trait SetChildren<D, C: IntoViewSeq<D>> {
+    type Output: View<D>;
+
+    fn children(self, children: C) -> Self::Output;
+}
 
 pub trait ViewExt<D>: View<D> + Sized {
-    fn show_if(self, cond: bool) -> Choice<Self, Nothing> {
-        choose(cond, self, Nothing)
+    fn show_if(self, cond: bool) -> Choice<Self, Nothing<D>> {
+        choose(cond, self, nothing())
     }
 
     fn constrain<C>(self, constraint: C) -> ConstraintView<Self, C> {
@@ -28,8 +40,8 @@ pub trait ViewExt<D>: View<D> + Sized {
         self.constrain(MaxHeight(height))
     }
 
-    fn set_stretch(self, stretch: f32) -> ConstraintView<Self, SetStretch> {
-        self.constrain(SetStretch(stretch))
+    fn stretch(self, stretch: f32) -> ConstraintView<Self, Stretch> {
+        self.constrain(Stretch(stretch))
     }
 
     fn padding<O: Into<SideOffsets<f32>>>(self, offsets: O) -> Padding<Self> {

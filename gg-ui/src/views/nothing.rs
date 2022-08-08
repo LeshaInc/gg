@@ -1,16 +1,15 @@
-use crate::{LayoutCtx, LayoutHints, View};
+use std::marker::PhantomData;
 
-pub fn nothing() -> Nothing {
-    Nothing
-}
+use crate::View;
 
-impl<D> View<D> for Nothing {
-    fn pre_layout(&mut self, _: LayoutCtx) -> LayoutHints {
-        LayoutHints {
-            stretch: 0.0,
-            ..Default::default()
-        }
+pub fn nothing<D>() -> Nothing<D> {
+    Nothing {
+        phantom: PhantomData,
     }
 }
 
-pub struct Nothing;
+impl<D> View<D> for Nothing<D> {}
+
+pub struct Nothing<D> {
+    phantom: PhantomData<fn(&mut D)>,
+}

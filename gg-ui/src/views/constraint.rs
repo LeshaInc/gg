@@ -1,6 +1,6 @@
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{AppendChild, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn constrain<V, C>(view: V, constraint: C) -> ConstraintView<V, C> {
     ConstraintView { view, constraint }
@@ -9,6 +9,22 @@ pub fn constrain<V, C>(view: V, constraint: C) -> ConstraintView<V, C> {
 pub struct ConstraintView<V, C> {
     view: V,
     constraint: C,
+}
+
+impl<D, V, VC, C> AppendChild<D, VC> for ConstraintView<V, C>
+where
+    V: View<D> + AppendChild<D, VC>,
+    VC: View<D>,
+    C: Constraint,
+{
+    type Output = ConstraintView<V::Output, C>;
+
+    fn child(self, child: VC) -> Self::Output {
+        ConstraintView {
+            view: self.view.child(child),
+            constraint: self.constraint,
+        }
+    }
 }
 
 impl<D, V, C> View<D> for ConstraintView<V, C>
@@ -83,9 +99,9 @@ impl Constraint for MaxHeight {
 }
 
 #[derive(PartialEq)]
-pub struct SetStretch(pub f32);
+pub struct Stretch(pub f32);
 
-impl Constraint for SetStretch {
+impl Constraint for Stretch {
     fn constrain(&self, hints: &mut LayoutHints) {
         hints.stretch = self.0;
     }

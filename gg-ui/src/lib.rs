@@ -12,5 +12,5 @@ pub use self::action::UiAction;
 pub use self::any_view::AnyView;
 pub use self::driver::{Driver, UiContext};
 pub use self::view::{DrawCtx, HandleCtx, LayoutCtx, LayoutHints, UpdateResult, View};
-pub use self::view_ext::ViewExt;
+pub use self::view_ext::{AppendChild, SetChildren, ViewExt};
 pub use self::view_seq::{IntoViewSeq, ViewSeq};

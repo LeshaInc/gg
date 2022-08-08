@@ -2,23 +2,22 @@ use std::marker::PhantomData;
 
 use gg_math::{Rect, Vec2};
 
-use crate::view_seq::HasMetaSeq;
-use crate::{DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, View, ViewSeq};
+use crate::view_seq::{Append, HasMetaSeq};
+use crate::{
+    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
+    ViewSeq,
+};
 
-pub fn overlay<D, C>(children: C) -> Overlay<D, C::ViewSeq>
-where
-    C: IntoViewSeq<D>,
-    C::ViewSeq: HasMetaSeq<Meta>,
-{
+pub fn overlay<D>() -> Overlay<D, ()> {
     Overlay {
         phantom: PhantomData,
-        children: children.into_view_seq(),
-        meta: C::ViewSeq::new_meta_seq(Meta::default),
+        children: (),
+        meta: <()>::new_meta_seq(Meta::default),
     }
 }
 
 pub struct Overlay<D, C: HasMetaSeq<Meta>> {
-    phantom: PhantomData<fn(D)>,
+    phantom: PhantomData<fn(&mut D)>,
     children: C,
     meta: C::MetaSeq,
 }
@@ -28,6 +27,40 @@ pub struct Meta {
     hints: LayoutHints,
     size: Vec2<f32>,
     pos: Vec2<f32>,
+}
+
+impl<D, C, V> AppendChild<D, V> for Overlay<D, C>
+where
+    C: HasMetaSeq<Meta>,
+    C: Append<V>,
+    C::Output: ViewSeq<D> + HasMetaSeq<Meta>,
+    V: View<D>,
+{
+    type Output = Overlay<D, C::Output>;
+
+    fn child(self, child: V) -> Self::Output {
+        Overlay {
+            phantom: PhantomData,
+            children: self.children.append(child),
+            meta: C::Output::new_meta_seq(Meta::default),
+        }
+    }
+}
+
+impl<D, C> SetChildren<D, C> for Overlay<D, ()>
+where
+    C: IntoViewSeq<D>,
+    C::ViewSeq: HasMetaSeq<Meta>,
+{
+    type Output = Overlay<D, C::ViewSeq>;
+
+    fn children(self, children: C) -> Self::Output {
+        Overlay {
+            phantom: PhantomData,
+            children: children.into_view_seq(),
+            meta: C::ViewSeq::new_meta_seq(Meta::default),
+        }
+    }
 }
 
 impl<D, C> View<D> for Overlay<D, C>

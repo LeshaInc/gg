@@ -1,6 +1,6 @@
 use gg_math::{Rect, SideOffsets, Vec2};
 
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{AppendChild, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn padding<O, V>(offsets: O, view: V) -> Padding<V>
 where
@@ -15,6 +15,21 @@ where
 pub struct Padding<V> {
     view: V,
     offsets: SideOffsets<f32>,
+}
+
+impl<D, V, VC> AppendChild<D, VC> for Padding<V>
+where
+    V: View<D> + AppendChild<D, VC>,
+    VC: View<D>,
+{
+    type Output = Padding<V::Output>;
+
+    fn child(self, child: VC) -> Self::Output {
+        Padding {
+            view: self.view.child(child),
+            offsets: self.offsets,
+        }
+    }
 }
 
 impl<D, V: View<D>> View<D> for Padding<V> {
