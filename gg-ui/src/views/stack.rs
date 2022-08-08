@@ -14,6 +14,7 @@ where
         children,
         meta: C::new_meta_seq(Meta::default),
         config,
+        size: Vec2::zero(),
     }
 }
 
@@ -89,13 +90,28 @@ pub struct Stack<D, C: MetaSeq<Meta>> {
     children: C,
     meta: C::MetaSeq,
     config: StackConfig,
+    size: Vec2<f32>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy)]
 pub struct Meta {
     hints: LayoutHints,
+    stretch: f32,
     pos: Vec2<f32>,
     size: Vec2<f32>,
+    changed: bool,
+}
+
+impl Default for Meta {
+    fn default() -> Meta {
+        Meta {
+            hints: LayoutHints::default(),
+            stretch: 0.0,
+            pos: Vec2::zero(),
+            size: Vec2::zero(),
+            changed: true,
+        }
+    }
 }
 
 impl<D, C> View<D> for Stack<D, C>
@@ -108,10 +124,12 @@ where
         let mut changed = false;
 
         for (i, (child, old_child)) in meta.iter_mut().zip(old_meta).enumerate() {
-            changed |= self.children.update(&mut old.children, i);
-            child.size = old_child.size;
-            child.pos = old_child.pos;
+            *child = *old_child;
+            child.changed = self.children.update(&mut old.children, i);
+            changed |= child.changed;
         }
+
+        self.size = old.size;
 
         changed
     }
@@ -123,13 +141,12 @@ where
         let mut res = LayoutHints::default();
 
         for (i, child) in meta.iter_mut().enumerate() {
-            let hints = self.children.pre_layout(ctx.reborrow(), i);
+            if child.changed {
+                child.hints = self.children.pre_layout(ctx.reborrow(), i);
+            }
 
-            res.min_size[maj] += hints.min_size[maj];
-            res.min_size[min] = res.min_size[min].max(hints.min_size[min]);
-
-            child.hints = hints;
-            child.size = hints.min_size;
+            res.min_size[maj] += child.hints.min_size[maj];
+            res.min_size[min] = res.min_size[min].max(child.hints.min_size[min]);
         }
 
         res
@@ -139,14 +156,37 @@ where
         let meta = self.meta.as_mut();
         let (maj, min) = self.config.orientation.indices();
 
-        let mut total_stretch: f32 = meta.iter().map(|v| v.hints.stretch).sum();
+        let mut total_stretch = 0.0;
         let mut used = Vec2::splat(0.0);
 
-        used[maj] = meta.iter().map(|v| v.size[maj]).sum();
+        let mut is_incremental = adviced == self.size;
+        let mut was_incremental = !is_incremental;
 
-        let mut rem_iters = self.children.len() + 1;
+        let max_iters = self.children.len() + 1;
+        let mut rem_iters = max_iters;
 
         while rem_iters > 0 {
+            if is_incremental != was_incremental {
+                total_stretch = 0.0;
+                used[min] = 0.0;
+                used[maj] = 0.0;
+
+                for child in meta.iter_mut() {
+                    if !is_incremental {
+                        child.size = child.hints.min_size;
+                        child.stretch = child.hints.stretch;
+                        child.changed = true;
+                    }
+
+                    used[maj] += child.size[maj];
+                    total_stretch += child.stretch;
+                }
+
+                rem_iters = max_iters;
+                was_incremental = is_incremental;
+                continue;
+            }
+
             rem_iters -= 1;
 
             let mut remaining = (adviced[maj] - used[maj]).max(0.0);
@@ -155,7 +195,7 @@ where
             for (i, child) in meta.iter_mut().enumerate() {
                 let old_size = child.size;
 
-                child.size[maj] += ((stretch_unit * child.hints.stretch).ceil()).min(remaining);
+                child.size[maj] += ((stretch_unit * child.stretch).ceil()).min(remaining);
                 child.size[min] = adviced[min].max(used[min]);
 
                 if child.size[min] >= child.hints.max_size[min] - 0.5 {
@@ -165,16 +205,26 @@ where
                 if child.size[maj] >= child.hints.max_size[maj] - 0.5 {
                     child.size[maj] = child.hints.max_size[maj];
 
-                    total_stretch -= child.hints.stretch;
-                    child.hints.stretch = 0.0;
+                    total_stretch -= child.stretch;
+                    child.stretch = 0.0;
                 }
 
-                child.size = self.children.layout(ctx.reborrow(), child.size, i);
+                if child.size != old_size || child.changed {
+                    child.size = self.children.layout(ctx.reborrow(), child.size, i);
+                }
 
                 let change = child.size[maj] - old_size[maj];
                 used[maj] += change;
                 remaining -= change;
                 used[min] = used[min].max(child.size[min]);
+
+                if change > 0.0 {
+                    is_incremental = false;
+                }
+            }
+
+            if used[maj] > adviced[maj] {
+                is_incremental = false;
             }
 
             if used[maj] >= adviced[maj] - 0.5 && rem_iters > 1 {
@@ -194,6 +244,8 @@ where
             child.pos[maj] = offset + pad_child;
             offset += child.size[maj] + pad_child * 2.0;
         }
+
+        self.size = used;
 
         used
     }
