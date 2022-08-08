@@ -71,7 +71,7 @@ macro_rules! action {
     };
 
     (@count $head:ident, $($tail:ident,)+) => {
-        action!(@count $($tail,)+) + 1
+        $crate::action!(@count $($tail,)+) + 1
     };
 }
 

@@ -152,8 +152,8 @@ impl Input {
         self.events.iter().copied()
     }
 
-    pub fn is_action_pressed(&self, action: Action) -> bool {
-        self.state.actions.contains(&action)
+    pub fn is_action_pressed(&self, action: impl Into<Action>) -> bool {
+        self.state.actions.contains(&action.into())
     }
 
     pub fn is_key_pressed(&self, key: VirtualKeyCode) -> bool {

@@ -149,8 +149,12 @@ impl Batcher {
     pub fn modify_state(&mut self, f: impl FnOnce(&mut State)) {
         let old_state = self.batch.state;
         f(&mut self.batch.state);
-        if self.batch.state.requires_flush(&old_state) {
+        let new_state = self.batch.state;
+
+        if new_state.requires_flush(&old_state) {
+            self.batch.state = old_state;
             self.flush();
+            self.batch.state = new_state;
         }
     }
 
@@ -160,7 +164,7 @@ impl Batcher {
 
     pub fn restore_state(&mut self) {
         if let Some(state) = self.saved_states.pop() {
-            self.batch.state = state;
+            self.modify_state(|s| *s = state)
         } else {
             tracing::error!("restore() called with empty state stack");
         }

@@ -1,3 +1,4 @@
 [
-  ["ui.touch", "MouseLeft"]
+  ["ui.touch", "MouseLeft"],
+  ["ui.transpose-scroll", "LShift"]
 ]

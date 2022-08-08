@@ -522,11 +522,15 @@ impl BackendImpl {
         pass.set_pipeline(self.pipelines.pipeline());
 
         for batch in self.batcher.batches() {
+            if batch.state.scissor.area() == 0 {
+                continue;
+            }
+
             pass.set_scissor_rect(
                 batch.state.scissor.min.x,
                 batch.state.scissor.min.y,
-                batch.state.scissor.width(),
-                batch.state.scissor.height(),
+                batch.state.scissor.width().min(self.resolution.x),
+                batch.state.scissor.height().min(self.resolution.y),
             );
 
             pass.draw_indexed(batch.indices.clone(), 0, 0..1);
