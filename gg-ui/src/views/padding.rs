@@ -1,6 +1,8 @@
 use gg_math::{Rect, SideOffsets, Vec2};
 
-use crate::{AppendChild, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{
+    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
+};
 
 pub fn padding<O, V>(offsets: O, view: V) -> Padding<V>
 where
@@ -27,6 +29,21 @@ where
     fn child(self, child: VC) -> Self::Output {
         Padding {
             view: self.view.child(child),
+            offsets: self.offsets,
+        }
+    }
+}
+
+impl<D, V, C> SetChildren<D, C> for Padding<V>
+where
+    V: View<D> + SetChildren<D, C>,
+    C: IntoViewSeq<D>,
+{
+    type Output = Padding<V::Output>;
+
+    fn children(self, children: C) -> Self::Output {
+        Padding {
+            view: self.view.children(children),
             offsets: self.offsets,
         }
     }

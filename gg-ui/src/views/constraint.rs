@@ -1,6 +1,8 @@
 use gg_math::{Rect, Vec2};
 
-use crate::{AppendChild, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{
+    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
+};
 
 pub fn constrain<V, C>(view: V, constraint: C) -> ConstraintView<V, C> {
     ConstraintView { view, constraint }
@@ -22,6 +24,22 @@ where
     fn child(self, child: VC) -> Self::Output {
         ConstraintView {
             view: self.view.child(child),
+            constraint: self.constraint,
+        }
+    }
+}
+
+impl<D, V, C, Cons> SetChildren<D, C> for ConstraintView<V, Cons>
+where
+    V: View<D> + SetChildren<D, C>,
+    C: IntoViewSeq<D>,
+    Cons: Constraint,
+{
+    type Output = ConstraintView<V::Output, Cons>;
+
+    fn children(self, children: C) -> Self::Output {
+        ConstraintView {
+            view: self.view.children(children),
             constraint: self.constraint,
         }
     }
