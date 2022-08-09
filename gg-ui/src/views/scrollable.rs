@@ -21,17 +21,24 @@ pub struct Scrollable<V> {
     inner_size: Vec2<f32>,
 }
 
+impl<V> Scrollable<V> {
+    fn inner_bounds(&self, outer: Rect<f32>) -> Rect<f32> {
+        Rect::from_pos_extents(outer.min + self.offset.floor(), self.inner_size)
+    }
+}
+
 impl<D, V: View<D>> View<D> for Scrollable<V> {
     fn update(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
+        self.hints = old.hints;
         self.offset = old.offset;
         self.target_offset = old.target_offset;
         self.inner_size = old.inner_size;
 
         let diff = self.target_offset - self.offset;
-        self.offset += diff.map(|v| (v.abs() * 0.1).copysign(v));
+        self.offset += diff.map(|v| (v.abs() * 0.2).copysign(v));
 
         self.view.update(&mut old.view)
     }
@@ -60,11 +67,43 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         size
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, mut ctx: DrawCtx, outer: Rect<f32>) {
         ctx.encoder.save();
-        ctx.encoder.set_scissor(bounds.cast());
-        let inner = Rect::from_pos_extents(bounds.min + self.offset.floor(), self.inner_size);
+        ctx.encoder.set_scissor(outer.cast());
+
+        let inner = self.inner_bounds(outer);
         self.view.draw(ctx.reborrow(), inner);
+
+        let mut thumb_factor = outer.extents() / inner.extents();
+        if thumb_factor.x < 1.0 && thumb_factor.y < 1.0 {
+            thumb_factor = (outer.extents() - Vec2::new(7.0, 0.0)) / inner.extents();
+        }
+
+        let thumb_size = outer.extents() * thumb_factor;
+        let thumb_offset = -self.offset * thumb_factor;
+
+        if thumb_factor.x < 1.0 {
+            ctx.encoder
+                .rect([
+                    outer.min.x + thumb_offset.x,
+                    outer.max.y - 4.0,
+                    thumb_size.x,
+                    3.0,
+                ])
+                .fill_color([1.0, 0.0, 0.0, 0.3]);
+        }
+
+        if thumb_factor.y < 1.0 {
+            ctx.encoder
+                .rect([
+                    outer.max.x - 4.0,
+                    outer.min.y + thumb_offset.y,
+                    3.0,
+                    thumb_size.y,
+                ])
+                .fill_color([1.0, 0.0, 0.0, 0.3]);
+        }
+
         ctx.encoder.restore();
     }
 
@@ -77,7 +116,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
                     ev.delta
                 };
 
-                self.target_offset += delta * 50.0;
+                self.target_offset += delta * 60.0;
                 self.target_offset = self
                     .target_offset
                     .fmax(bounds.extents() - self.inner_size)
@@ -85,7 +124,6 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
             }
         }
 
-        let inner = Rect::from_pos_extents(bounds.min + self.offset.floor(), self.inner_size);
-        self.view.handle(ctx, inner, event)
+        self.view.handle(ctx, self.inner_bounds(bounds), event)
     }
 }

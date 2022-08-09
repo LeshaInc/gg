@@ -120,9 +120,14 @@ pub fn build_ui(fps: f32) -> impl View<()> {
                 .child(views::scrollable(
                     views::text(LEFT).padding([10.0, 5.0, 10.0, 2.5]),
                 ))
-                .child(views::scrollable(
-                    views::text(RIGHT).padding([10.0, 2.5, 10.0, 5.0]),
-                )),
+                .child(
+                    views::scrollable(
+                        views::text(RIGHT)
+                            .padding([10.0, 2.5, 10.0, 5.0])
+                            .min_width(500.0),
+                    )
+                    .max_width(300.0),
+                ),
         )
         .child(
             views::hstack()
