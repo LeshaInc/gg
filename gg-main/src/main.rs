@@ -112,7 +112,7 @@ pub fn build_ui(fps: f32) -> impl View<()> {
             views::hstack()
                 .child(views::button("Button A", |_| println!("A")))
                 .child(views::button("Button B", |_| println!("B")))
-                .child(views::button("Button C", |_| println!("C"))),
+                .child(views::button("Button Cool", |_| println!("C"))),
         )
         .child(
             views::hstack()

@@ -22,6 +22,7 @@ pub struct TextProperties {
     pub line_height: f32,
     pub h_align: TextHAlign,
     pub v_align: TextVAlign,
+    pub wrap: bool,
 }
 
 impl Default for TextProperties {
@@ -30,6 +31,7 @@ impl Default for TextProperties {
             line_height: 1.2,
             h_align: TextHAlign::Start,
             v_align: TextVAlign::Start,
+            wrap: true,
         }
     }
 }
@@ -154,7 +156,7 @@ impl TextLayouter {
     }
 
     pub fn measure(&mut self, text: &mut ShapedText, max_size: Vec2<f32>) -> Vec2<f32> {
-        flow_segments(&mut text.segments, max_size.x);
+        flow_segments(&mut text.segments, max_size.x, text.props.wrap);
         split_lines(&mut self.lines, &text.segments);
         measure_lines(&self.lines)
     }
@@ -350,13 +352,17 @@ fn measure_segments(
     }
 }
 
-fn flow_segments(segments: &mut [RawSegment], max_width: f32) {
+fn flow_segments(segments: &mut [RawSegment], max_width: f32, wrap: bool) {
     if segments.is_empty() {
         return;
     }
 
     for segment in segments.iter_mut() {
         segment.flow_break = segment.linebreak == Some(BreakOpportunity::Mandatory);
+    }
+
+    if !wrap {
+        return;
     }
 
     let mut line_width = segments[0].width;

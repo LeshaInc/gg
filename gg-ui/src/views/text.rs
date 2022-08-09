@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use gg_graphics::{
-    Color, FontFamily, FontStyle, FontWeight, ShapedText, Text, TextHAlign, TextProperties,
-    TextSegment, TextSegmentProperties, TextVAlign,
+    Color, FontFamily, FontStyle, FontWeight, ShapedText, Text, TextProperties, TextSegment,
+    TextSegmentProperties,
 };
 use gg_math::{Rect, Vec2};
 
@@ -13,6 +13,7 @@ pub fn text<D>(text: impl Into<String>) -> TextView<D> {
     TextView {
         phantom: PhantomData,
         text: text.into(),
+        props: TextProperties::default(),
         shaped_text: None,
     }
 }
@@ -20,7 +21,15 @@ pub fn text<D>(text: impl Into<String>) -> TextView<D> {
 pub struct TextView<D> {
     phantom: PhantomData<fn(D)>,
     text: String,
+    props: TextProperties,
     shaped_text: Option<ShapedText>,
+}
+
+impl<D> TextView<D> {
+    pub fn wrap(mut self, v: bool) -> Self {
+        self.props.wrap = v;
+        self
+    }
 }
 
 impl<D> View<D> for TextView<D> {
@@ -54,11 +63,7 @@ impl<D> View<D> for TextView<D> {
 
             let text = Text {
                 segments: Cow::Borrowed(&segments),
-                props: TextProperties {
-                    line_height: 1.2,
-                    h_align: TextHAlign::Start,
-                    v_align: TextVAlign::Start,
-                },
+                props: self.props,
             };
 
             ctx.text_layouter.shape(ctx.assets, ctx.fonts, &text)
