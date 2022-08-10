@@ -173,6 +173,8 @@ where
 
             res.min_size[maj] += child.hints.min_size[maj];
             res.min_size[min] = res.min_size[min].max(child.hints.min_size[min]);
+
+            res.num_layers = res.num_layers.max(child.hints.num_layers);
         }
 
         res
@@ -280,6 +282,10 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
+            if child.hints.num_layers == 1 && ctx.layer > 0 {
+                continue;
+            }
+
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.draw(ctx.reborrow(), bounds, i);
         }
@@ -289,6 +295,10 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
+            if child.hints.num_layers == 1 && ctx.layer > 0 {
+                continue;
+            }
+
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.handle(ctx.reborrow(), bounds, event, i);
         }

@@ -8,6 +8,7 @@ use crate::{AnyView, Bounds, DrawCtx, HandleCtx, LayoutCtx, View};
 pub struct Driver<D> {
     old_view: Option<Box<dyn AnyView<D>>>,
     size: Vec2<f32>,
+    num_layers: u32,
 }
 
 impl<D: 'static> Driver<D> {
@@ -15,6 +16,7 @@ impl<D: 'static> Driver<D> {
         Driver {
             old_view: None,
             size: Vec2::zero(),
+            num_layers: 1,
         }
     }
 
@@ -32,8 +34,9 @@ impl<D: 'static> Driver<D> {
                 fonts: ctx.fonts,
                 text_layouter: ctx.text_layouter,
             };
-            let _hints = view.pre_layout(l_ctx.reborrow());
+            let hints = view.pre_layout(l_ctx.reborrow());
             self.size = view.layout(l_ctx, ctx.bounds.size());
+            self.num_layers = hints.num_layers;
         }
 
         let bounds = Bounds {
@@ -41,23 +44,27 @@ impl<D: 'static> Driver<D> {
             scissor: Rect::new(Vec2::zero(), Vec2::splat(f32::INFINITY)),
         };
 
-        for event in ctx.input.events() {
-            let h_ctx = HandleCtx {
+        for layer in 0..self.num_layers {
+            for event in ctx.input.events() {
+                let h_ctx = HandleCtx {
+                    assets: ctx.assets,
+                    input: ctx.input,
+                    data,
+                    layer,
+                };
+
+                view.handle(h_ctx, bounds, event);
+            }
+
+            let d_ctx = DrawCtx {
                 assets: ctx.assets,
-                input: ctx.input,
-                data,
+                text_layouter: ctx.text_layouter,
+                encoder: ctx.encoder,
+                layer,
             };
 
-            view.handle(h_ctx, bounds, event);
+            view.draw(d_ctx, bounds);
         }
-
-        let d_ctx = DrawCtx {
-            assets: ctx.assets,
-            text_layouter: ctx.text_layouter,
-            encoder: ctx.encoder,
-        };
-
-        view.draw(d_ctx, bounds);
 
         self.old_view = Some(view);
     }

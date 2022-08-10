@@ -92,6 +92,7 @@ where
             child.hints = self.children.pre_layout(ctx.reborrow(), i);
             hints.min_size = hints.min_size.fmax(child.hints.min_size);
             hints.max_size = hints.max_size.fmin(child.hints.max_size);
+            hints.num_layers = hints.num_layers.max(child.hints.num_layers);
         }
 
         hints.max_size = hints.max_size.fmax(hints.min_size);
@@ -129,6 +130,10 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
+            if child.hints.num_layers == 1 && ctx.layer > 0 {
+                continue;
+            }
+
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.draw(ctx.reborrow(), bounds, i);
         }
@@ -138,6 +143,10 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
+            if child.hints.num_layers == 1 && ctx.layer > 0 {
+                continue;
+            }
+
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.handle(ctx.reborrow(), bounds, event, i);
         }

@@ -54,6 +54,7 @@ pub struct LayoutHints {
     pub stretch: f32,
     pub min_size: Vec2<f32>,
     pub max_size: Vec2<f32>,
+    pub num_layers: u32,
 }
 
 impl Default for LayoutHints {
@@ -62,6 +63,7 @@ impl Default for LayoutHints {
             stretch: 0.0,
             min_size: Vec2::splat(0.0),
             max_size: Vec2::splat(f32::INFINITY),
+            num_layers: 1,
         }
     }
 }
@@ -86,6 +88,7 @@ pub struct DrawCtx<'a> {
     pub assets: &'a Assets,
     pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
+    pub layer: u32,
 }
 
 impl DrawCtx<'_> {
@@ -94,6 +97,7 @@ impl DrawCtx<'_> {
             assets: self.assets,
             text_layouter: self.text_layouter,
             encoder: self.encoder,
+            layer: self.layer,
         }
     }
 }
@@ -101,6 +105,7 @@ pub struct HandleCtx<'a, D> {
     pub assets: &'a Assets,
     pub input: &'a Input,
     pub data: &'a mut D,
+    pub layer: u32,
 }
 
 impl<D> HandleCtx<'_, D> {
@@ -109,6 +114,7 @@ impl<D> HandleCtx<'_, D> {
             assets: self.assets,
             input: self.input,
             data: self.data,
+            layer: self.layer,
         }
     }
 }

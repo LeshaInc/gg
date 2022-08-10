@@ -91,6 +91,7 @@ where
                 assets: ctx.assets,
                 input: ctx.input,
                 data: &mut combined_data,
+                layer: ctx.layer,
             };
 
             if let Some(view) = &mut self.view {

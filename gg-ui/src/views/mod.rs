@@ -9,6 +9,7 @@ mod scrollable;
 pub mod stack;
 mod stateful;
 mod text;
+mod tooltip;
 mod touch_area;
 
 pub use self::button::button;
@@ -22,4 +23,5 @@ pub use self::scrollable::{scrollable, Scrollable};
 pub use self::stack::{hstack, vstack, Stack};
 pub use self::stateful::{stateful, Stateful};
 pub use self::text::{text, TextView};
+pub use self::tooltip::{tooltip, Tooltip};
 pub use self::touch_area::{touch_area, TouchArea};

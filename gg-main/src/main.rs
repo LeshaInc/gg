@@ -110,7 +110,12 @@ pub fn build_ui(fps: f32) -> impl View<()> {
         .child(views::text(format!("fps: {:.2}", fps)))
         .child(
             views::hstack()
-                .child(views::button("Button A", |_| println!("A")))
+                .child(views::tooltip(
+                    views::button("Button A", |_| println!("A")),
+                    views::overlay()
+                        .child(views::rect([0.0; 3]))
+                        .child(views::text("test tooltip").wrap(false).padding(4.0)),
+                ))
                 .child(views::button("Button B", |_| println!("B")))
                 .child(views::button("Button Cool", |_| println!("C"))),
         )
