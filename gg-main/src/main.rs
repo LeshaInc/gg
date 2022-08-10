@@ -114,9 +114,23 @@ pub fn build_ui(fps: f32) -> impl View<()> {
                     views::button("Button A", |_| println!("A")),
                     views::overlay()
                         .child(views::rect([0.0; 3]))
-                        .child(views::text("test tooltip").wrap(false).padding(4.0)),
+                        .child(views::tooltip(
+                            views::text("test tooltip").wrap(false).padding(4.0),
+                            views::overlay()
+                                .min_width(300.0)
+                                .min_height(30.0)
+                                .child(views::rect([0.2, 0.0, 0.0]))
+                                .child(views::text("mic check")),
+                        )),
                 ))
-                .child(views::button("Button B", |_| println!("B")))
+                .child(views::tooltip(
+                    views::button("Button B", |_| println!("B")),
+                    views::overlay().child(views::rect([0.0; 3])).child(
+                        views::text("another test tooltip\n foobar")
+                            .wrap(false)
+                            .padding(4.0),
+                    ),
+                ))
                 .child(views::button("Button Cool", |_| println!("C"))),
         )
         .child(
