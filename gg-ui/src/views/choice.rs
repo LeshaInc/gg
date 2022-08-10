@@ -1,6 +1,6 @@
-use gg_math::{Rect, Vec2};
+use gg_math::Vec2;
 
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn choose<VT, VF>(condition: bool, view_t: VT, view_f: VF) -> Choice<VT, VF> {
     Choice {
@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
         if self.condition {
             self.view_t.draw(ctx, bounds)
         } else {
@@ -55,7 +55,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
         if self.condition {
             self.view_t.handle(ctx, bounds, event)
         } else {

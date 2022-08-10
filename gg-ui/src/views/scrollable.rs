@@ -1,7 +1,7 @@
 use gg_input::Event;
 use gg_math::{Rect, Vec2};
 
-use crate::{DrawCtx, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
+use crate::{Bounds, DrawCtx, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
 
 pub fn scrollable<V>(view: V) -> Scrollable<V> {
     Scrollable {
@@ -22,8 +22,11 @@ pub struct Scrollable<V> {
 }
 
 impl<V> Scrollable<V> {
-    fn inner_bounds(&self, outer: Rect<f32>) -> Rect<f32> {
-        Rect::new(outer.min + self.offset.floor(), self.inner_size)
+    fn inner_bounds(&self, outer: Bounds) -> Bounds {
+        Bounds {
+            rect: Rect::new(outer.rect.min + self.offset.floor(), self.inner_size),
+            scissor: outer.rect,
+        }
     }
 }
 
@@ -67,12 +70,15 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         size
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, outer: Rect<f32>) {
+    fn draw(&mut self, mut ctx: DrawCtx, outer_bounds: Bounds) {
+        let inner_bounds = self.inner_bounds(outer_bounds);
+        let outer = outer_bounds.rect;
+        let inner = inner_bounds.rect;
+
         ctx.encoder.save();
         ctx.encoder.set_scissor(outer.cast());
 
-        let inner = self.inner_bounds(outer);
-        self.view.draw(ctx.reborrow(), inner);
+        self.view.draw(ctx.reborrow(), inner_bounds);
 
         let mut thumb_factor = outer.size() / inner.size();
         if thumb_factor.x < 1.0 && thumb_factor.y < 1.0 {
@@ -107,9 +113,9 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         ctx.encoder.restore();
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
         if let Event::Scroll(ev) = event {
-            if bounds.contains(ctx.input.mouse_pos()) {
+            if bounds.clip_rect().contains(ctx.input.mouse_pos()) {
                 let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
                     Vec2::new(ev.delta.y, ev.delta.x)
                 } else {
@@ -119,7 +125,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
                 self.target_offset += delta * 60.0;
                 self.target_offset = self
                     .target_offset
-                    .fmax(bounds.size() - self.inner_size)
+                    .fmax(bounds.rect.size() - self.inner_size)
                     .fmin(Vec2::zero());
             }
         }

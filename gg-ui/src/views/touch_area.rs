@@ -1,6 +1,4 @@
-use gg_math::Rect;
-
-use crate::{Event, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
+use crate::{Bounds, Event, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
 
 pub fn touch_area<D, F>(callback: F) -> TouchArea<F>
 where
@@ -26,8 +24,9 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
-        if event.pressed_action(UiAction::Touch) && bounds.contains(ctx.input.mouse_pos()) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
+        let rect = bounds.clip_rect();
+        if event.pressed_action(UiAction::Touch) && rect.contains(ctx.input.mouse_pos()) {
             if let Some(callback) = self.callback.take() {
                 callback(ctx.data);
             }

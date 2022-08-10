@@ -24,11 +24,11 @@ pub trait View<D> {
         size
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
         let _ = (ctx, bounds);
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
         let _ = (ctx, bounds, event);
     }
 }
@@ -109,6 +109,25 @@ impl<D> HandleCtx<'_, D> {
             assets: self.assets,
             input: self.input,
             data: self.data,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Bounds {
+    pub rect: Rect<f32>,
+    pub scissor: Rect<f32>,
+}
+
+impl Bounds {
+    pub fn clip_rect(&self) -> Rect<f32> {
+        self.rect.f_intersect(&self.scissor)
+    }
+
+    pub fn child(&self, rect: Rect<f32>) -> Bounds {
+        Bounds {
+            rect,
+            scissor: self.scissor,
         }
     }
 }

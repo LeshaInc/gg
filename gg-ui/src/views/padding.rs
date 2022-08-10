@@ -1,7 +1,8 @@
-use gg_math::{Rect, SideOffsets, Vec2};
+use gg_math::{SideOffsets, Vec2};
 
 use crate::{
-    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
+    AppendChild, Bounds, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints,
+    SetChildren, View,
 };
 
 pub fn padding<O, V>(offsets: O, view: V) -> Padding<V>
@@ -68,11 +69,13 @@ impl<D, V: View<D>> View<D> for Padding<V> {
         self.view.layout(ctx, size - self.offsets.size()) + self.offsets.size()
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
-        self.view.draw(ctx, bounds.shrink(&self.offsets));
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets));
+        self.view.draw(ctx, bounds);
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
-        self.view.handle(ctx, bounds.shrink(&self.offsets), event);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets));
+        self.view.handle(ctx, bounds, event);
     }
 }

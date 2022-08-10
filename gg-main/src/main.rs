@@ -118,7 +118,11 @@ pub fn build_ui(fps: f32) -> impl View<()> {
             views::hstack()
                 .stretch(2.0)
                 .child(views::scrollable(
-                    views::text(LEFT).padding([10.0, 5.0, 10.0, 2.5]),
+                    views::vstack()
+                        .padding([10.0, 5.0, 10.0, 2.5])
+                        .child(views::text(TOP_LEFT))
+                        .child(views::hstack().child(views::button("Test", |_| ())))
+                        .child(views::text(LEFT)),
                 ))
                 .child(
                     views::scrollable(
@@ -143,6 +147,8 @@ pub fn build_ui(fps: f32) -> impl View<()> {
                 ),
         )
 }
+
+const TOP_LEFT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum";
 
 const LEFT: &str = "It is not at present our business to treat of empirical illusory appearance (for example, optical illusion), which occurs in the empirical application of otherwise correct rules of the understanding, and in which the judgement is misled by the influence of imagination. Our purpose is to speak of transcendental illusory appearance, which influences principles—that are not even applied to experience, for in this case we should possess a sure test of their correctness—but which leads us, in disregard of all the warnings of criticism, completely beyond the empirical employment of the categories and deludes us with the chimera of an extension of the sphere of the pure understanding. We shall term those principles the application of which is confined entirely within the limits of possible experience, immanent; those, on the other hand, which transgress these limits, we shall call transcendent principles. But by these latter I do not understand principles of the transcendental use or misuse of the categories, which is in reality a mere fault of the judgement when not under due restraint from criticism, and therefore not paying sufficient attention to the limits of the sphere in which the pure understanding is allowed to exercise its functions; but real principles which exhort us to break down all those barriers, and to lay claim to a perfectly new field of cognition, which recognizes no line of demarcation. Thus transcendental and transcendent are not identical terms. The principles of the pure understanding, which we have already propounded, ought to be of empirical and not of transcendental use, that is, they are not applicable to any object beyond the sphere of experience. A principle which removes these limits, nay, which authorizes us to overstep them, is called transcendent. If our criticism can succeed in exposing the illusion in these pretended principles, those which are limited in their employment to the sphere of experience may be called, in opposition to the others, immanent principles of the pure understanding.
 

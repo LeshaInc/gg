@@ -5,9 +5,9 @@ use gg_graphics::{
     Color, FontFamily, FontStyle, FontWeight, ShapedText, Text, TextProperties, TextSegment,
     TextSegmentProperties,
 };
-use gg_math::{Rect, Vec2};
+use gg_math::Vec2;
 
-use crate::{DrawCtx, LayoutCtx, View};
+use crate::{Bounds, DrawCtx, LayoutCtx, View};
 
 pub fn text<D>(text: impl Into<String>) -> TextView<D> {
     TextView {
@@ -72,13 +72,13 @@ impl<D> View<D> for TextView<D> {
         ctx.text_layouter.measure(shaped_text, size).fmax(size)
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
         if let Some(text) = &mut self.shaped_text {
-            let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.size());
+            let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.rect.size());
 
             for glyph in glyphs {
                 let mut glyph = *glyph;
-                glyph.pos += bounds.min;
+                glyph.pos += bounds.rect.min;
                 ctx.encoder.glyph(glyph);
             }
         }

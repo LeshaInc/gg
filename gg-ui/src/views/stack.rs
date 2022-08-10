@@ -4,8 +4,8 @@ use gg_math::{Rect, Vec2};
 
 use crate::view_seq::{Append, HasMetaSeq};
 use crate::{
-    AppendChild, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren, View,
-    ViewSeq,
+    AppendChild, Bounds, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints,
+    SetChildren, View, ViewSeq,
 };
 
 pub fn stack<D>(config: StackConfig) -> Stack<D, ()> {
@@ -276,20 +276,20 @@ where
         used
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, mut ctx: DrawCtx, bounds: Bounds) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            let bounds = Rect::new(child.pos + bounds.min, child.size);
+            let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.draw(ctx.reborrow(), bounds, i);
         }
     }
 
-    fn handle(&mut self, mut ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+    fn handle(&mut self, mut ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            let bounds = Rect::new(child.pos + bounds.min, child.size);
+            let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
             self.children.handle(ctx.reborrow(), bounds, event, i);
         }
     }

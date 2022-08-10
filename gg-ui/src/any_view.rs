@@ -1,8 +1,8 @@
 use std::any::Any;
 
-use gg_math::{Rect, Vec2};
+use gg_math::Vec2;
 
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub trait AnyView<D: 'static>: Any + View<D> {
     fn as_any(&mut self) -> &mut dyn Any;
@@ -37,11 +37,11 @@ impl<'a, D: 'static> View<D> for Box<dyn AnyView<D>> {
         (**self).layout(ctx, size)
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
         (**self).draw(ctx, bounds)
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
         (**self).handle(ctx, bounds, event)
     }
 }

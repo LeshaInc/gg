@@ -1,8 +1,8 @@
 use std::convert::{AsMut, AsRef};
 
-use gg_math::{Rect, Vec2};
+use gg_math::Vec2;
 
-use crate::{DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub trait ViewSeq<D> {
     fn len(&self) -> usize;
@@ -17,9 +17,9 @@ pub trait ViewSeq<D> {
 
     fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32>;
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>, idx: usize);
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds, idx: usize);
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event, idx: usize);
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event, idx: usize);
 }
 
 impl<D> ViewSeq<D> for () {
@@ -39,9 +39,9 @@ impl<D> ViewSeq<D> for () {
         size
     }
 
-    fn draw(&mut self, _: DrawCtx, _: Rect<f32>, _: usize) {}
+    fn draw(&mut self, _: DrawCtx, _: Bounds, _: usize) {}
 
-    fn handle(&mut self, _: HandleCtx<D>, _: Rect<f32>, _: Event, _: usize) {}
+    fn handle(&mut self, _: HandleCtx<D>, _: Bounds, _: Event, _: usize) {}
 }
 
 impl<D, VS, V> ViewSeq<D> for (V, VS)
@@ -77,7 +77,7 @@ where
         }
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>, idx: usize) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds, idx: usize) {
         if idx == 0 {
             self.0.draw(ctx, bounds)
         } else {
@@ -85,7 +85,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: Event, idx: usize) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event, idx: usize) {
         if idx == 0 {
             self.0.handle(ctx, bounds, event)
         } else {

@@ -1,6 +1,6 @@
-use gg_math::{Rect, Vec2};
+use gg_math::Vec2;
 
-use crate::{DrawCtx, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, HandleCtx, LayoutCtx, LayoutHints, View};
 
 pub fn stateful<D, S, VF, V>(state: S, view_factory: VF) -> Stateful<S, VF, V>
 where
@@ -71,7 +71,7 @@ where
         }
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
+    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
         self.ensure_init();
 
         if let Some(view) = &mut self.view {
@@ -79,7 +79,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Rect<f32>, event: gg_input::Event) {
+    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: gg_input::Event) {
         self.ensure_init();
 
         take_mut::scoped::scope(|s| {

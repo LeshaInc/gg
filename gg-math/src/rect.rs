@@ -1,4 +1,4 @@
-use num_traits::{Num, NumCast};
+use num_traits::{Float, Num, NumCast};
 
 use crate::{SideOffsets, Vec2};
 
@@ -114,6 +114,15 @@ impl<T: Ord + Copy> Rect<T> {
     pub fn intersect(&self, rhs: &Rect<T>) -> Rect<T> {
         let min = self.min.max(rhs.min);
         let max = self.max.min(rhs.max).max(min);
+        Rect::from_min_max(min, max)
+    }
+}
+
+impl<T: Float> Rect<T> {
+    #[inline]
+    pub fn f_intersect(&self, rhs: &Rect<T>) -> Rect<T> {
+        let min = self.min.fmax(rhs.min);
+        let max = self.max.fmin(rhs.max).fmax(min);
         Rect::from_min_max(min, max)
     }
 }

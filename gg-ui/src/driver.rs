@@ -3,7 +3,7 @@ use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
 use gg_input::Input;
 use gg_math::{Rect, Vec2};
 
-use crate::{AnyView, DrawCtx, HandleCtx, LayoutCtx, View};
+use crate::{AnyView, Bounds, DrawCtx, HandleCtx, LayoutCtx, View};
 
 pub struct Driver<D> {
     old_view: Option<Box<dyn AnyView<D>>>,
@@ -36,7 +36,11 @@ impl<D: 'static> Driver<D> {
             self.size = view.layout(l_ctx, ctx.bounds.size());
         }
 
-        let bounds = Rect::new(ctx.bounds.min, self.size);
+        let bounds = Bounds {
+            rect: Rect::new(ctx.bounds.min, self.size),
+            scissor: Rect::new(Vec2::zero(), Vec2::splat(f32::INFINITY)),
+        };
+
         for event in ctx.input.events() {
             let h_ctx = HandleCtx {
                 assets: ctx.assets,
