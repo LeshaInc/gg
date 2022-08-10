@@ -41,7 +41,7 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    pub fn indices(self) -> (usize, usize) {
+    fn indices(self) -> (usize, usize) {
         match self {
             Orientation::Horizontal => (0, 1),
             Orientation::Vertical => (1, 0),

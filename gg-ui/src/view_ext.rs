@@ -1,5 +1,6 @@
 use gg_math::SideOffsets;
 
+use crate::views::constrain::{MaxHeight, MaxWidth, MinHeight, MinWidth, Stretch};
 use crate::views::*;
 use crate::{IntoViewSeq, View};
 
@@ -20,27 +21,27 @@ pub trait ViewExt<D>: View<D> + Sized {
         choose(cond, self, nothing())
     }
 
-    fn constrain<C>(self, constraint: C) -> ConstraintView<Self, C> {
+    fn constrain<C>(self, constraint: C) -> Constrain<Self, C> {
         constrain(self, constraint)
     }
 
-    fn min_width(self, width: f32) -> ConstraintView<Self, MinWidth> {
+    fn min_width(self, width: f32) -> Constrain<Self, MinWidth> {
         self.constrain(MinWidth(width))
     }
 
-    fn min_height(self, height: f32) -> ConstraintView<Self, MinHeight> {
+    fn min_height(self, height: f32) -> Constrain<Self, MinHeight> {
         self.constrain(MinHeight(height))
     }
 
-    fn max_width(self, width: f32) -> ConstraintView<Self, MaxWidth> {
+    fn max_width(self, width: f32) -> Constrain<Self, MaxWidth> {
         self.constrain(MaxWidth(width))
     }
 
-    fn max_height(self, height: f32) -> ConstraintView<Self, MaxHeight> {
+    fn max_height(self, height: f32) -> Constrain<Self, MaxHeight> {
         self.constrain(MaxHeight(height))
     }
 
-    fn stretch(self, stretch: f32) -> ConstraintView<Self, Stretch> {
+    fn stretch(self, stretch: f32) -> Constrain<Self, Stretch> {
         self.constrain(Stretch(stretch))
     }
 

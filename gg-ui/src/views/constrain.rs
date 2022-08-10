@@ -5,48 +5,48 @@ use crate::{
     SetChildren, View,
 };
 
-pub fn constrain<V, C>(view: V, constraint: C) -> ConstraintView<V, C> {
-    ConstraintView { view, constraint }
+pub fn constrain<V, C>(view: V, constraint: C) -> Constrain<V, C> {
+    Constrain { view, constraint }
 }
 
-pub struct ConstraintView<V, C> {
+pub struct Constrain<V, C> {
     view: V,
     constraint: C,
 }
 
-impl<D, V, VC, C> AppendChild<D, VC> for ConstraintView<V, C>
+impl<D, V, VC, C> AppendChild<D, VC> for Constrain<V, C>
 where
     V: View<D> + AppendChild<D, VC>,
     VC: View<D>,
     C: Constraint,
 {
-    type Output = ConstraintView<V::Output, C>;
+    type Output = Constrain<V::Output, C>;
 
     fn child(self, child: VC) -> Self::Output {
-        ConstraintView {
+        Constrain {
             view: self.view.child(child),
             constraint: self.constraint,
         }
     }
 }
 
-impl<D, V, C, Cons> SetChildren<D, C> for ConstraintView<V, Cons>
+impl<D, V, C, Cons> SetChildren<D, C> for Constrain<V, Cons>
 where
     V: View<D> + SetChildren<D, C>,
     C: IntoViewSeq<D>,
     Cons: Constraint,
 {
-    type Output = ConstraintView<V::Output, Cons>;
+    type Output = Constrain<V::Output, Cons>;
 
     fn children(self, children: C) -> Self::Output {
-        ConstraintView {
+        Constrain {
             view: self.view.children(children),
             constraint: self.constraint,
         }
     }
 }
 
-impl<D, V, C> View<D> for ConstraintView<V, C>
+impl<D, V, C> View<D> for Constrain<V, C>
 where
     V: View<D>,
     C: Constraint,
