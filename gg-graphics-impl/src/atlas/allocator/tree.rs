@@ -60,5 +60,5 @@ fn from_size(size: guillotiere::Size) -> Vec2<u32> {
 fn from_rect(rect: guillotiere::Rectangle) -> Rect<u32> {
     let min = Vec2::new(rect.min.x, rect.min.y);
     let max = Vec2::new(rect.max.x, rect.max.y);
-    Rect::new(min, max).cast()
+    Rect::from_min_max(min, max).cast()
 }

@@ -26,17 +26,17 @@ impl<D: 'static> Driver<D> {
             _ => true,
         };
 
-        if changed || ctx.bounds.extents() != self.size {
+        if changed || ctx.bounds.size() != self.size {
             let mut l_ctx = LayoutCtx {
                 assets: ctx.assets,
                 fonts: ctx.fonts,
                 text_layouter: ctx.text_layouter,
             };
             let _hints = view.pre_layout(l_ctx.reborrow());
-            self.size = view.layout(l_ctx, ctx.bounds.extents());
+            self.size = view.layout(l_ctx, ctx.bounds.size());
         }
 
-        let bounds = Rect::from_pos_extents(ctx.bounds.min, self.size);
+        let bounds = Rect::new(ctx.bounds.min, self.size);
         for event in ctx.input.events() {
             let h_ctx = HandleCtx {
                 assets: ctx.assets,

@@ -74,7 +74,7 @@ impl<D> View<D> for TextView<D> {
 
     fn draw(&mut self, ctx: DrawCtx, bounds: Rect<f32>) {
         if let Some(text) = &mut self.shaped_text {
-            let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.extents());
+            let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.size());
 
             for glyph in glyphs {
                 let mut glyph = *glyph;

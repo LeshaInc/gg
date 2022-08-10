@@ -23,7 +23,7 @@ pub struct Scrollable<V> {
 
 impl<V> Scrollable<V> {
     fn inner_bounds(&self, outer: Rect<f32>) -> Rect<f32> {
-        Rect::from_pos_extents(outer.min + self.offset.floor(), self.inner_size)
+        Rect::new(outer.min + self.offset.floor(), self.inner_size)
     }
 }
 
@@ -74,12 +74,12 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         let inner = self.inner_bounds(outer);
         self.view.draw(ctx.reborrow(), inner);
 
-        let mut thumb_factor = outer.extents() / inner.extents();
+        let mut thumb_factor = outer.size() / inner.size();
         if thumb_factor.x < 1.0 && thumb_factor.y < 1.0 {
-            thumb_factor = (outer.extents() - Vec2::new(7.0, 0.0)) / inner.extents();
+            thumb_factor = (outer.size() - Vec2::new(7.0, 0.0)) / inner.size();
         }
 
-        let thumb_size = outer.extents() * thumb_factor;
+        let thumb_size = outer.size() * thumb_factor;
         let thumb_offset = -self.offset * thumb_factor;
 
         if thumb_factor.x < 1.0 {
@@ -119,7 +119,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
                 self.target_offset += delta * 60.0;
                 self.target_offset = self
                     .target_offset
-                    .fmax(bounds.extents() - self.inner_size)
+                    .fmax(bounds.size() - self.inner_size)
                     .fmin(Vec2::zero());
             }
         }

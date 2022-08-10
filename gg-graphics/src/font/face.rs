@@ -124,7 +124,7 @@ impl FontFace {
         let raster_size = Vec2::new(px_width, px_height).cast::<u32>();
 
         Some(GlyphRaster {
-            bounds: Rect::from_pos_extents(
+            bounds: Rect::new(
                 Vec2::new(px_min.x, -px_min.y) / size,
                 raster_size.cast::<f32>() / size,
             ),
@@ -158,7 +158,7 @@ impl FontFace {
         }
 
         Some(GlyphRaster {
-            bounds: Rect::from_pos_extents(
+            bounds: Rect::new(
                 Vec2::new(raster.x, -raster.y).cast::<f32>() / scale,
                 Vec2::new(raster.width, raster.height).cast::<f32>() / scale,
             ),

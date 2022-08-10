@@ -280,7 +280,7 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            let bounds = Rect::from_pos_extents(child.pos + bounds.min, child.size);
+            let bounds = Rect::new(child.pos + bounds.min, child.size);
             self.children.draw(ctx.reborrow(), bounds, i);
         }
     }
@@ -289,7 +289,7 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            let bounds = Rect::from_pos_extents(child.pos + bounds.min, child.size);
+            let bounds = Rect::new(child.pos + bounds.min, child.size);
             self.children.handle(ctx.reborrow(), bounds, event, i);
         }
     }

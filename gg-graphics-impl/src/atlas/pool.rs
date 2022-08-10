@@ -56,10 +56,7 @@ impl AtlasPool {
     pub fn get_normalized_rect(&self, alloc: &PoolAllocation) -> Rect<f32> {
         let atlas = self.get(alloc.id.atlas_id);
         let size = atlas.size().cast::<f32>();
-        Rect::new(
-            alloc.rect.min.cast::<f32>() / size,
-            alloc.rect.max.cast::<f32>() / size,
-        )
+        alloc.rect.map(|v| v.cast::<f32>() / size)
     }
 
     fn alloc_inner(&mut self, mut image: PoolImage, start_idx: usize) -> PoolAllocation {

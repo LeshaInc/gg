@@ -7,7 +7,7 @@ use wgpu::{
     Buffer, BufferUsages, Device, VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct State {
     pub scissor: Rect<u32>,
     pub view_proj: Affine2<f32>,
@@ -18,17 +18,6 @@ pub struct State {
 impl State {
     fn requires_flush(&self, other: &State) -> bool {
         self.scissor != other.scissor
-    }
-}
-
-impl Default for State {
-    fn default() -> State {
-        State {
-            scissor: Rect::new(Vec2::new(0, 0), Vec2::new(800, 600)),
-            view_proj: Affine2::identity(),
-            view: Affine2::identity(),
-            proj: Affine2::identity(),
-        }
     }
 }
 

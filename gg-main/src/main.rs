@@ -80,7 +80,7 @@ fn main() -> Result<()> {
             encoder.clear([0.02; 3]);
 
             let padding = Vec2::splat(30.0);
-            let ui_bounds = Rect::new(padding, size.cast::<f32>() - padding);
+            let ui_bounds = Rect::from_min_max(padding, size.cast::<f32>() - padding);
             let ui_ctx = UiContext {
                 bounds: ui_bounds,
                 assets: &assets,

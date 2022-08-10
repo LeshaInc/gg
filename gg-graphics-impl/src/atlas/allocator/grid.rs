@@ -56,12 +56,10 @@ impl Allocator for GridAllocator {
         }
 
         let cell = self.alloc_cell()?;
-        let min = cell_offset(cell, self.cell_size);
-        let max = min + size;
 
         Some(Allocation {
             id: cell_to_id(cell),
-            rect: Rect::new(min, max),
+            rect: Rect::new(cell_offset(cell, self.cell_size), size),
         })
     }
 

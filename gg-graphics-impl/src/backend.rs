@@ -382,47 +382,47 @@ impl BackendImpl {
         let bottom_right_size = get_image_size(assets, image.top_left.id());
 
         let outer = rect;
-        let inner = Rect::new(rect.min + top_left_size, rect.max - bottom_right_size);
+        let inner = Rect::from_min_max(rect.min + top_left_size, rect.max - bottom_right_size);
 
         self.draw_textured_rect(inner, color, image.center.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(inner.min.x, outer.min.y),
             Vec2::new(inner.max.x, inner.min.y),
         );
         self.draw_textured_rect(rect, color, image.top.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(inner.min.x, inner.max.y),
             Vec2::new(inner.max.x, outer.max.y),
         );
         self.draw_textured_rect(rect, color, image.bottom.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(outer.min.x, inner.min.y),
             Vec2::new(inner.min.x, inner.max.y),
         );
         self.draw_textured_rect(rect, color, image.left.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(inner.max.x, inner.min.y),
             Vec2::new(outer.max.x, inner.max.y),
         );
         self.draw_textured_rect(rect, color, image.right.id());
 
-        let rect = Rect::new(outer.min, inner.min);
+        let rect = Rect::from_min_max(outer.min, inner.min);
         self.draw_textured_rect(rect, color, image.top_left.id());
 
-        let rect = Rect::new(inner.max, outer.max);
+        let rect = Rect::from_min_max(inner.max, outer.max);
         self.draw_textured_rect(rect, color, image.bottom_right.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(inner.max.x, outer.min.y),
             Vec2::new(outer.max.x, inner.min.y),
         );
         self.draw_textured_rect(rect, color, image.top_right.id());
 
-        let rect = Rect::new(
+        let rect = Rect::from_min_max(
             Vec2::new(outer.min.x, inner.max.y),
             Vec2::new(inner.min.x, outer.max.y),
         );
@@ -436,9 +436,9 @@ impl BackendImpl {
             None => return,
         };
 
-        let size = glyph.bounds.extents() * cmd.size;
+        let size = glyph.bounds.size() * cmd.size;
         let offset = glyph.bounds.min * cmd.size + Vec2::new(0.0, -size.y);
-        let rect = Rect::from_pos_extents((cmd.pos + offset).floor(), size);
+        let rect = Rect::new((cmd.pos + offset).floor(), size);
 
         let tex_id = self.bindings.atlas_index(glyph.alloc.id.atlas_id);
         let tex_rect = self.atlases.get_normalized_rect(&glyph.alloc);
