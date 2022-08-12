@@ -4,8 +4,8 @@ use gg_math::{Rect, Vec2};
 
 use crate::view_seq::{Append, HasMetaSeq};
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints,
-    SetChildren, View, ViewSeq,
+    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    UpdateCtx, View, ViewSeq,
 };
 
 pub fn overlay<D>() -> Overlay<D, ()> {
@@ -67,14 +67,14 @@ impl<D, C> View<D> for Overlay<D, C>
 where
     C: ViewSeq<D> + HasMetaSeq<Meta>,
 {
-    fn update(&mut self, old: &mut Self) -> bool {
+    fn init(&mut self, old: &mut Self) -> bool {
         let meta = self.meta.as_mut();
         let old_meta = old.meta.as_mut();
 
         let mut changed = false;
 
         for (i, (child, old_child)) in meta.iter_mut().zip(old_meta).enumerate() {
-            if self.children.update(&mut old.children, i) {
+            if self.children.init(&mut old.children, i) {
                 changed = true;
             } else {
                 *child = *old_child;
@@ -84,12 +84,12 @@ where
         changed
     }
 
-    fn pre_layout(&mut self, mut ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         let meta = self.meta.as_mut();
         let mut hints = LayoutHints::default();
 
         for (i, child) in meta.iter_mut().enumerate() {
-            child.hints = self.children.pre_layout(ctx.reborrow(), i);
+            child.hints = self.children.pre_layout(ctx, i);
             hints.min_size = hints.min_size.fmax(child.hints.min_size);
             hints.max_size = hints.max_size.fmin(child.hints.max_size);
             hints.num_layers = hints.num_layers.max(child.hints.num_layers);
@@ -99,7 +99,7 @@ where
         hints
     }
 
-    fn layout(&mut self, mut ctx: LayoutCtx, mut size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, mut size: Vec2<f32>) -> Vec2<f32> {
         let meta = self.meta.as_mut();
 
         let max_iters = 5;
@@ -107,7 +107,7 @@ where
             for (i, child) in meta.iter_mut().enumerate() {
                 let adviced = size.fclamp(child.hints.min_size, child.hints.max_size);
                 if adviced != child.size {
-                    child.size = self.children.layout(ctx.reborrow(), adviced, i);
+                    child.size = self.children.layout(ctx, adviced, i);
                 }
 
                 if child.size.cmp_gt(adviced).any() {
@@ -126,7 +126,7 @@ where
         size
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, bounds: Bounds) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
@@ -135,11 +135,11 @@ where
             }
 
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
-            self.children.draw(ctx.reborrow(), bounds, i);
+            self.children.handle(ctx, bounds, event, i);
         }
     }
 
-    fn handle(&mut self, mut ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
@@ -148,7 +148,7 @@ where
             }
 
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
-            self.children.handle(ctx.reborrow(), bounds, event, i);
+            self.children.draw(ctx, bounds, i);
         }
     }
 }

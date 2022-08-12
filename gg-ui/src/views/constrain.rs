@@ -1,8 +1,8 @@
 use gg_math::Vec2;
 
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints,
-    SetChildren, View,
+    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    UpdateCtx, View,
 };
 
 pub fn constrain<V, C>(view: V, constraint: C) -> Constrain<V, C> {
@@ -51,29 +51,29 @@ where
     V: View<D>,
     C: Constraint,
 {
-    fn update(&mut self, old: &mut Self) -> bool
+    fn init(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
-        self.view.update(&mut old.view) || old.constraint != self.constraint
+        self.view.init(&mut old.view) || old.constraint != self.constraint
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         let mut hints = self.view.pre_layout(ctx);
         self.constraint.constrain(&mut hints);
         hints
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         self.view.layout(ctx, size)
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
-        self.view.draw(ctx, bounds);
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+        self.view.handle(ctx, bounds, event);
     }
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
-        self.view.handle(ctx, bounds, event);
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
+        self.view.draw(ctx, bounds);
     }
 }
 

@@ -1,6 +1,6 @@
 use gg_math::Vec2;
 
-use crate::{Bounds, DrawCtx, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub fn stateful<D, S, VF, V>(state: S, view_factory: VF) -> Stateful<S, VF, V>
 where
@@ -36,7 +36,7 @@ where
     VF: FnOnce(&S) -> V,
     V: View<(D, S)>,
 {
-    fn update(&mut self, old: &mut Self) -> bool
+    fn init(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
@@ -45,13 +45,13 @@ where
         self.ensure_init();
 
         if let (Some(view), Some(old_view)) = (&mut self.view, &mut old.view) {
-            view.update(old_view)
+            view.init(old_view)
         } else {
             true
         }
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         self.ensure_init();
 
         if let Some(view) = &mut self.view {
@@ -61,7 +61,7 @@ where
         }
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         self.ensure_init();
 
         if let Some(view) = &mut self.view {
@@ -71,15 +71,7 @@ where
         }
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
-        self.ensure_init();
-
-        if let Some(view) = &mut self.view {
-            view.draw(ctx, bounds)
-        }
-    }
-
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: gg_input::Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: gg_input::Event) {
         self.ensure_init();
 
         take_mut::scoped::scope(|s| {
@@ -87,7 +79,7 @@ where
             let (state, state_hole) = s.take(&mut self.state);
 
             let mut combined_data = (data, state);
-            let ctx = HandleCtx {
+            let mut ctx = UpdateCtx {
                 assets: ctx.assets,
                 input: ctx.input,
                 data: &mut combined_data,
@@ -95,12 +87,20 @@ where
             };
 
             if let Some(view) = &mut self.view {
-                view.handle(ctx, bounds, event);
+                view.handle(&mut ctx, bounds, event);
             }
 
             let (data, state) = combined_data;
             data_hole.fill(data);
             state_hole.fill(state);
         });
+    }
+
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
+        self.ensure_init();
+
+        if let Some(view) = &mut self.view {
+            view.draw(ctx, bounds)
+        }
     }
 }

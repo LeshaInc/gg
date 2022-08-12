@@ -4,8 +4,8 @@ use gg_math::{Rect, Vec2};
 
 use crate::view_seq::{Append, HasMetaSeq};
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, HandleCtx, IntoViewSeq, LayoutCtx, LayoutHints,
-    SetChildren, View, ViewSeq,
+    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    UpdateCtx, View, ViewSeq,
 };
 
 pub fn stack<D>(config: StackConfig) -> Stack<D, ()> {
@@ -144,14 +144,14 @@ impl<D, C> View<D> for Stack<D, C>
 where
     C: ViewSeq<D> + HasMetaSeq<Meta>,
 {
-    fn update(&mut self, old: &mut Self) -> bool {
+    fn init(&mut self, old: &mut Self) -> bool {
         let meta = self.meta.as_mut();
         let old_meta = old.meta.as_ref();
         let mut changed = false;
 
         for (i, (child, old_child)) in meta.iter_mut().zip(old_meta).enumerate() {
             *child = *old_child;
-            child.changed = self.children.update(&mut old.children, i);
+            child.changed = self.children.init(&mut old.children, i);
             changed |= child.changed;
         }
 
@@ -160,7 +160,7 @@ where
         changed
     }
 
-    fn pre_layout(&mut self, mut ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         let meta = self.meta.as_mut();
         let (maj, min) = self.config.orientation.indices();
 
@@ -168,7 +168,7 @@ where
 
         for (i, child) in meta.iter_mut().enumerate() {
             if child.changed {
-                child.hints = self.children.pre_layout(ctx.reborrow(), i);
+                child.hints = self.children.pre_layout(ctx, i);
             }
 
             res.min_size[maj] += child.hints.min_size[maj];
@@ -180,7 +180,7 @@ where
         res
     }
 
-    fn layout(&mut self, mut ctx: LayoutCtx, adviced: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, adviced: Vec2<f32>) -> Vec2<f32> {
         let meta = self.meta.as_mut();
         let (maj, min) = self.config.orientation.indices();
 
@@ -238,7 +238,7 @@ where
                 }
 
                 if child.size != old_size || child.changed {
-                    child.size = self.children.layout(ctx.reborrow(), child.size, i);
+                    child.size = self.children.layout(ctx, child.size, i);
                 }
 
                 let change = child.size[maj] - old_size[maj];
@@ -278,7 +278,7 @@ where
         used
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, bounds: Bounds) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
@@ -287,11 +287,11 @@ where
             }
 
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
-            self.children.draw(ctx.reborrow(), bounds, i);
+            self.children.handle(ctx, bounds, event, i);
         }
     }
 
-    fn handle(&mut self, mut ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
@@ -300,7 +300,7 @@ where
             }
 
             let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
-            self.children.handle(ctx.reborrow(), bounds, event, i);
+            self.children.draw(ctx, bounds, i);
         }
     }
 }

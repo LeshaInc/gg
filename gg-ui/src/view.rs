@@ -6,7 +6,7 @@ use gg_math::{Rect, Vec2};
 use crate::Event;
 
 pub trait View<D> {
-    fn update(&mut self, old: &mut Self) -> bool
+    fn init(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
@@ -14,38 +14,22 @@ pub trait View<D> {
         false
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         let _ = ctx;
         LayoutHints::default()
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         let _ = ctx;
         size
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
-        let _ = (ctx, bounds);
-    }
-
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         let _ = (ctx, bounds, event);
     }
-}
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UpdateResult {
-    Changed,
-    Unchanged,
-}
-
-impl UpdateResult {
-    pub fn or(&self, other: UpdateResult) -> UpdateResult {
-        use UpdateResult::*;
-        match (self, other) {
-            (Unchanged, Unchanged) => Unchanged,
-            _ => Changed,
-        }
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
+        let _ = (ctx, bounds);
     }
 }
 
@@ -74,16 +58,6 @@ pub struct LayoutCtx<'a> {
     pub text_layouter: &'a mut TextLayouter,
 }
 
-impl LayoutCtx<'_> {
-    pub fn reborrow(&mut self) -> LayoutCtx<'_> {
-        LayoutCtx {
-            assets: self.assets,
-            fonts: self.fonts,
-            text_layouter: self.text_layouter,
-        }
-    }
-}
-
 pub struct DrawCtx<'a> {
     pub assets: &'a Assets,
     pub text_layouter: &'a mut TextLayouter,
@@ -101,16 +75,17 @@ impl DrawCtx<'_> {
         }
     }
 }
-pub struct HandleCtx<'a, D> {
+
+pub struct UpdateCtx<'a, D> {
     pub assets: &'a Assets,
     pub input: &'a Input,
     pub data: &'a mut D,
     pub layer: u32,
 }
 
-impl<D> HandleCtx<'_, D> {
-    pub fn reborrow(&mut self) -> HandleCtx<'_, D> {
-        HandleCtx {
+impl<D> UpdateCtx<'_, D> {
+    pub fn reborrow(&mut self) -> UpdateCtx<'_, D> {
+        UpdateCtx {
             assets: self.assets,
             input: self.input,
             data: self.data,
@@ -122,17 +97,28 @@ impl<D> HandleCtx<'_, D> {
 #[derive(Clone, Copy, Debug)]
 pub struct Bounds {
     pub rect: Rect<f32>,
+    pub clip_rect: Rect<f32>,
     pub scissor: Rect<f32>,
 }
 
 impl Bounds {
-    pub fn clip_rect(&self) -> Rect<f32> {
-        self.rect.f_intersect(&self.scissor)
+    pub fn new(rect: Rect<f32>) -> Bounds {
+        Bounds {
+            rect,
+            clip_rect: rect,
+            scissor: Rect::new(Vec2::zero(), Vec2::splat(f32::INFINITY)),
+        }
+    }
+
+    pub fn with_scissor(mut self, scissor: Rect<f32>) -> Bounds {
+        self.scissor = scissor;
+        self
     }
 
     pub fn child(&self, rect: Rect<f32>) -> Bounds {
         Bounds {
             rect,
+            clip_rect: rect.f_intersect(&self.scissor),
             scissor: self.scissor,
         }
     }

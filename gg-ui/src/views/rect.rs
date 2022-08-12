@@ -17,11 +17,11 @@ pub struct RectView<D> {
 }
 
 impl<D> View<D> for RectView<D> {
-    fn update(&mut self, old: &mut Self) -> bool {
+    fn init(&mut self, old: &mut Self) -> bool {
         self.color != old.color
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
         ctx.encoder.rect(bounds.rect).fill_color(self.color);
     }
 }

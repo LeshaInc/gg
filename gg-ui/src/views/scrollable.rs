@@ -1,7 +1,7 @@
 use gg_input::Event;
 use gg_math::{Rect, Vec2};
 
-use crate::{Bounds, DrawCtx, HandleCtx, LayoutCtx, LayoutHints, UiAction, View};
+use crate::{Bounds, DrawCtx, LayoutCtx, LayoutHints, UiAction, UpdateCtx, View};
 
 pub fn scrollable<V>(view: V) -> Scrollable<V> {
     Scrollable {
@@ -23,15 +23,15 @@ pub struct Scrollable<V> {
 
 impl<V> Scrollable<V> {
     fn inner_bounds(&self, outer: Bounds) -> Bounds {
-        Bounds {
-            rect: Rect::new(outer.rect.min + self.offset.floor(), self.inner_size),
-            scissor: outer.rect,
-        }
+        outer.with_scissor(outer.rect).child(Rect::new(
+            outer.rect.min + self.offset.floor(),
+            self.inner_size,
+        ))
     }
 }
 
 impl<D, V: View<D>> View<D> for Scrollable<V> {
-    fn update(&mut self, old: &mut Self) -> bool
+    fn init(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
@@ -43,10 +43,10 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         let diff = self.target_offset - self.offset;
         self.offset += diff.map(|v| (v.abs() * 0.2).copysign(v));
 
-        self.view.update(&mut old.view)
+        self.view.init(&mut old.view)
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx) -> LayoutHints {
         self.hints = self.view.pre_layout(ctx);
         self.inner_size = self.hints.min_size;
         LayoutHints {
@@ -56,7 +56,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         }
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         self.inner_size = size.fclamp(self.hints.min_size, self.hints.max_size);
         self.inner_size = self.view.layout(ctx, self.inner_size);
 
@@ -70,7 +70,27 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         size
     }
 
-    fn draw(&mut self, mut ctx: DrawCtx, outer_bounds: Bounds) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+        if let Event::Scroll(ev) = event {
+            if bounds.clip_rect.contains(ctx.input.mouse_pos()) {
+                let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
+                    Vec2::new(ev.delta.y, ev.delta.x)
+                } else {
+                    ev.delta
+                };
+
+                self.target_offset += delta * 60.0;
+                self.target_offset = self
+                    .target_offset
+                    .fmax(bounds.rect.size() - self.inner_size)
+                    .fmin(Vec2::zero());
+            }
+        }
+
+        self.view.handle(ctx, self.inner_bounds(bounds), event)
+    }
+
+    fn draw(&mut self, ctx: &mut DrawCtx, outer_bounds: Bounds) {
         let inner_bounds = self.inner_bounds(outer_bounds);
         let outer = outer_bounds.rect;
         let inner = inner_bounds.rect;
@@ -78,7 +98,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         ctx.encoder.save();
         ctx.encoder.set_scissor(outer.cast());
 
-        self.view.draw(ctx.reborrow(), inner_bounds);
+        self.view.draw(ctx, inner_bounds);
 
         let mut thumb_factor = outer.size() / inner.size();
         if thumb_factor.x < 1.0 && thumb_factor.y < 1.0 {
@@ -111,25 +131,5 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         }
 
         ctx.encoder.restore();
-    }
-
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event) {
-        if let Event::Scroll(ev) = event {
-            if bounds.clip_rect().contains(ctx.input.mouse_pos()) {
-                let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
-                    Vec2::new(ev.delta.y, ev.delta.x)
-                } else {
-                    ev.delta
-                };
-
-                self.target_offset += delta * 60.0;
-                self.target_offset = self
-                    .target_offset
-                    .fmax(bounds.rect.size() - self.inner_size)
-                    .fmin(Vec2::zero());
-            }
-        }
-
-        self.view.handle(ctx, self.inner_bounds(bounds), event)
     }
 }

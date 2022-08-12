@@ -33,7 +33,7 @@ impl<D> TextView<D> {
 }
 
 impl<D> View<D> for TextView<D> {
-    fn update(&mut self, old: &mut Self) -> bool
+    fn init(&mut self, old: &mut Self) -> bool
     where
         Self: Sized,
     {
@@ -45,7 +45,7 @@ impl<D> View<D> for TextView<D> {
         }
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         let shaped_text = self.shaped_text.get_or_insert_with(|| {
             let segments = [TextSegment {
                 text: Cow::Borrowed(&self.text),
@@ -72,7 +72,7 @@ impl<D> View<D> for TextView<D> {
         ctx.text_layouter.measure(shaped_text, size).fmax(size)
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds) {
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
         if let Some(text) = &mut self.shaped_text {
             let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.rect.size());
 

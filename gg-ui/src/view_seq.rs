@@ -2,7 +2,7 @@ use std::convert::{AsMut, AsRef};
 
 use gg_math::Vec2;
 
-use crate::{Bounds, DrawCtx, Event, HandleCtx, LayoutCtx, LayoutHints, View};
+use crate::{Bounds, DrawCtx, Event, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub trait ViewSeq<D> {
     fn len(&self) -> usize;
@@ -11,15 +11,15 @@ pub trait ViewSeq<D> {
         self.len() == 0
     }
 
-    fn update(&mut self, old: &mut Self, idx: usize) -> bool;
+    fn init(&mut self, old: &mut Self, idx: usize) -> bool;
 
-    fn pre_layout(&mut self, ctx: LayoutCtx, idx: usize) -> LayoutHints;
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx, idx: usize) -> LayoutHints;
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32>;
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32>;
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds, idx: usize);
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize);
 
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event, idx: usize);
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds, idx: usize);
 }
 
 impl<D> ViewSeq<D> for () {
@@ -27,21 +27,21 @@ impl<D> ViewSeq<D> for () {
         0
     }
 
-    fn update(&mut self, _: &mut Self, _: usize) -> bool {
+    fn init(&mut self, _: &mut Self, _: usize) -> bool {
         false
     }
 
-    fn pre_layout(&mut self, _: LayoutCtx, _: usize) -> LayoutHints {
+    fn pre_layout(&mut self, _: &mut LayoutCtx, _: usize) -> LayoutHints {
         LayoutHints::default()
     }
 
-    fn layout(&mut self, _: LayoutCtx, size: Vec2<f32>, _: usize) -> Vec2<f32> {
+    fn layout(&mut self, _: &mut LayoutCtx, size: Vec2<f32>, _: usize) -> Vec2<f32> {
         size
     }
 
-    fn draw(&mut self, _: DrawCtx, _: Bounds, _: usize) {}
+    fn handle(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: Event, _: usize) {}
 
-    fn handle(&mut self, _: HandleCtx<D>, _: Bounds, _: Event, _: usize) {}
+    fn draw(&mut self, _: &mut DrawCtx, _: Bounds, _: usize) {}
 }
 
 impl<D, VS, V> ViewSeq<D> for (V, VS)
@@ -53,15 +53,15 @@ where
         1 + self.1.len()
     }
 
-    fn update(&mut self, old: &mut Self, idx: usize) -> bool {
+    fn init(&mut self, old: &mut Self, idx: usize) -> bool {
         if idx == 0 {
-            self.0.update(&mut old.0)
+            self.0.init(&mut old.0)
         } else {
-            self.1.update(&mut old.1, idx - 1)
+            self.1.init(&mut old.1, idx - 1)
         }
     }
 
-    fn pre_layout(&mut self, ctx: LayoutCtx, idx: usize) -> LayoutHints {
+    fn pre_layout(&mut self, ctx: &mut LayoutCtx, idx: usize) -> LayoutHints {
         if idx == 0 {
             self.0.pre_layout(ctx)
         } else {
@@ -69,7 +69,7 @@ where
         }
     }
 
-    fn layout(&mut self, ctx: LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32> {
+    fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32> {
         if idx == 0 {
             self.0.layout(ctx, size)
         } else {
@@ -77,19 +77,19 @@ where
         }
     }
 
-    fn draw(&mut self, ctx: DrawCtx, bounds: Bounds, idx: usize) {
-        if idx == 0 {
-            self.0.draw(ctx, bounds)
-        } else {
-            self.1.draw(ctx, bounds, idx - 1)
-        }
-    }
-
-    fn handle(&mut self, ctx: HandleCtx<D>, bounds: Bounds, event: Event, idx: usize) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize) {
         if idx == 0 {
             self.0.handle(ctx, bounds, event)
         } else {
             self.1.handle(ctx, bounds, event, idx - 1)
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds, idx: usize) {
+        if idx == 0 {
+            self.0.draw(ctx, bounds)
+        } else {
+            self.1.draw(ctx, bounds, idx - 1)
         }
     }
 }

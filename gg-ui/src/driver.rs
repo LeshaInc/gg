@@ -3,7 +3,7 @@ use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
 use gg_input::Input;
 use gg_math::{Rect, Vec2};
 
-use crate::{AnyView, Bounds, DrawCtx, HandleCtx, LayoutCtx, View};
+use crate::{AnyView, Bounds, DrawCtx, LayoutCtx, UpdateCtx, View};
 
 pub struct Driver<D> {
     old_view: Option<Box<dyn AnyView<D>>>,
@@ -24,7 +24,7 @@ impl<D: 'static> Driver<D> {
         let mut view: Box<dyn AnyView<D>> = Box::new(view);
 
         let changed = match self.old_view.take() {
-            Some(mut old) => view.update(&mut old),
+            Some(mut old) => view.init(&mut old),
             _ => true,
         };
 
@@ -34,36 +34,34 @@ impl<D: 'static> Driver<D> {
                 fonts: ctx.fonts,
                 text_layouter: ctx.text_layouter,
             };
-            let hints = view.pre_layout(l_ctx.reborrow());
-            self.size = view.layout(l_ctx, ctx.bounds.size());
+
+            let hints = view.pre_layout(&mut l_ctx);
+            self.size = view.layout(&mut l_ctx, ctx.bounds.size());
             self.num_layers = hints.num_layers;
         }
 
-        let bounds = Bounds {
-            rect: Rect::new(ctx.bounds.min, self.size),
-            scissor: Rect::new(Vec2::zero(), Vec2::splat(f32::INFINITY)),
-        };
+        let bounds = Bounds::new(Rect::new(ctx.bounds.min, self.size));
 
         for layer in 0..self.num_layers {
             for event in ctx.input.events() {
-                let h_ctx = HandleCtx {
+                let mut u_ctx = UpdateCtx {
                     assets: ctx.assets,
                     input: ctx.input,
                     data,
                     layer,
                 };
 
-                view.handle(h_ctx, bounds, event);
+                view.handle(&mut u_ctx, bounds, event);
             }
 
-            let d_ctx = DrawCtx {
+            let mut d_ctx = DrawCtx {
                 assets: ctx.assets,
                 text_layouter: ctx.text_layouter,
                 encoder: ctx.encoder,
                 layer,
             };
 
-            view.draw(d_ctx, bounds);
+            view.draw(&mut d_ctx, bounds);
         }
 
         self.old_view = Some(view);
