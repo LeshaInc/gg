@@ -1,7 +1,7 @@
 use gg_input::Event;
 use gg_math::{Rect, Vec2};
 
-use crate::{Bounds, DrawCtx, LayoutCtx, LayoutHints, UiAction, UpdateCtx, View};
+use crate::{Bounds, DrawCtx, Hover, LayoutCtx, LayoutHints, UiAction, UpdateCtx, View};
 
 pub fn scrollable<V>(view: V) -> Scrollable<V> {
     Scrollable {
@@ -23,10 +23,10 @@ pub struct Scrollable<V> {
 
 impl<V> Scrollable<V> {
     fn inner_bounds(&self, outer: Bounds) -> Bounds {
-        outer.with_scissor(outer.rect).child(Rect::new(
-            outer.rect.min + self.offset.floor(),
-            self.inner_size,
-        ))
+        outer.with_scissor(outer.rect).child(
+            Rect::new(outer.rect.min + self.offset.floor(), self.inner_size),
+            outer.hover,
+        )
     }
 }
 
@@ -70,9 +70,13 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         size
     }
 
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        self.view.hover(ctx, self.inner_bounds(bounds))
+    }
+
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         if let Event::Scroll(ev) = event {
-            if bounds.clip_rect.contains(ctx.input.mouse_pos()) {
+            if bounds.hover.is_some() {
                 let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
                     Vec2::new(ev.delta.y, ev.delta.x)
                 } else {

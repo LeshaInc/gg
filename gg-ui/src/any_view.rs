@@ -2,7 +2,7 @@ use std::any::Any;
 
 use gg_math::Vec2;
 
-use crate::{Bounds, DrawCtx, Event, LayoutCtx, LayoutHints, UpdateCtx, View};
+use crate::{Bounds, DrawCtx, Event, Hover, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub trait AnyView<D: 'static>: Any + View<D> {
     fn as_any(&mut self) -> &mut dyn Any;
@@ -37,11 +37,19 @@ impl<'a, D: 'static> View<D> for Box<dyn AnyView<D>> {
         (**self).layout(ctx, size)
     }
 
-    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
-        (**self).draw(ctx, bounds)
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        (**self).hover(ctx, bounds)
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        (**self).update(ctx, bounds)
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         (**self).handle(ctx, bounds, event)
+    }
+
+    fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
+        (**self).draw(ctx, bounds)
     }
 }

@@ -1,6 +1,6 @@
 use gg_math::{Rect, Vec2};
 
-use crate::{Bounds, DrawCtx, Event, LayoutCtx, LayoutHints, UpdateCtx, View};
+use crate::{Bounds, DrawCtx, Event, Hover, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub fn tooltip<V, VT>(view: V, contents: VT) -> Tooltip<V, VT> {
     Tooltip {
@@ -49,6 +49,38 @@ where
     fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         self.size = self.contents.layout(ctx, self.size);
         self.view.layout(ctx, size)
+    }
+
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        if ctx.layer < self.view_layers {
+            self.view.hover(ctx, bounds)
+        } else {
+            let mut ctx = ctx.reborrow();
+            ctx.layer -= self.view_layers;
+
+            let bounds = Bounds::new(Rect::new(
+                Vec2::new(bounds.rect.min.x, bounds.rect.max.y),
+                self.size,
+            ));
+
+            self.contents.hover(&mut ctx, bounds)
+        }
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        if ctx.layer < self.view_layers {
+            self.view.update(ctx, bounds)
+        } else {
+            let mut ctx = ctx.reborrow();
+            ctx.layer -= self.view_layers;
+
+            let bounds = Bounds::new(Rect::new(
+                Vec2::new(bounds.rect.min.x, bounds.rect.max.y),
+                self.size,
+            ));
+
+            self.contents.update(&mut ctx, bounds)
+        }
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {

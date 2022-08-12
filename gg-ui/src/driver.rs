@@ -40,27 +40,38 @@ impl<D: 'static> Driver<D> {
             self.num_layers = hints.num_layers;
         }
 
-        let bounds = Bounds::new(Rect::new(ctx.bounds.min, self.size));
+        let mut bounds = Bounds::new(Rect::new(ctx.bounds.min, self.size));
 
-        for layer in 0..self.num_layers {
-            for event in ctx.input.events() {
-                let mut u_ctx = UpdateCtx {
-                    assets: ctx.assets,
-                    input: ctx.input,
-                    data,
-                    layer,
-                };
+        let mut u_ctx = UpdateCtx {
+            assets: ctx.assets,
+            input: ctx.input,
+            data,
+            layer: 0,
+        };
 
-                view.handle(&mut u_ctx, bounds, event);
+        for layer in (0..self.num_layers).rev() {
+            u_ctx.layer = layer;
+
+            if bounds.hover.is_none() {
+                bounds.hover = view.hover(&mut u_ctx, bounds);
             }
 
-            let mut d_ctx = DrawCtx {
-                assets: ctx.assets,
-                text_layouter: ctx.text_layouter,
-                encoder: ctx.encoder,
-                layer,
-            };
+            view.update(&mut u_ctx, bounds);
 
+            for event in ctx.input.events() {
+                view.handle(&mut u_ctx, bounds, event);
+            }
+        }
+
+        let mut d_ctx = DrawCtx {
+            assets: ctx.assets,
+            text_layouter: ctx.text_layouter,
+            encoder: ctx.encoder,
+            layer: 0,
+        };
+
+        for layer in 0..self.num_layers {
+            d_ctx.layer = layer;
             view.draw(&mut d_ctx, bounds);
         }
 

@@ -105,6 +105,29 @@ fn main() -> Result<()> {
     });
 }
 
+pub fn _build_ui(fps: f32) -> impl View<()> {
+    views::vstack().child(
+        views::overlay()
+            .min_width(200.0)
+            .min_height(200.0)
+            .child(views::rect([0.1, 0.0, 0.0]))
+            .child(views::touch_area(|_| println!("YES"))),
+    )
+    // views::vstack()
+    //     .child(
+    //         views::overlay()
+    //             .child(views::rect([0.1, 0.0, 0.0]))
+    //             .child(views::tooltip(
+    //                 views::text("text a").wrap(false).padding(8.0),
+    //                 views::overlay()
+    //                     .child(views::rect([0.0, 0.1, 0.0]))
+    //                     .child(views::text("text b").wrap(false).padding(8.0))
+    //                     .padding(8.0),
+    //             )),
+    //     )
+    //     .child(views::text("test").wrap(false))
+}
+
 pub fn build_ui(fps: f32) -> impl View<()> {
     views::vstack()
         .child(views::text(format!("fps: {:.2}", fps)))

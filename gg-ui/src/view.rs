@@ -24,6 +24,18 @@ pub trait View<D> {
         size
     }
 
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        if bounds.clip_rect.contains(ctx.input.mouse_pos()) {
+            Hover::Direct
+        } else {
+            Hover::None
+        }
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        let _ = (ctx, bounds);
+    }
+
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         let _ = (ctx, bounds, event);
     }
@@ -58,21 +70,34 @@ pub struct LayoutCtx<'a> {
     pub text_layouter: &'a mut TextLayouter,
 }
 
-pub struct DrawCtx<'a> {
-    pub assets: &'a Assets,
-    pub text_layouter: &'a mut TextLayouter,
-    pub encoder: &'a mut GraphicsEncoder,
-    pub layer: u32,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Hover {
+    None,
+    Indirect,
+    Direct,
 }
 
-impl DrawCtx<'_> {
-    pub fn reborrow(&mut self) -> DrawCtx<'_> {
-        DrawCtx {
-            assets: self.assets,
-            text_layouter: self.text_layouter,
-            encoder: self.encoder,
-            layer: self.layer,
-        }
+impl Default for Hover {
+    fn default() -> Hover {
+        Hover::None
+    }
+}
+
+impl Hover {
+    pub fn is_none(self) -> bool {
+        self == Hover::None
+    }
+
+    pub fn is_some(self) -> bool {
+        self != Hover::None
+    }
+
+    pub fn is_direct(self) -> bool {
+        self == Hover::Direct
+    }
+
+    pub fn is_indirect(self) -> bool {
+        self == Hover::Indirect
     }
 }
 
@@ -99,6 +124,7 @@ pub struct Bounds {
     pub rect: Rect<f32>,
     pub clip_rect: Rect<f32>,
     pub scissor: Rect<f32>,
+    pub hover: Hover,
 }
 
 impl Bounds {
@@ -107,6 +133,7 @@ impl Bounds {
             rect,
             clip_rect: rect,
             scissor: Rect::new(Vec2::zero(), Vec2::splat(f32::INFINITY)),
+            hover: Hover::None,
         }
     }
 
@@ -115,11 +142,30 @@ impl Bounds {
         self
     }
 
-    pub fn child(&self, rect: Rect<f32>) -> Bounds {
+    pub fn child(&self, rect: Rect<f32>, hover: Hover) -> Bounds {
         Bounds {
             rect,
             clip_rect: rect.f_intersect(&self.scissor),
             scissor: self.scissor,
+            hover,
+        }
+    }
+}
+
+pub struct DrawCtx<'a> {
+    pub assets: &'a Assets,
+    pub text_layouter: &'a mut TextLayouter,
+    pub encoder: &'a mut GraphicsEncoder,
+    pub layer: u32,
+}
+
+impl DrawCtx<'_> {
+    pub fn reborrow(&mut self) -> DrawCtx<'_> {
+        DrawCtx {
+            assets: self.assets,
+            text_layouter: self.text_layouter,
+            encoder: self.encoder,
+            layer: self.layer,
         }
     }
 }

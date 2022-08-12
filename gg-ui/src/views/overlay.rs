@@ -4,7 +4,7 @@ use gg_math::{Rect, Vec2};
 
 use crate::view_seq::{Append, HasMetaSeq};
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    AppendChild, Bounds, DrawCtx, Event, Hover, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
     UpdateCtx, View, ViewSeq,
 };
 
@@ -27,6 +27,7 @@ pub struct Meta {
     hints: LayoutHints,
     size: Vec2<f32>,
     pos: Vec2<f32>,
+    hover: Hover,
 }
 
 impl<D, C, V> AppendChild<D, V> for Overlay<D, C>
@@ -78,6 +79,7 @@ where
                 changed = true;
             } else {
                 *child = *old_child;
+                child.hover = Hover::None;
             }
         }
 
@@ -126,15 +128,50 @@ where
         size
     }
 
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        let meta = self.meta.as_mut();
+        let mut hover = Hover::None;
+
+        for (i, child) in meta.iter_mut().enumerate().rev() {
+            if ctx.layer >= child.hints.num_layers {
+                continue;
+            }
+
+            let rect = Rect::new(child.pos + bounds.rect.min, child.size);
+            let bounds = bounds.child(rect, Hover::None);
+
+            child.hover = self.children.hover(ctx, bounds, i);
+
+            if child.hover.is_some() {
+                hover = Hover::Indirect;
+            }
+        }
+
+        hover
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        let meta = self.meta.as_ref();
+
+        for (i, child) in meta.iter().enumerate() {
+            let rect = Rect::new(child.pos + bounds.rect.min, child.size);
+            let bounds = bounds.child(rect, child.hover);
+
+            self.children.update(ctx, bounds, i);
+        }
+    }
+
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            if child.hints.num_layers == 1 && ctx.layer > 0 {
+            if ctx.layer >= child.hints.num_layers {
                 continue;
             }
 
-            let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
+            let rect = Rect::new(child.pos + bounds.rect.min, child.size);
+            let bounds = bounds.child(rect, child.hover);
+
             self.children.handle(ctx, bounds, event, i);
         }
     }
@@ -143,12 +180,26 @@ where
         let meta = self.meta.as_ref();
 
         for (i, child) in meta.iter().enumerate() {
-            if child.hints.num_layers == 1 && ctx.layer > 0 {
+            if ctx.layer >= child.hints.num_layers {
                 continue;
             }
 
-            let bounds = bounds.child(Rect::new(child.pos + bounds.rect.min, child.size));
+            let rect = Rect::new(child.pos + bounds.rect.min, child.size);
+            let bounds = bounds.child(rect, child.hover);
+
             self.children.draw(ctx, bounds, i);
+
+            if child.hover.is_direct() {
+                ctx.encoder
+                    .rect(bounds.rect)
+                    .fill_color([0.0, 1.0, 0.0, 0.08]);
+            }
+
+            if child.hover.is_indirect() {
+                ctx.encoder
+                    .rect(bounds.rect)
+                    .fill_color([1.0, 0.0, 0.0, 0.02]);
+            }
         }
     }
 }

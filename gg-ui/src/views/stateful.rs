@@ -1,6 +1,7 @@
+use gg_input::Event;
 use gg_math::Vec2;
 
-use crate::{Bounds, DrawCtx, LayoutCtx, LayoutHints, UpdateCtx, View};
+use crate::{Bounds, DrawCtx, Hover, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub fn stateful<D, S, VF, V>(state: S, view_factory: VF) -> Stateful<S, VF, V>
 where
@@ -28,6 +29,35 @@ where
         if let Some(factory) = self.view_factory.take() {
             self.view = Some(factory(&self.state));
         }
+    }
+
+    fn with_ctx<D, R>(
+        &mut self,
+        ctx: &mut UpdateCtx<D>,
+        f: impl FnOnce(&mut Option<V>, &mut UpdateCtx<(D, S)>) -> R,
+    ) -> R {
+        self.ensure_init();
+
+        take_mut::scoped::scope(|s| {
+            let (data, data_hole) = s.take(ctx.data);
+            let (state, state_hole) = s.take(&mut self.state);
+
+            let mut combined_data = (data, state);
+            let mut ctx = UpdateCtx {
+                assets: ctx.assets,
+                input: ctx.input,
+                data: &mut combined_data,
+                layer: ctx.layer,
+            };
+
+            let res = f(&mut self.view, &mut ctx);
+
+            let (data, state) = combined_data;
+            data_hole.fill(data);
+            state_hole.fill(state);
+
+            res
+        })
     }
 }
 
@@ -71,29 +101,30 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: gg_input::Event) {
-        self.ensure_init();
-
-        take_mut::scoped::scope(|s| {
-            let (data, data_hole) = s.take(ctx.data);
-            let (state, state_hole) = s.take(&mut self.state);
-
-            let mut combined_data = (data, state);
-            let mut ctx = UpdateCtx {
-                assets: ctx.assets,
-                input: ctx.input,
-                data: &mut combined_data,
-                layer: ctx.layer,
-            };
-
-            if let Some(view) = &mut self.view {
-                view.handle(&mut ctx, bounds, event);
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        self.with_ctx(ctx, |view, ctx| {
+            if let Some(view) = view {
+                view.hover(ctx, bounds)
+            } else {
+                Hover::None
             }
+        })
+    }
 
-            let (data, state) = combined_data;
-            data_hole.fill(data);
-            state_hole.fill(state);
-        });
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        self.with_ctx(ctx, |view, ctx| {
+            if let Some(view) = view {
+                view.update(ctx, bounds);
+            }
+        })
+    }
+
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+        self.with_ctx(ctx, |view, ctx| {
+            if let Some(view) = view {
+                view.handle(ctx, bounds, event);
+            }
+        })
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {

@@ -2,7 +2,7 @@ use std::convert::{AsMut, AsRef};
 
 use gg_math::Vec2;
 
-use crate::{Bounds, DrawCtx, Event, LayoutCtx, LayoutHints, UpdateCtx, View};
+use crate::{Bounds, DrawCtx, Event, Hover, LayoutCtx, LayoutHints, UpdateCtx, View};
 
 pub trait ViewSeq<D> {
     fn len(&self) -> usize;
@@ -16,6 +16,10 @@ pub trait ViewSeq<D> {
     fn pre_layout(&mut self, ctx: &mut LayoutCtx, idx: usize) -> LayoutHints;
 
     fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>, idx: usize) -> Vec2<f32>;
+
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, idx: usize) -> Hover;
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, idx: usize);
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize);
 
@@ -38,6 +42,12 @@ impl<D> ViewSeq<D> for () {
     fn layout(&mut self, _: &mut LayoutCtx, size: Vec2<f32>, _: usize) -> Vec2<f32> {
         size
     }
+
+    fn hover(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: usize) -> Hover {
+        Hover::None
+    }
+
+    fn update(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: usize) {}
 
     fn handle(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: Event, _: usize) {}
 
@@ -74,6 +84,22 @@ where
             self.0.layout(ctx, size)
         } else {
             self.1.layout(ctx, size, idx - 1)
+        }
+    }
+
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, idx: usize) -> Hover {
+        if idx == 0 {
+            self.0.hover(ctx, bounds)
+        } else {
+            self.1.hover(ctx, bounds, idx - 1)
+        }
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, idx: usize) {
+        if idx == 0 {
+            self.0.update(ctx, bounds)
+        } else {
+            self.1.update(ctx, bounds, idx - 1)
         }
     }
 

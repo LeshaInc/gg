@@ -1,7 +1,7 @@
 use gg_math::{SideOffsets, Vec2};
 
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    AppendChild, Bounds, DrawCtx, Event, Hover, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
     UpdateCtx, View,
 };
 
@@ -69,13 +69,23 @@ impl<D, V: View<D>> View<D> for Padding<V> {
         self.view.layout(ctx, size - self.offsets.size()) + self.offsets.size()
     }
 
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets), Hover::None);
+        self.view.hover(ctx, bounds)
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets), bounds.hover);
+        self.view.update(ctx, bounds);
+    }
+
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
-        let bounds = bounds.child(bounds.rect.shrink(&self.offsets));
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets), bounds.hover);
         self.view.handle(ctx, bounds, event);
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
-        let bounds = bounds.child(bounds.rect.shrink(&self.offsets));
+        let bounds = bounds.child(bounds.rect.shrink(&self.offsets), bounds.hover);
         self.view.draw(ctx, bounds);
     }
 }

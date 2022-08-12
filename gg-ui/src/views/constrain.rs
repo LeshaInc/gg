@@ -1,7 +1,7 @@
 use gg_math::Vec2;
 
 use crate::{
-    AppendChild, Bounds, DrawCtx, Event, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
+    AppendChild, Bounds, DrawCtx, Event, Hover, IntoViewSeq, LayoutCtx, LayoutHints, SetChildren,
     UpdateCtx, View,
 };
 
@@ -66,6 +66,14 @@ where
 
     fn layout(&mut self, ctx: &mut LayoutCtx, size: Vec2<f32>) -> Vec2<f32> {
         self.view.layout(ctx, size)
+    }
+
+    fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
+        self.view.hover(ctx, bounds)
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        self.view.update(ctx, bounds);
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
