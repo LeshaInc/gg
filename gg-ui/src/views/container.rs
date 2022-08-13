@@ -207,6 +207,7 @@ where
             }
 
             let rect = Rect::new(bounds.rect.min + child.pos, child.size);
+
             let bounds = bounds.child(rect, child.hover);
             self.children.draw(ctx, bounds, i);
 

@@ -45,6 +45,7 @@ pub struct BackendImpl {
     bindings: Bindings,
     pipelines: Pipelines,
     submitted_lists: Vec<CommandList>,
+    recycled_lists: Vec<CommandList>,
     resolution: Vec2<u32>,
 }
 
@@ -102,6 +103,7 @@ impl BackendImpl {
             bindings,
             pipelines,
             submitted_lists: Vec::new(),
+            recycled_lists: Vec::new(),
             resolution,
         };
 
@@ -136,6 +138,7 @@ impl Backend for BackendImpl {
 
     fn present(&mut self, assets: &mut Assets) {
         let submitted_lists = std::mem::take(&mut self.submitted_lists);
+        self.recycled_lists.clear();
 
         self.images.cleanup(&mut self.atlases);
 
@@ -179,7 +182,12 @@ impl Backend for BackendImpl {
         surface_texture.present();
 
         self.submitted_lists = submitted_lists;
-        self.submitted_lists.clear();
+        self.recycled_lists
+            .extend(self.submitted_lists.drain(..).rev());
+    }
+
+    fn recycle_list(&mut self) -> Option<CommandList> {
+        self.recycled_lists.pop()
     }
 }
 
@@ -275,10 +283,13 @@ impl BackendImpl {
         };
 
         let full_scissor = Rect::new(Vec2::zero(), resolution);
+        let normalized_full_scissor =
+            Rect::from_min_max(Vec2::new(-1.0, -1.0), Vec2::new(1.0, 1.0));
 
         let proj = projection_matrix(resolution);
         self.batcher.reset(State {
             scissor: full_scissor,
+            normalized_scissor: normalized_full_scissor,
             view_proj: proj,
             view: Affine2::identity(),
             proj,
@@ -305,8 +316,10 @@ impl BackendImpl {
                     self.set_scissor(rect, resolution);
                 }
                 Command::ClearScissor => {
-                    self.batcher
-                        .modify_state(|state| state.scissor = full_scissor);
+                    self.batcher.modify_state(|state| {
+                        state.scissor = full_scissor;
+                        state.normalized_scissor = normalized_full_scissor;
+                    });
                 }
                 &Command::PreTransform(v) => {
                     self.batcher.modify_state(|state| {
@@ -335,10 +348,21 @@ impl BackendImpl {
     }
 
     fn set_scissor(&mut self, rect: &Rect<f32>, resolution: Vec2<u32>) {
-        let min = rect.min.fmax(Vec2::zero());
-        let max = rect.max.fmin(resolution.cast()).fmax(min);
-        let scissor = Rect::from_min_max(min, max).cast::<u32>();
-        self.batcher.modify_state(|state| state.scissor = scissor);
+        self.batcher.modify_state(|state| {
+            let rect = rect.f_intersection(&state.scissor.cast::<f32>());
+
+            let min = rect.min.fmax(Vec2::zero());
+            let max = rect.max.fmin(resolution.cast()).fmax(min);
+            let scissor = Rect::from_min_max(min, max);
+
+            let n_min = state.view_proj.transform_point(scissor.min);
+            let n_max = state.view_proj.transform_point(scissor.max);
+
+            state.normalized_scissor =
+                Rect::from_min_max(Vec2::new(n_min.x, n_max.y), Vec2::new(n_max.x, n_min.y));
+
+            state.scissor = scissor.cast::<u32>();
+        })
     }
 
     fn draw_rect(&mut self, assets: &Assets, rect: &DrawRect) {
@@ -463,13 +487,28 @@ impl BackendImpl {
     }
 
     fn emit_rect(&mut self, rect: Rect<f32>, tex_rect: Rect<f32>, tex_id: u32, color: Color) {
+        let state = self.batcher.state();
+
+        let mut vertices = rect.vertices();
+        for v in &mut vertices {
+            *v = state.view_proj.transform_point(*v);
+        }
+
+        let min = vertices.into_iter().fold(vertices[0], Vec2::fmin);
+        let max = vertices.into_iter().fold(vertices[0], Vec2::fmax);
+        let new_rect = Rect::from_min_max(min, max);
+
+        if !state.normalized_scissor.intersects(&new_rect) {
+            return;
+        }
+
         let i = self.batcher.next_vertex_index();
         self.batcher
             .emit_indices(&[i, i + 1, i + 2, i, i + 2, i + 3]);
 
-        for (pos, tex) in rect.vertices().into_iter().zip(tex_rect.vertices()) {
+        for (pos, tex) in vertices.into_iter().zip(tex_rect.vertices()) {
             self.batcher.emit_vertex(Vertex {
-                pos: self.batcher.state().view_proj.transform_point(pos),
+                pos,
                 tex,
                 tex_id,
                 color,
@@ -529,7 +568,7 @@ impl BackendImpl {
         pass.set_pipeline(self.pipelines.pipeline());
 
         for batch in self.batcher.batches() {
-            if batch.state.scissor.area() == 0 {
+            if batch.state.scissor.area() == 0 || batch.indices.is_empty() {
                 continue;
             }
 

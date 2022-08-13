@@ -14,4 +14,6 @@ pub trait Backend: Send + Sync + 'static {
     fn resize(&mut self, new_resolution: Vec2<u32>);
 
     fn present(&mut self, assets: &mut Assets);
+
+    fn recycle_list(&mut self) -> Option<CommandList>;
 }

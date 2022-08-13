@@ -49,6 +49,7 @@ fn main() -> Result<()> {
 
     let mut backend = BackendImpl::new(settings, &assets, &window)?;
     let main_canvas = backend.get_main_canvas();
+    let mut recycled_list: Option<gg_graphics::CommandList> = None;
 
     let mut fps_counter = FpsCounter::new(300);
     let mut frame_start = Instant::now();
@@ -75,11 +76,15 @@ fn main() -> Result<()> {
             let size = Vec2::new(size.width, size.height);
             backend.resize(size);
 
-            let mut encoder = GraphicsEncoder::new(&main_canvas);
+            let mut encoder = if let Some(list) = recycled_list.take() {
+                GraphicsEncoder::new_recycled(&main_canvas, list)
+            } else {
+                GraphicsEncoder::new(&main_canvas)
+            };
 
             encoder.clear([0.02; 3]);
 
-            let padding = Vec2::splat(30.0);
+            let padding = Vec2::splat(0.0);
             let ui_bounds = Rect::from_min_max(padding, size.cast::<f32>() - padding);
             let ui_ctx = UiContext {
                 bounds: ui_bounds,
@@ -94,6 +99,7 @@ fn main() -> Result<()> {
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
+            recycled_list = backend.recycle_list();
 
             fps_counter.add_sample(frame_start.elapsed());
             frame_start = Instant::now();
@@ -108,6 +114,39 @@ fn main() -> Result<()> {
 pub fn build_ui(fps: f32) -> impl View<()> {
     views::scrollable(
         views::vstack()
+            .padding(30.0)
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
             .child(_build_ui(fps).min_height(300.0))
             .child(_build_ui(fps).min_height(300.0))
             .child(_build_ui(fps).min_height(300.0))
@@ -117,7 +156,7 @@ pub fn build_ui(fps: f32) -> impl View<()> {
 
 pub fn _build_ui(fps: f32) -> impl View<()> {
     views::vstack()
-        .child(views::text(format!("fps: {:.2}", fps)))
+        .child(views::text(format!("fps: {:.0}", fps)))
         .child(
             views::hstack()
                 .child(views::tooltip(

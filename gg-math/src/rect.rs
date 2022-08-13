@@ -109,9 +109,17 @@ impl<T: Num + Copy> Rect<T> {
     }
 }
 
+impl<T: PartialOrd + Copy> Rect<T> {
+    #[inline]
+    pub fn intersects(&self, rhs: &Rect<T>) -> bool {
+        (self.max.x >= rhs.min.x && rhs.max.x >= self.min.x)
+            && (self.max.y >= rhs.min.y && rhs.max.y >= self.min.y)
+    }
+}
+
 impl<T: Ord + Copy> Rect<T> {
     #[inline]
-    pub fn intersect(&self, rhs: &Rect<T>) -> Rect<T> {
+    pub fn intersection(&self, rhs: &Rect<T>) -> Rect<T> {
         let min = self.min.max(rhs.min);
         let max = self.max.min(rhs.max).max(min);
         Rect::from_min_max(min, max)
@@ -120,7 +128,7 @@ impl<T: Ord + Copy> Rect<T> {
 
 impl<T: Float> Rect<T> {
     #[inline]
-    pub fn f_intersect(&self, rhs: &Rect<T>) -> Rect<T> {
+    pub fn f_intersection(&self, rhs: &Rect<T>) -> Rect<T> {
         let min = self.min.fmax(rhs.min);
         let max = self.max.fmin(rhs.max).fmax(min);
         Rect::from_min_max(min, max)

@@ -10,6 +10,7 @@ use wgpu::{
 #[derive(Clone, Copy, Debug, Default)]
 pub struct State {
     pub scissor: Rect<u32>,
+    pub normalized_scissor: Rect<f32>,
     pub view_proj: Affine2<f32>,
     pub view: Affine2<f32>,
     pub proj: Affine2<f32>,

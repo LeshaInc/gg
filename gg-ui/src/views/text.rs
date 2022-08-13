@@ -73,6 +73,10 @@ impl<D> View<D> for TextView<D> {
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {
+        if !ctx.encoder.get_scissor().intersects(&bounds.rect) {
+            return;
+        }
+
         if let Some(text) = &mut self.shaped_text {
             let (_size, glyphs) = ctx.text_layouter.layout(text, bounds.rect.size());
 

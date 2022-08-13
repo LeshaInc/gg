@@ -110,6 +110,11 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
 
         self.view.draw(ctx, inner_bounds);
 
+        if ctx.layer > 0 {
+            ctx.encoder.restore();
+            return;
+        }
+
         let mut thumb_factor = outer.size() / inner.size();
         if thumb_factor.x < 1.0 && thumb_factor.y < 1.0 {
             thumb_factor = (outer.size() - Vec2::new(7.0, 0.0)) / inner.size();

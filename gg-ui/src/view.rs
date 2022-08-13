@@ -145,7 +145,7 @@ impl Bounds {
     pub fn child(&self, rect: Rect<f32>, hover: Hover) -> Bounds {
         Bounds {
             rect,
-            clip_rect: rect.f_intersect(&self.scissor),
+            clip_rect: rect.f_intersection(&self.scissor),
             scissor: self.scissor,
             hover,
         }
