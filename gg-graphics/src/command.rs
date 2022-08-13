@@ -13,7 +13,7 @@ pub struct CommandList {
 pub enum Command {
     Save,
     Restore,
-    SetScissor(Rect<u32>),
+    SetScissor(Rect<f32>),
     ClearScissor,
     PreTransform(Affine2<f32>),
     PostTransform(Affine2<f32>),

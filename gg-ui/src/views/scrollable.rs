@@ -71,7 +71,13 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
     }
 
     fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
-        self.view.hover(ctx, self.inner_bounds(bounds))
+        self.view.hover(ctx, self.inner_bounds(bounds));
+
+        if ctx.layer == 0 && bounds.clip_rect.contains(ctx.input.mouse_pos()) {
+            Hover::Direct
+        } else {
+            Hover::None
+        }
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
@@ -100,7 +106,7 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         let inner = inner_bounds.rect;
 
         ctx.encoder.save();
-        ctx.encoder.set_scissor(outer.cast());
+        ctx.encoder.set_scissor(outer);
 
         self.view.draw(ctx, inner_bounds);
 

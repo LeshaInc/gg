@@ -28,7 +28,7 @@ impl GraphicsEncoder {
         self.command(Command::Restore);
     }
 
-    pub fn set_scissor(&mut self, rect: Rect<u32>) {
+    pub fn set_scissor(&mut self, rect: Rect<f32>) {
         self.command(Command::SetScissor(rect));
     }
 

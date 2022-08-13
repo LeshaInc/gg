@@ -167,12 +167,7 @@ where
             }
         }
 
-        let self_hovered = bounds.clip_rect.contains(ctx.input.mouse_pos());
-        if hover.is_none() && ctx.layer == 0 && self_hovered {
-            Hover::Direct
-        } else {
-            hover
-        }
+        hover
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {

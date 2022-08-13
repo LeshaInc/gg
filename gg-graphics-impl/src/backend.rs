@@ -275,6 +275,7 @@ impl BackendImpl {
         };
 
         let full_scissor = Rect::new(Vec2::zero(), resolution);
+
         let proj = projection_matrix(resolution);
         self.batcher.reset(State {
             scissor: full_scissor,
@@ -301,8 +302,7 @@ impl BackendImpl {
                     self.batcher.restore_state();
                 }
                 Command::SetScissor(rect) => {
-                    self.batcher
-                        .modify_state(|state| state.scissor = rect.intersect(&full_scissor));
+                    self.set_scissor(rect, resolution);
                 }
                 Command::ClearScissor => {
                     self.batcher
@@ -332,6 +332,13 @@ impl BackendImpl {
 
         self.batcher.flush();
         clear_color
+    }
+
+    fn set_scissor(&mut self, rect: &Rect<f32>, resolution: Vec2<u32>) {
+        let min = rect.min.fmax(Vec2::zero());
+        let max = rect.max.fmin(resolution.cast()).fmax(min);
+        let scissor = Rect::from_min_max(min, max).cast::<u32>();
+        self.batcher.modify_state(|state| state.scissor = scissor);
     }
 
     fn draw_rect(&mut self, assets: &Assets, rect: &DrawRect) {

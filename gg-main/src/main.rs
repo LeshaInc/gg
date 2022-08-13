@@ -106,6 +106,16 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(fps: f32) -> impl View<()> {
+    views::scrollable(
+        views::vstack()
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0))
+            .child(_build_ui(fps).min_height(300.0)),
+    )
+}
+
+pub fn _build_ui(fps: f32) -> impl View<()> {
     views::vstack()
         .child(views::text(format!("fps: {:.2}", fps)))
         .child(
