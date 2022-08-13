@@ -90,7 +90,9 @@ fn main() -> Result<()> {
                 input: &input,
             };
 
-            ui.run(build_ui(fps_counter.fps()), ui_ctx, &mut ());
+            let v = build_ui(fps_counter.fps());
+            println!("{}", std::mem::size_of_val(&v));
+            ui.run(v, ui_ctx, &mut ());
 
             backend.submit(encoder.finish());
             backend.present(&mut assets);
