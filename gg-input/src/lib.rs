@@ -156,6 +156,11 @@ impl Input {
         self.state.actions.contains(&action.into())
     }
 
+    pub fn has_action_pressed(&self, action: impl Into<Action>) -> bool {
+        let action = action.into();
+        self.events().any(|ev| ev.pressed_action(action))
+    }
+
     pub fn is_key_pressed(&self, key: VirtualKeyCode) -> bool {
         self.state.elements.contains(&BindingElement::Keyboard(key))
     }

@@ -1,9 +1,11 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use gg_assets::Assets;
 use gg_graphics::{FontDb, GraphicsEncoder, TextLayouter};
 use gg_input::Input;
 use gg_math::{Rect, Vec2};
 
-use crate::{AnyView, Bounds, DrawCtx, LayoutCtx, UpdateCtx, View};
+use crate::{AnyView, Bounds, DrawCtx, LayoutCtx, UiAction, UpdateCtx, View};
 
 pub struct Driver<D> {
     old_view: Option<Box<dyn AnyView<D>>>,
@@ -63,11 +65,17 @@ impl<D: 'static> Driver<D> {
             }
         }
 
+        static DEBUG_DRAW: AtomicBool = AtomicBool::new(false);
+
+        let pressed = ctx.input.has_action_pressed(UiAction::DebugDraw);
+        let debug_draw = DEBUG_DRAW.fetch_xor(pressed, Ordering::Relaxed) ^ pressed;
+
         let mut d_ctx = DrawCtx {
             assets: ctx.assets,
             text_layouter: ctx.text_layouter,
             encoder: ctx.encoder,
             layer: 0,
+            debug_draw,
         };
 
         for layer in 0..self.num_layers {

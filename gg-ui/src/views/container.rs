@@ -215,7 +215,7 @@ where
             let bounds = bounds.child(rect, child.hover);
             self.children.draw(ctx, bounds, i);
 
-            if child.hover.is_some() {
+            if child.hover.is_some() && ctx.debug_draw {
                 let color = if child.hover.is_direct() {
                     [0.0, 1.0, 0.0, 0.08]
                 } else {

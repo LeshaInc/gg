@@ -157,6 +157,7 @@ pub struct DrawCtx<'a> {
     pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
     pub layer: u32,
+    pub debug_draw: bool,
 }
 
 impl DrawCtx<'_> {
@@ -166,6 +167,7 @@ impl DrawCtx<'_> {
             text_layouter: self.text_layouter,
             encoder: self.encoder,
             layer: self.layer,
+            debug_draw: self.debug_draw,
         }
     }
 }
