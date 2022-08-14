@@ -21,7 +21,7 @@ pub trait ViewSeq<D> {
 
     fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, idx: usize);
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize);
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize) -> bool;
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds, idx: usize);
 }
@@ -49,7 +49,9 @@ impl<D> ViewSeq<D> for () {
 
     fn update(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: usize) {}
 
-    fn handle(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: Event, _: usize) {}
+    fn handle(&mut self, _: &mut UpdateCtx<D>, _: Bounds, _: Event, _: usize) -> bool {
+        false
+    }
 
     fn draw(&mut self, _: &mut DrawCtx, _: Bounds, _: usize) {}
 }
@@ -103,7 +105,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event, idx: usize) -> bool {
         if idx == 0 {
             self.0.handle(ctx, bounds, event)
         } else {

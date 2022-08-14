@@ -83,7 +83,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         if ctx.layer < self.view_layers {
             self.view.handle(ctx, bounds, event)
         } else {

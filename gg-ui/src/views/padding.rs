@@ -79,9 +79,9 @@ impl<D, V: View<D>> View<D> for Padding<V> {
         self.view.update(ctx, bounds);
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         let bounds = bounds.child(bounds.rect.shrink(&self.offsets), bounds.hover);
-        self.view.handle(ctx, bounds, event);
+        self.view.handle(ctx, bounds, event)
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {

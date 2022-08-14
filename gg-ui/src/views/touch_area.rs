@@ -24,11 +24,14 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         if event.pressed_action(UiAction::Touch) && bounds.hover.is_direct() {
             if let Some(callback) = self.callback.take() {
                 callback(ctx.data);
+                return true;
             }
         }
+
+        false
     }
 }

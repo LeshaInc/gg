@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         if self.condition {
             self.view_t.handle(ctx, bounds, event)
         } else {

@@ -184,7 +184,7 @@ where
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         let meta = self.meta.as_mut();
 
         for (i, child) in meta.iter().enumerate().rev() {
@@ -194,8 +194,12 @@ where
 
             let rect = Rect::new(bounds.rect.min + child.pos, child.size);
             let bounds = bounds.child(rect, child.hover);
-            self.children.handle(ctx, bounds, event, i);
+            if self.children.handle(ctx, bounds, event, i) {
+                return true;
+            }
         }
+
+        false
     }
 
     fn draw(&mut self, ctx: &mut crate::DrawCtx, bounds: Bounds) {

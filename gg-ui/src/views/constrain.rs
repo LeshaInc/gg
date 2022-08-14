@@ -76,8 +76,8 @@ where
         self.view.update(ctx, bounds);
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
-        self.view.handle(ctx, bounds, event);
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
+        self.view.handle(ctx, bounds, event)
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {

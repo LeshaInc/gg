@@ -36,8 +36,9 @@ pub trait View<D> {
         let _ = (ctx, bounds);
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         let _ = (ctx, bounds, event);
+        false
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, bounds: Bounds) {

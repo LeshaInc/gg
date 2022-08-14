@@ -119,10 +119,12 @@ where
         })
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         self.with_ctx(ctx, |view, ctx| {
             if let Some(view) = view {
-                view.handle(ctx, bounds, event);
+                view.handle(ctx, bounds, event)
+            } else {
+                false
             }
         })
     }

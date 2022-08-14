@@ -45,7 +45,7 @@ impl<'a, D: 'static> View<D> for Box<dyn AnyView<D>> {
         (**self).update(ctx, bounds)
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
         (**self).handle(ctx, bounds, event)
     }
 

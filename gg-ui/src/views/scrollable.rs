@@ -80,7 +80,11 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         }
     }
 
-    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) {
+    fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
+        if self.view.handle(ctx, self.inner_bounds(bounds), event) {
+            return true;
+        }
+
         if let Event::Scroll(ev) = event {
             if bounds.hover.is_some() {
                 let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
@@ -94,10 +98,12 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
                     .target_offset
                     .fmax(bounds.rect.size() - self.inner_size)
                     .fmin(Vec2::zero());
+
+                return true;
             }
         }
 
-        self.view.handle(ctx, self.inner_bounds(bounds), event)
+        false
     }
 
     fn draw(&mut self, ctx: &mut DrawCtx, outer_bounds: Bounds) {
