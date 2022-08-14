@@ -48,8 +48,11 @@ impl<D: 'static> Driver<D> {
             assets: ctx.assets,
             input: ctx.input,
             data,
+            dt: ctx.dt,
             layer: 0,
         };
+
+        view.update(&mut u_ctx, bounds);
 
         for layer in (0..self.num_layers).rev() {
             u_ctx.layer = layer;
@@ -57,8 +60,6 @@ impl<D: 'static> Driver<D> {
             if bounds.hover.is_none() {
                 bounds.hover = view.hover(&mut u_ctx, bounds);
             }
-
-            view.update(&mut u_ctx, bounds);
 
             for event in ctx.input.events() {
                 view.handle(&mut u_ctx, bounds, event);
@@ -75,6 +76,7 @@ impl<D: 'static> Driver<D> {
             text_layouter: ctx.text_layouter,
             encoder: ctx.encoder,
             layer: 0,
+            dt: ctx.dt,
             debug_draw,
         };
 
@@ -94,4 +96,5 @@ pub struct UiContext<'a> {
     pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
     pub input: &'a Input,
+    pub dt: f32,
 }

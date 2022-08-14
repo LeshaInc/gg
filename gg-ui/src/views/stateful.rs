@@ -48,6 +48,7 @@ where
                 input: ctx.input,
                 data: &mut combined_data,
                 layer: ctx.layer,
+                dt: ctx.dt,
             };
 
             let res = f(&mut self.view, &mut ctx);

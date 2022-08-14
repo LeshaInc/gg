@@ -174,10 +174,6 @@ where
         let meta = self.meta.as_mut();
 
         for (i, child) in meta.iter().enumerate().rev() {
-            if ctx.layer >= child.hints.num_layers {
-                continue;
-            }
-
             let rect = Rect::new(bounds.rect.min + child.pos, child.size);
             let bounds = bounds.child(rect, child.hover);
             self.children.update(ctx, bounds, i);

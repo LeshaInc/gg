@@ -42,7 +42,7 @@ fn main() -> Result<()> {
         .build(&event_loop)?;
 
     let settings = BackendSettings {
-        vsync: true,
+        vsync: false,
         prefer_low_power_gpu: true,
         image_cell_size: Vec2::splat(8),
     };
@@ -56,6 +56,8 @@ fn main() -> Result<()> {
 
     let mut ui = gg_ui::Driver::new();
     let mut text_layouter = TextLayouter::new();
+
+    let mut dt = 0.0;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::NewEvents(_) => {
@@ -93,6 +95,7 @@ fn main() -> Result<()> {
                 text_layouter: &mut text_layouter,
                 encoder: &mut encoder,
                 input: &input,
+                dt,
             };
 
             ui.run(build_ui(fps_counter.fps()), ui_ctx, &mut ());
@@ -101,7 +104,9 @@ fn main() -> Result<()> {
             backend.present(&mut assets);
             recycled_list = backend.recycle_list();
 
-            fps_counter.add_sample(frame_start.elapsed());
+            let elapsed = frame_start.elapsed();
+            dt = elapsed.as_secs_f32();
+            fps_counter.add_sample(elapsed);
             frame_start = Instant::now();
 
             window.request_redraw();

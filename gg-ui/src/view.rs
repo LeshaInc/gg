@@ -107,6 +107,7 @@ pub struct UpdateCtx<'a, D> {
     pub input: &'a Input,
     pub data: &'a mut D,
     pub layer: u32,
+    pub dt: f32,
 }
 
 impl<D> UpdateCtx<'_, D> {
@@ -116,6 +117,7 @@ impl<D> UpdateCtx<'_, D> {
             input: self.input,
             data: self.data,
             layer: self.layer,
+            dt: self.dt,
         }
     }
 }
@@ -158,6 +160,7 @@ pub struct DrawCtx<'a> {
     pub text_layouter: &'a mut TextLayouter,
     pub encoder: &'a mut GraphicsEncoder,
     pub layer: u32,
+    pub dt: f32,
     pub debug_draw: bool,
 }
 
@@ -168,6 +171,7 @@ impl DrawCtx<'_> {
             text_layouter: self.text_layouter,
             encoder: self.encoder,
             layer: self.layer,
+            dt: self.dt,
             debug_draw: self.debug_draw,
         }
     }

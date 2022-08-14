@@ -68,19 +68,14 @@ where
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
-        if ctx.layer < self.view_layers {
-            self.view.update(ctx, bounds)
-        } else {
-            let mut ctx = ctx.reborrow();
-            ctx.layer -= self.view_layers;
+        self.view.update(ctx, bounds);
 
-            let bounds = Bounds::new(Rect::new(
-                Vec2::new(bounds.rect.min.x, bounds.rect.max.y),
-                self.size,
-            ));
+        let bounds = Bounds::new(Rect::new(
+            Vec2::new(bounds.rect.min.x, bounds.rect.max.y),
+            self.size,
+        ));
 
-            self.contents.update(&mut ctx, bounds)
-        }
+        self.contents.update(ctx, bounds)
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {

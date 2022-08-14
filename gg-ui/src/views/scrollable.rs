@@ -40,9 +40,6 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         self.target_offset = old.target_offset;
         self.inner_size = old.inner_size;
 
-        let diff = self.target_offset - self.offset;
-        self.offset += diff.map(|v| (v.abs() * 0.2).copysign(v));
-
         self.view.init(&mut old.view)
     }
 
@@ -71,13 +68,19 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
     }
 
     fn hover(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) -> Hover {
-        self.view.hover(ctx, self.inner_bounds(bounds));
+        let inner = self.view.hover(ctx, self.inner_bounds(bounds));
 
         if ctx.layer == 0 && bounds.clip_rect.contains(ctx.input.mouse_pos()) {
             Hover::Direct
         } else {
-            Hover::None
+            inner
         }
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds) {
+        let diff = self.target_offset - self.offset;
+        self.offset += diff.map(|v| (v.abs() * ctx.dt * 8.0).ceil().min(v.abs()).copysign(v));
+        self.view.update(ctx, self.inner_bounds(bounds))
     }
 
     fn handle(&mut self, ctx: &mut UpdateCtx<D>, bounds: Bounds, event: Event) -> bool {
@@ -86,14 +89,14 @@ impl<D, V: View<D>> View<D> for Scrollable<V> {
         }
 
         if let Event::Scroll(ev) = event {
-            if bounds.hover.is_some() {
+            if bounds.hover.is_some() && ctx.layer == 0 {
                 let delta = if ctx.input.is_action_pressed(UiAction::TransposeScroll) {
                     Vec2::new(ev.delta.y, ev.delta.x)
                 } else {
                     ev.delta
                 };
 
-                self.target_offset += delta * 60.0;
+                self.target_offset += delta * 100.0;
                 self.target_offset = self
                     .target_offset
                     .fmax(bounds.rect.size() - self.inner_size)
