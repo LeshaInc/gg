@@ -13,8 +13,4 @@ guillotiere = "0.6.2"
 pollster = "0.2.5"
 tracing = "0.1.35"
 wgpu = "0.13.1"
-
-[dependencies.winit]
-version = "0.26.1"
-default-features = false
-features = ["x11"]
+winit = "0.26.1"
