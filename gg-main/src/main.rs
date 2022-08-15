@@ -70,7 +70,7 @@ fn main() -> Result<()> {
 
             input.process_event(event);
         }
-        Event::RedrawRequested(_) => {
+        Event::MainEventsCleared => {
             assets.maintain();
             fonts.update(&assets);
 
@@ -109,8 +109,7 @@ fn main() -> Result<()> {
             fps_counter.add_sample(elapsed);
             frame_start = Instant::now();
 
-            window.request_redraw();
-            *control_flow = ControlFlow::Wait;
+            *control_flow = ControlFlow::Poll;
         }
         _ => (),
     });
