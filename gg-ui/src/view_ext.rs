@@ -2,7 +2,7 @@ use gg_math::SideOffsets;
 
 use crate::views::constrain::{MaxHeight, MaxWidth, MinHeight, MinWidth, Stretch};
 use crate::views::*;
-use crate::{IntoViewSeq, View};
+use crate::{AnyView, IntoViewSeq, View};
 
 pub trait AppendChild<D, V: View<D>> {
     type Output: View<D>;
@@ -17,6 +17,14 @@ pub trait SetChildren<D, C: IntoViewSeq<D>> {
 }
 
 pub trait ViewExt<D>: View<D> + Sized {
+    fn boxed(self) -> Box<dyn AnyView<D>>
+    where
+        Self: 'static,
+        D: 'static,
+    {
+        Box::new(self)
+    }
+
     fn show_if(self, cond: bool) -> Choice<Self, Nothing<D>> {
         choose(cond, self, nothing())
     }

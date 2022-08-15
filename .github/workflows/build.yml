@@ -1,0 +1,79 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  NAME: gg
+  BIN: gg-main
+  EXTRA_PATHS: README.md LICENSE-APACHE LICENSE-MIT assets input.json
+
+jobs:
+  build:
+    name: Build
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [linux64, windows64]
+        include:
+          - build: linux64
+            os: ubuntu-latest
+          - build: windows64
+            os: windows-latest
+    
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+      
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          override: true
+          profile: minimal
+          toolchain: nightly-2022-08-15
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build project
+        run: |
+          cargo build --release
+      
+      - name: Create archive
+        shell: bash
+        run: |
+          mkdir out
+          cp ./target/release/$BIN out
+          cp -r $EXTRA_PATHS out
+          mv out $NAME-${{ matrix.build }}
+          7z a -r $NAME-${{ matrix.build }}.zip $NAME-${{ matrix.build }}
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.NAME }}-${{ matrix.build }}
+          path: ${{ env.NAME }}-${{ matrix.build }}.zip
+          retention-days: 1
+  
+  release:
+    if: github.event_name != 'pull_request'
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all workflow run artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "Development Build"
+          files: "**.zip"

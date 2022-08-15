@@ -1,28 +1,36 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  inputs.flake-utils.url = "github:numtide/flake-utils";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    utils.url = "github:numtide/flake-utils";
+    fenix.url = "github:nix-community/fenix";
+  };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, utils, fenix }:
+    utils.lib.eachDefaultSystem (system:
       let 
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { inherit system; };
+        
+        toolchain = with fenix.packages.${system};
+          combine [
+            minimal.rustc
+            minimal.cargo
+            targets.x86_64-unknown-linux-gnu.latest.rust-std
+          ];
       in {
-        devShell = pkgs.mkShell rec {
-          nativeBuildInputs = with pkgs; [
-            pkgconfig
-            llvmPackages.bintools
-          ];
-
-          buildInputs = with pkgs; [
+        devShell = with pkgs; mkShell rec {
+          buildInputs = [
+            toolchain
             vulkan-loader vulkan-validation-layers
-            xlibsWrapper xorg.libXcursor xorg.libXrandr xorg.libXi
+            xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXi
           ];
-
+          
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           VK_LAYER_PATH = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d/";
+
+          RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
           RUST_LOG = "warn";
           RUST_BACKTRACE = 1;
-        };
+        };        
       }
     );
 }
