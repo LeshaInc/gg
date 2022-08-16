@@ -23,7 +23,7 @@ fn main_expr() -> Result<()> {
 
     let mut parser = gg_expr::Parser::new(&input);
 
-    dbg!(parser.expr());
+    println!("{}", parser.expr());
 
     Ok(())
 }

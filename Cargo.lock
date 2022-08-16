@@ -625,6 +625,7 @@ dependencies = [
 name = "gg-expr"
 version = "0.1.0"
 dependencies = [
+ "indenter",
  "logos",
 ]
 

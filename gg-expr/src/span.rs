@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
     pub start: u32,
@@ -23,5 +25,11 @@ pub struct Spanned<T> {
 impl<T> Spanned<T> {
     pub fn new(span: Span, item: T) -> Spanned<T> {
         Spanned { span, item }
+    }
+}
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.item.fmt(f)
     }
 }
