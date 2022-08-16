@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 gg-assets = { version = "0.1.0", path = "../gg-assets" }
+gg-expr = { version = "0.1.0", path = "../gg-expr" }
 gg-graphics = { version = "0.1.0", path = "../gg-graphics" }
 gg-graphics-impl = { version = "0.1.0", path = "../gg-graphics-impl" }
 gg-input = { version = "0.1.0", path = "../gg-input" }

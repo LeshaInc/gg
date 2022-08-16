@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "gg-assets",
+    "gg-expr",
     "gg-graphics",
     "gg-graphics-impl",
     "gg-input",
