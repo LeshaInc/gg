@@ -23,8 +23,21 @@ pub enum Token {
     Or,
     #[token("!")]
     Not,
-    #[token("^")]
-    Xor,
+
+    #[token("=")]
+    Assign,
+    #[token("<")]
+    Lt,
+    #[token("<=")]
+    Le,
+    #[token("==")]
+    Eq,
+    #[token("!=")]
+    Neq,
+    #[token(">=")]
+    Ge,
+    #[token(">")]
+    Gt,
 
     #[token("(")]
     LParen,
@@ -41,27 +54,10 @@ pub enum Token {
 
     #[token(",")]
     Comma,
-
     #[token(":")]
     Colon,
-
     #[token(";")]
     Semicolon,
-
-    #[token("=")]
-    Assign,
-    #[token("<")]
-    Lt,
-    #[token("<=")]
-    Le,
-    #[token("==")]
-    Eq,
-    #[token("!=")]
-    Neq,
-    #[token(">=")]
-    Ge,
-    #[token(">")]
-    Gt,
 
     #[token("true")]
     True,
@@ -100,6 +96,8 @@ pub enum Token {
     #[regex(r"[ \t\n\f]+", logos::skip)]
     #[regex(r"//[^\n]*", logos::skip)]
     Error,
+
+    Eof,
 }
 
 impl Token {
@@ -116,16 +114,7 @@ impl Token {
             And => "`&&`",
             Or => "`||`",
             Not => "`!`",
-            Xor => "`^`",
-            LParen => "`(`",
-            RParen => "`)`",
-            LBrace => "`{`",
-            RBrace => "`}`",
-            LBracket => "`[`",
-            RBracket => "`]`",
-            Comma => "`,`",
-            Colon => "`:`",
-            Semicolon => "`;`",
+
             Assign => "`=`",
             Lt => "`<`",
             Le => "`<=`",
@@ -133,6 +122,18 @@ impl Token {
             Neq => "`!=`",
             Ge => "`>=`",
             Gt => "`>`",
+
+            LParen => "`(`",
+            RParen => "`)`",
+            LBrace => "`{`",
+            RBrace => "`}`",
+            LBracket => "`[`",
+            RBracket => "`]`",
+
+            Comma => "`,`",
+            Colon => "`:`",
+            Semicolon => "`;`",
+
             True => "`true`",
             False => "`false`",
             Let => "`let`",
@@ -147,6 +148,7 @@ impl Token {
             String => "string",
             Ident => "identifier",
             Error => "unexpected character",
+            Eof => "EOF",
         }
     }
 }
@@ -163,10 +165,7 @@ pub fn tokenize(input: &str) -> Vec<Spanned<Token>> {
     while let Some(token) = lexer.next() {
         let span = lexer.span();
         tokens.push(Spanned {
-            span: Span {
-                start: span.start as u32,
-                end: span.end as u32,
-            },
+            span: Span::new(span.start as u32, span.end as u32),
             item: token,
         });
     }

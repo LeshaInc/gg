@@ -21,7 +21,9 @@ fn main_expr() -> Result<()> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
 
-    dbg!(gg_expr::tokenize(&input));
+    let mut parser = gg_expr::Parser::new(&input);
+
+    dbg!(parser.expr());
 
     Ok(())
 }
