@@ -25,6 +25,10 @@ fn main_expr() -> Result<()> {
 
     println!("{}", parser.expr());
 
+    for error in parser.errors() {
+        gg_expr::report(&input, error);
+    }
+
     Ok(())
 }
 

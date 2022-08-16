@@ -1,5 +1,7 @@
 use std::fmt::{self, Display};
 
+use miette::SourceSpan;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
     pub start: u32,
@@ -13,6 +15,12 @@ impl Span {
 
     pub fn slice(self, s: &str) -> &str {
         &s[self.start as usize..self.end as usize]
+    }
+}
+
+impl From<Span> for SourceSpan {
+    fn from(v: Span) -> Self {
+        (v.start as usize..v.end as usize).into()
     }
 }
 

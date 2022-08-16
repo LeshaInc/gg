@@ -6,8 +6,10 @@ use crate::{Spanned, Token};
 pub enum Expr {
     Int(i32),
     Float(f32),
+    Var(String),
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
+    Fn(FnExpr),
     Error,
 }
 
@@ -24,10 +26,12 @@ impl Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Int(v) => write!(f, "{}", v),
-            Expr::Float(v) => write!(f, "{}", v),
-            Expr::BinOp(v) => write!(f, "{}", v),
-            Expr::UnOp(v) => write!(f, "{}", v),
+            Expr::Int(v) => v.fmt(f),
+            Expr::Float(v) => v.fmt(f),
+            Expr::Var(v) => v.fmt(f),
+            Expr::BinOp(v) => v.fmt(f),
+            Expr::UnOp(v) => v.fmt(f),
+            Expr::Fn(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
         }
     }
@@ -50,7 +54,7 @@ impl Display for BinOpExpr {
             write!(f, "{}", self.lhs)?;
         }
 
-        write!(f, "{}", self.op)?;
+        write!(f, " {} ", self.op)?;
 
         if r_bp > self.rhs.item.binding_power().0 {
             write!(f, "({})", self.rhs)?;
@@ -187,5 +191,27 @@ impl Display for UnOp {
             UnOp::Neg => "-",
             UnOp::Not => "!",
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FnExpr {
+    pub args: Vec<String>,
+    pub expr: Box<Spanned<Expr>>,
+}
+
+impl Display for FnExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "fn(")?;
+
+        for (i, arg) in self.args.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}", arg)?;
+        }
+
+        write!(f, "): {}", self.expr)
     }
 }

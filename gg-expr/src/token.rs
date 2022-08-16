@@ -2,7 +2,7 @@ use logos::Logos;
 
 use crate::{Span, Spanned};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Logos)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Logos)]
 #[logos(subpattern decimal = r"[0-9](?:_*[0-9])*")]
 pub enum Token {
     #[token("+")]
@@ -75,6 +75,8 @@ pub enum Token {
     Then,
     #[token("else")]
     Else,
+    #[token("fn")]
+    Fn,
 
     #[regex(r"(?&decimal)", priority = 2)]
     #[regex(r"0x[0-9a-fA-F](?:_*[0-9a-fA-F])*")]
@@ -142,12 +144,14 @@ impl Token {
             If => "`if`",
             Then => "`then`",
             Else => "`else`",
+            Fn => "`fn`",
+
             Int => "integer",
             Float => "float",
             HexColor => "hex color",
             String => "string",
             Ident => "identifier",
-            Error => "unexpected character",
+            Error => "invalid token",
             Eof => "EOF",
         }
     }
