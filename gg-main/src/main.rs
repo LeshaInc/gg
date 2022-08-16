@@ -8,7 +8,7 @@ use gg_graphics_impl::{BackendImpl, BackendSettings};
 use gg_input::Input;
 use gg_math::{Rect, Vec2};
 use gg_ui::{views, AppendChild, UiAction, UiContext, View, ViewExt};
-use gg_util::eyre::Result;
+use gg_util::eyre::{bail, Result};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -19,13 +19,29 @@ use self::fps_counter::FpsCounter;
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
+    let mut path = std::env::current_exe()?;
+    path.pop();
+    path.push("assets");
+
+    if !path.exists() {
+        path.pop();
+        path.push("../../assets");
+    }
+
+    if !path.exists() {
+        bail!("Could not find assets directory");
+    }
+
     let event_loop = EventLoop::new();
 
-    let source = DirSource::new("assets")?;
+    let source = DirSource::new(&path.canonicalize()?)?;
     let mut assets = Assets::new(source);
+
+    path.push("../input.json");
+
     let mut input = Input::new();
     input.register_action::<UiAction>();
-    input.load("input.json")?;
+    input.load(&path.canonicalize()?)?;
 
     let mut fonts = FontDb::new();
     fonts.add_collection(&assets.load("fonts/OpenSans-Regular.ttf"));
