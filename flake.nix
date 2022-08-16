@@ -7,30 +7,35 @@
 
   outputs = { self, nixpkgs, utils, fenix }:
     utils.lib.eachDefaultSystem (system:
-      let 
+      let
         pkgs = import nixpkgs { inherit system; };
-        
+
         toolchain = with fenix.packages.${system};
           combine [
             minimal.rustc
             minimal.cargo
             targets.x86_64-unknown-linux-gnu.latest.rust-std
           ];
-      in {
+      in
+      {
         devShell = with pkgs; mkShell rec {
           buildInputs = [
             toolchain
-            vulkan-loader vulkan-validation-layers
-            xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXi
+            vulkan-loader
+            vulkan-validation-layers
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
           ];
-          
+
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           VK_LAYER_PATH = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d/";
 
           RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
           RUST_LOG = "warn";
           RUST_BACKTRACE = 1;
-        };        
+        };
       }
     );
 }
