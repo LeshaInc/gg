@@ -11,16 +11,19 @@
         pkgs = import nixpkgs { inherit system; };
 
         toolchain = with fenix.packages.${system};
-          combine [
-            minimal.rustc
-            minimal.cargo
-            targets.x86_64-unknown-linux-gnu.latest.rust-std
-          ];
+          combine (with complete; [
+            rustc
+            rust-src
+            cargo
+            rustfmt
+            rust-analyzer
+          ]);
       in
       {
         devShell = with pkgs; mkShell rec {
           buildInputs = [
             toolchain
+            rnix-lsp
             vulkan-loader
             vulkan-validation-layers
             xorg.libX11
