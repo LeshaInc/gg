@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+indenter = "0.3.3"
 logos = "0.12.1"
 miette = { version = "5.3.0", features = ["fancy"] }
 thiserror = "1.0.32"

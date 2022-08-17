@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use miette::Diagnostic;
 use thiserror::Error;
 
-use super::ast::*;
-use super::{tokenize, Span, Spanned, Token};
+use super::*;
 
 pub struct Parser<'a> {
     source: &'a str,
@@ -249,7 +248,7 @@ impl Parser<'_> {
 
         let inner = self.expr();
         let span = Span::new(start, inner.span.end);
-        let expr = Expr::Fn(FnExpr {
+        let expr = Expr::Func(FuncExpr {
             args,
             expr: Box::new(inner),
         });

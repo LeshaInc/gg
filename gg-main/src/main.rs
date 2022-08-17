@@ -23,11 +23,13 @@ fn main_expr() -> Result<()> {
 
     let mut parser = gg_expr::syntax::Parser::new(&input);
 
-    println!("{}", parser.expr());
+    let expr = parser.expr();
 
     for error in parser.errors() {
         gg_expr::syntax::report(&input, error);
     }
+
+    dbg!(gg_expr::compiler::compile(&expr));
 
     Ok(())
 }

@@ -1,10 +1,11 @@
-pub mod ast;
+mod ast;
 mod parser;
 mod span;
 mod token;
 
 use miette::NamedSource;
 
+pub use self::ast::*;
 pub use self::parser::{Parser, SyntaxError};
 pub use self::span::{Span, Spanned};
 pub use self::token::{tokenize, Token};

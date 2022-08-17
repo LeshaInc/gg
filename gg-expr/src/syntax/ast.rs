@@ -9,7 +9,7 @@ pub enum Expr {
     Var(String),
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
-    Fn(FnExpr),
+    Func(FuncExpr),
     Error,
 }
 
@@ -31,7 +31,7 @@ impl Display for Expr {
             Expr::Var(v) => v.fmt(f),
             Expr::BinOp(v) => v.fmt(f),
             Expr::UnOp(v) => v.fmt(f),
-            Expr::Fn(v) => v.fmt(f),
+            Expr::Func(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
         }
     }
@@ -195,12 +195,12 @@ impl Display for UnOp {
 }
 
 #[derive(Clone, Debug)]
-pub struct FnExpr {
+pub struct FuncExpr {
     pub args: Vec<String>,
     pub expr: Box<Spanned<Expr>>,
 }
 
-impl Display for FnExpr {
+impl Display for FuncExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "fn(")?;
 
