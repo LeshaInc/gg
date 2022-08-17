@@ -146,7 +146,7 @@ impl TextLayouter {
             &mut self.cache,
         );
 
-        measure_segments(assets, &text.props, &mut self.segments, &mut self.glyphs);
+        measure_segments(assets, &text.props, &mut self.segments, &self.glyphs);
 
         ShapedText {
             props: text.props,
@@ -215,7 +215,7 @@ fn find_linebreaks(
     scratch_segments.clear();
 
     let mut seg_i = 0;
-    for (i, linebreak) in unicode_linebreak::linebreaks(&text) {
+    for (i, linebreak) in unicode_linebreak::linebreaks(text) {
         let segment = loop {
             let seg = &mut segments[seg_i];
             if seg.range.contains(&(i - 1)) {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FontFamily {
     names: Arc<Vec<Box<str>>>,
 }

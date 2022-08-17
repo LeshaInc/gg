@@ -148,7 +148,7 @@ impl FontFace {
 
         let scale = raster.pixels_per_em as f32;
 
-        let mut image = image::load_from_memory(&raster.data).ok()?.into_rgba8();
+        let mut image = image::load_from_memory(raster.data).ok()?.into_rgba8();
 
         let old_size = Vec2::new(image.width(), image.height());
         let size = (old_size.cast::<f32>() / scale * (size as f32)).cast::<u32>();

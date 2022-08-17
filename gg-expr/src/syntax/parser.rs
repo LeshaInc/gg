@@ -132,12 +132,7 @@ impl Parser<'_> {
     fn expr_bp(&mut self, min_bp: u8) -> Spanned<Expr> {
         let mut lhs = self.expr_lhs();
 
-        loop {
-            let op = match BinOp::from_token(self.peek().item) {
-                Some(v) => v,
-                None => break,
-            };
-
+        while let Some(op) = BinOp::from_token(self.peek().item) {
             let (l_bp, r_bp) = op.binding_power();
             if l_bp < min_bp {
                 break;
@@ -201,8 +196,8 @@ impl Parser<'_> {
         let span = self.next().span;
         let slice = span.slice(self.source);
 
-        let expr = if slice.starts_with("0x") {
-            i32::from_str_radix(&slice[2..], 16)
+        let expr = if let Some(stripped) = slice.strip_prefix("0x") {
+            i32::from_str_radix(stripped, 16)
                 .map(Expr::Int)
                 .unwrap_or(Expr::Error)
         } else {

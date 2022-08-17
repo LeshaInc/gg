@@ -24,7 +24,7 @@ impl<D: 'static, V: Any + View<D>> AnyView<D> for V {
     }
 }
 
-impl<'a, D: 'static> View<D> for Box<dyn AnyView<D>> {
+impl<D: 'static> View<D> for Box<dyn AnyView<D>> {
     fn init(&mut self, old: &mut Self) -> bool {
         (**self).init_dyn(&mut **old)
     }

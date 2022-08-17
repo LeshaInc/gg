@@ -89,6 +89,12 @@ impl<D: 'static> Driver<D> {
     }
 }
 
+impl<D: 'static> Default for Driver<D> {
+    fn default() -> Driver<D> {
+        Driver::new()
+    }
+}
+
 pub struct UiContext<'a> {
     pub bounds: Rect<f32>,
     pub assets: &'a Assets,

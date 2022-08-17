@@ -39,7 +39,7 @@ impl FromStr for Binding {
         let mut elements = [BindingElement::Keyboard(VirtualKeyCode::Key1); MAX_ELEMENTS];
         let mut i = 0;
 
-        for part in s.split("-") {
+        for part in s.split('-') {
             if let Some(m) = parse_modifier(part) {
                 modifiers |= m;
             } else {

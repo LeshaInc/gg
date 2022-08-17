@@ -480,7 +480,7 @@ impl HlLine {
 fn max_span(spans: impl Iterator<Item = Span>) -> Span {
     spans
         .reduce(|a, b| Span::new(a.start.min(b.start), a.end.max(b.end)))
-        .unwrap_or(Span::new(0, 0))
+        .unwrap_or_else(|| Span::new(0, 0))
 }
 
 fn decimal_width(v: u32) -> usize {

@@ -43,7 +43,7 @@ impl GraphicsEncoder {
             _ => {}
         }
 
-        self.list.push(command.into());
+        self.list.push(command);
     }
 
     pub fn save(&mut self) {

@@ -131,14 +131,14 @@ impl Input {
             new_set.insert(action);
         }
 
-        for &action in old_set.difference(&new_set) {
+        for &action in old_set.difference(new_set) {
             self.events.push(Event::Action(ActionEvent {
                 action,
                 state: ElementState::Released,
             }));
         }
 
-        for &action in new_set.difference(&old_set) {
+        for &action in new_set.difference(old_set) {
             self.events.push(Event::Action(ActionEvent {
                 action,
                 state: ElementState::Pressed,
