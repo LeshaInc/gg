@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crossbeam-utils = "0.8.11"
+arc-swap = "1.5.1"
 im = "15.1.0"
 indenter = "0.3.3"
 logos = "0.12.1"

@@ -149,7 +149,9 @@ impl Parser<'_> {
             Token::LParen => self.expr_paren(),
             Token::Int => self.expr_int(),
             Token::Float => self.expr_float(),
+            Token::String => self.expr_string(),
             Token::Ident => self.expr_var(),
+            Token::LBracket => self.expr_list(),
             Token::Fn => self.expr_fn(),
             Token::If => self.expr_if_else(),
             _ => {
@@ -188,9 +190,43 @@ impl Parser<'_> {
         Spanned::new(span, expr)
     }
 
+    fn expr_string(&mut self) -> Spanned<Expr> {
+        let span = self.next().span;
+        let slice = span.slice(self.source);
+        let str = slice[1..slice.len() - 1]
+            .replace("\\\\", "\\")
+            .replace("\\r", "\r")
+            .replace("\\n", "\n")
+            .replace("\\t", "\t");
+        let expr = Expr::String(Arc::new(str));
+        Spanned::new(span, expr)
+    }
+
     fn expr_var(&mut self) -> Spanned<Expr> {
         let span = self.next().span;
         let expr = Expr::Var(span.slice(self.source).into());
+        Spanned::new(span, expr)
+    }
+
+    fn expr_list(&mut self) -> Spanned<Expr> {
+        let start = self.next().span.start;
+
+        let mut exprs = Vec::new();
+
+        while self.peek().item != Token::RBracket {
+            exprs.push(self.expr());
+
+            if self.peek().item == Token::Comma {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        let end = self.expect_token(&[Token::RBracket]).span.end;
+        let span = Span::new(start, end);
+        let expr = Expr::List(ListExpr { exprs });
+
         Spanned::new(span, expr)
     }
 

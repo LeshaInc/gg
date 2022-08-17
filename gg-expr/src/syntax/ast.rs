@@ -1,4 +1,5 @@
 use std::fmt::{self, Display};
+use std::sync::Arc;
 
 use super::{Spanned, Token};
 
@@ -6,10 +7,11 @@ use super::{Spanned, Token};
 pub enum Expr {
     Int(i64),
     Float(f64),
-    String(String),
+    String(Arc<String>),
     Var(String),
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
+    List(ListExpr),
     Func(FuncExpr),
     IfElse(IfElseExpr),
     Error,
@@ -35,6 +37,7 @@ impl Display for Expr {
             Expr::Var(v) => v.fmt(f),
             Expr::BinOp(v) => v.fmt(f),
             Expr::UnOp(v) => v.fmt(f),
+            Expr::List(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
             Expr::IfElse(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
@@ -196,6 +199,27 @@ impl Display for UnOp {
             UnOp::Neg => "-",
             UnOp::Not => "!",
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ListExpr {
+    pub exprs: Vec<Spanned<Expr>>,
+}
+
+impl Display for ListExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+
+        for (i, v) in self.exprs.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            v.fmt(f)?;
+        }
+
+        write!(f, "]")
     }
 }
 

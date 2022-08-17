@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 
-use crossbeam_utils::atomic::AtomicCell;
+use arc_swap::ArcSwapOption;
 
 use crate::vm::Func;
 
@@ -32,20 +32,25 @@ impl Debug for Value {
 
 pub struct Thunk {
     pub func: Func,
-    pub value: AtomicCell<Option<Box<Value>>>,
+    pub value: ArcSwapOption<Value>,
 }
 
 impl Thunk {
     pub fn new(func: Func) -> Thunk {
         Thunk {
             func,
-            value: AtomicCell::new(None),
+            value: ArcSwapOption::new(None),
         }
     }
 }
 
 impl Debug for Thunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<thunk>")
+        let opt = self.value.load();
+        if let Some(val) = &*opt {
+            val.fmt(f)
+        } else {
+            writeln!(f, "thunk: {:?}", self.func)
+        }
     }
 }

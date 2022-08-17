@@ -24,6 +24,7 @@ pub enum Instr {
     JumpIf(InstrOffset),
     UnOp(UnOp),
     BinOp(BinOp),
+    NewList(u16),
 }
 
 #[derive(Clone)]
@@ -68,9 +69,13 @@ impl Debug for Func {
             }
         }
 
-        for (i, instr) in self.instrs.iter().enumerate() {
-            let mut f = indented(f);
+        let mut f = indented(f);
 
+        if self.instrs.is_empty() {
+            write!(f, "empty")?;
+        }
+
+        for (i, instr) in self.instrs.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
             }

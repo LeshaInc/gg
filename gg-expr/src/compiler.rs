@@ -9,6 +9,8 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
     match &expr.item {
         Expr::Int(v) => Value::Int(*v),
         Expr::Float(v) => Value::Float(*v),
+        Expr::String(v) => Value::String(v.clone()),
+        Expr::List(v) => Value::List(Box::new(v.exprs.iter().map(|v| compile(v)).collect())),
         Expr::Func(func) => Value::Func(Arc::new(compile_func(func))),
         _ => compile_thunk(expr),
     }
@@ -36,13 +38,13 @@ struct Context<'a> {
 
 fn compile_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
     match &expr.item {
-        Expr::Int(v) => {
-            let id = ctx.func.add_const(Value::Int(*v));
-            ctx.func.add_instr(Instr::PushConst(id));
-        }
-        Expr::Float(v) => {
-            let id = ctx.func.add_const(Value::Float(*v));
-            ctx.func.add_instr(Instr::PushConst(id));
+        Expr::List(list) => {
+            for expr in &list.exprs {
+                compile_expr(ctx, expr);
+            }
+
+            let len = u16::try_from(list.exprs.len()).expect("list too long");
+            ctx.func.add_instr(Instr::NewList(len));
         }
         Expr::Var(name) => {
             let idx = ctx.args.iter().position(|s| s == name).unwrap();
@@ -75,7 +77,11 @@ fn compile_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
             let offset = i16::try_from(end - mid - 1).expect("jump too far");
             ctx.func.instrs[mid] = Instr::Jump(InstrOffset(offset));
         }
-        _ => todo!(),
+        Expr::Error => {}
+        _ => {
+            let id = ctx.func.add_const(compile(&expr));
+            ctx.func.add_instr(Instr::PushConst(id));
+        }
     }
 
     ctx.stack_len += 1;
