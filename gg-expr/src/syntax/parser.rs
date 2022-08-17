@@ -151,6 +151,7 @@ impl Parser<'_> {
             Token::Float => self.expr_float(),
             Token::Ident => self.expr_var(),
             Token::Fn => self.expr_fn(),
+            Token::If => self.expr_if_else(),
             _ => {
                 let span = self.unexpected_token("expression");
                 Spanned::new(span, Expr::Error)
@@ -229,6 +230,25 @@ impl Parser<'_> {
         let expr = Expr::Func(FuncExpr {
             args,
             expr: Box::new(inner),
+        });
+
+        Spanned::new(span, expr)
+    }
+
+    fn expr_if_else(&mut self) -> Spanned<Expr> {
+        let start = self.next().span.start;
+
+        let cond = self.expr();
+        self.expect_token(&[Token::Then]);
+        let if_true = self.expr();
+        self.expect_token(&[Token::Else]);
+        let if_false = self.expr();
+
+        let span = Span::new(start, if_false.span.end);
+        let expr = Expr::IfElse(IfElseExpr {
+            cond: Box::new(cond),
+            if_true: Box::new(if_true),
+            if_false: Box::new(if_false),
         });
 
         Spanned::new(span, expr)

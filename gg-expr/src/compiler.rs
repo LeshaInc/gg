@@ -1,5 +1,5 @@
 use crate::syntax::{Expr, FuncExpr, Spanned};
-use crate::vm::{Const, Func, Instr, StackPos};
+use crate::vm::{Const, Func, Instr, InstrOffset, StackPos};
 use crate::Value;
 
 pub fn compile(expr: &Spanned<Expr>) -> Value {
@@ -24,7 +24,7 @@ fn compile_func(func: &FuncExpr) -> Func {
         stack_len: 0,
     };
 
-    compile_func_expr(&mut ctx, &func.expr);
+    compile_expr(&mut ctx, &func.expr);
 
     res
 }
@@ -35,7 +35,7 @@ struct Context<'a> {
     stack_len: u16,
 }
 
-fn compile_func_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
+fn compile_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
     match &expr.item {
         Expr::Int(v) => {
             let id = ctx.func.add_const(Const::Int(*v));
@@ -51,15 +51,30 @@ fn compile_func_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
             ctx.func.add_instr(Instr::PushCopy(pos));
         }
         Expr::BinOp(expr) => {
-            compile_func_expr(ctx, &expr.lhs);
-            compile_func_expr(ctx, &expr.rhs);
+            compile_expr(ctx, &expr.lhs);
+            compile_expr(ctx, &expr.rhs);
             ctx.stack_len -= 2;
             ctx.func.add_instr(Instr::BinOp(expr.op));
         }
         Expr::UnOp(expr) => {
-            compile_func_expr(ctx, &expr.expr);
+            compile_expr(ctx, &expr.expr);
             ctx.stack_len -= 2;
             ctx.func.add_instr(Instr::UnOp(expr.op));
+        }
+        Expr::IfElse(expr) => {
+            compile_expr(ctx, &expr.cond);
+
+            let start = ctx.func.add_instr(Instr::Nop);
+            compile_expr(ctx, &expr.if_false);
+            let mid = ctx.func.add_instr(Instr::Nop);
+            compile_expr(ctx, &expr.if_true);
+            let end = ctx.func.instrs.len();
+
+            let offset = i16::try_from(mid - start).expect("jump too far");
+            ctx.func.instrs[start] = Instr::JumpIf(InstrOffset(offset));
+
+            let offset = i16::try_from(end - mid - 1).expect("jump too far");
+            ctx.func.instrs[mid] = Instr::Jump(InstrOffset(offset));
         }
         _ => todo!(),
     }

@@ -10,6 +10,9 @@ pub struct ConstId(pub u16);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StackPos(pub u16);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InstrOffset(pub i16);
+
 #[derive(Clone, Copy, Debug)]
 pub enum Const {
     Int(i32),
@@ -18,9 +21,12 @@ pub enum Const {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
+    Nop,
     PushCopy(StackPos),
     PushConst(ConstId),
     Pop,
+    Jump(InstrOffset),
+    JumpIf(InstrOffset),
     UnOp(UnOp),
     BinOp(BinOp),
 }
@@ -39,8 +45,10 @@ impl Func {
         ConstId(id)
     }
 
-    pub fn add_instr(&mut self, instr: Instr) {
+    pub fn add_instr(&mut self, instr: Instr) -> usize {
+        let idx = self.instrs.len();
         self.instrs.push(instr);
+        idx
     }
 }
 

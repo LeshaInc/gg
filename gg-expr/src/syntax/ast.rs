@@ -10,6 +10,7 @@ pub enum Expr {
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
     Func(FuncExpr),
+    IfElse(IfElseExpr),
     Error,
 }
 
@@ -18,7 +19,7 @@ impl Expr {
         match self {
             Expr::UnOp(v) => (255, v.op.binding_power()),
             Expr::BinOp(v) => v.op.binding_power(),
-            Expr::Func(_) => (0, 0),
+            Expr::Func(_) | Expr::IfElse(_) => (0, 0),
             _ => (255, 255),
         }
     }
@@ -33,6 +34,7 @@ impl Display for Expr {
             Expr::BinOp(v) => v.fmt(f),
             Expr::UnOp(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
+            Expr::IfElse(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
         }
     }
@@ -214,5 +216,22 @@ impl Display for FuncExpr {
         }
 
         write!(f, "): {}", self.expr)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct IfElseExpr {
+    pub cond: Box<Spanned<Expr>>,
+    pub if_true: Box<Spanned<Expr>>,
+    pub if_false: Box<Spanned<Expr>>,
+}
+
+impl Display for IfElseExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "if {} then {} else {}",
+            self.cond, self.if_true, self.if_false
+        )
     }
 }
