@@ -171,7 +171,7 @@ impl Parser<'_> {
         let slice = span.slice(self.source);
 
         let expr = if let Some(stripped) = slice.strip_prefix("0x") {
-            i32::from_str_radix(stripped, 16)
+            i64::from_str_radix(stripped, 16)
                 .map(Expr::Int)
                 .unwrap_or(Expr::Error)
         } else {

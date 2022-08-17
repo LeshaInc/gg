@@ -3,6 +3,7 @@ use std::fmt::{self, Debug, Write};
 use indenter::indented;
 
 use crate::syntax::{BinOp, UnOp};
+use crate::Value;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConstId(pub u16);
@@ -12,12 +13,6 @@ pub struct StackPos(pub u16);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InstrOffset(pub i16);
-
-#[derive(Clone, Copy, Debug)]
-pub enum Const {
-    Int(i32),
-    Float(f32),
-}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
@@ -35,11 +30,19 @@ pub enum Instr {
 pub struct Func {
     pub arity: usize,
     pub instrs: Vec<Instr>,
-    pub consts: Vec<Const>,
+    pub consts: Vec<Value>,
 }
 
 impl Func {
-    pub fn add_const(&mut self, val: Const) -> ConstId {
+    pub fn new(arity: usize) -> Func {
+        Func {
+            arity,
+            instrs: Vec::new(),
+            consts: Vec::new(),
+        }
+    }
+
+    pub fn add_const(&mut self, val: Value) -> ConstId {
         let id = u16::try_from(self.consts.len()).expect("too many constants");
         self.consts.push(val);
         ConstId(id)

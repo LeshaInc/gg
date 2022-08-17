@@ -4,8 +4,9 @@ use super::{Spanned, Token};
 
 #[derive(Clone, Debug)]
 pub enum Expr {
-    Int(i32),
-    Float(f32),
+    Int(i64),
+    Float(f64),
+    String(String),
     Var(String),
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
@@ -30,6 +31,7 @@ impl Display for Expr {
         match self {
             Expr::Int(v) => v.fmt(f),
             Expr::Float(v) => v.fmt(f),
+            Expr::String(v) => write!(f, "{:?}", v),
             Expr::Var(v) => v.fmt(f),
             Expr::BinOp(v) => v.fmt(f),
             Expr::UnOp(v) => v.fmt(f),

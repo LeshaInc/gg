@@ -1,22 +1,21 @@
+use std::sync::Arc;
+
 use crate::syntax::{Expr, FuncExpr, Spanned};
-use crate::vm::{Const, Func, Instr, InstrOffset, StackPos};
+use crate::value::Thunk;
+use crate::vm::{Func, Instr, InstrOffset, StackPos};
 use crate::Value;
 
 pub fn compile(expr: &Spanned<Expr>) -> Value {
     match &expr.item {
         Expr::Int(v) => Value::Int(*v),
         Expr::Float(v) => Value::Float(*v),
-        Expr::Func(func) => Value::Func(compile_func(func)),
-        _ => todo!(),
+        Expr::Func(func) => Value::Func(Arc::new(compile_func(func))),
+        _ => compile_thunk(expr),
     }
 }
 
 fn compile_func(func: &FuncExpr) -> Func {
-    let mut res = Func {
-        arity: func.args.len(),
-        instrs: Vec::new(),
-        consts: Vec::new(),
-    };
+    let mut res = Func::new(func.args.len());
 
     let mut ctx = Context {
         args: &func.args,
@@ -38,11 +37,11 @@ struct Context<'a> {
 fn compile_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
     match &expr.item {
         Expr::Int(v) => {
-            let id = ctx.func.add_const(Const::Int(*v));
+            let id = ctx.func.add_const(Value::Int(*v));
             ctx.func.add_instr(Instr::PushConst(id));
         }
         Expr::Float(v) => {
-            let id = ctx.func.add_const(Const::Float(*v));
+            let id = ctx.func.add_const(Value::Float(*v));
             ctx.func.add_instr(Instr::PushConst(id));
         }
         Expr::Var(name) => {
@@ -80,4 +79,17 @@ fn compile_expr(ctx: &mut Context, expr: &Spanned<Expr>) {
     }
 
     ctx.stack_len += 1;
+}
+
+fn compile_thunk(expr: &Spanned<Expr>) -> Value {
+    let mut func = Func::new(0);
+    let mut ctx = Context {
+        args: &[],
+        func: &mut func,
+        stack_len: 0,
+    };
+
+    compile_expr(&mut ctx, expr);
+
+    Value::Thunk(Arc::new(Thunk::new(func)))
 }

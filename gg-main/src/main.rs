@@ -31,7 +31,10 @@ fn main_expr() -> Result<()> {
         println!("{}", diagnostic);
     }
 
-    dbg!(gg_expr::compiler::compile(&expr));
+    let value = gg_expr::compiler::compile(&expr);
+
+    println!();
+    println!("{:?}", value);
 
     Ok(())
 }
