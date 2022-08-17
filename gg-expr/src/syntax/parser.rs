@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-
-use miette::Diagnostic;
-use thiserror::Error;
+use std::sync::Arc;
 
 use super::*;
+use crate::diagnostic::{Component, Diagnostic, Label, Severity, Source, SourceComponent};
 
 pub struct Parser<'a> {
     source: &'a str,
     tokens: Vec<Spanned<Token>>,
     pos: usize,
-    errors: Vec<SyntaxError>,
+    diagnostic_source: Arc<Source>,
+    diagnostics: Vec<Diagnostic>,
     recovery_set: HashMap<Token, u32>,
     recovery_level: u32,
 }
@@ -21,7 +21,8 @@ impl Parser<'_> {
             source,
             tokens,
             pos: 0,
-            errors: Vec::new(),
+            diagnostic_source: Arc::new(Source::new("unknown.expr", source)),
+            diagnostics: Vec::new(),
             recovery_set: HashMap::new(),
             recovery_level: 0,
         }
@@ -31,8 +32,8 @@ impl Parser<'_> {
         self.source
     }
 
-    pub fn errors(&mut self) -> impl Iterator<Item = SyntaxError> + '_ {
-        self.errors.drain(..)
+    pub fn diagnostics(&mut self) -> impl Iterator<Item = Diagnostic> + '_ {
+        self.diagnostics.drain(..)
     }
 
     fn peek(&self) -> Spanned<Token> {
@@ -57,7 +58,18 @@ impl Parser<'_> {
     }
 
     fn error(&mut self, span: Span, message: String) {
-        self.errors.push(SyntaxError { span, message });
+        self.diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            message: "syntax error".into(),
+            components: vec![Component::Source(SourceComponent {
+                source: self.diagnostic_source.clone(),
+                labels: vec![Label {
+                    severity: Severity::Error,
+                    span,
+                    message,
+                }],
+            })],
+        });
     }
 
     fn push_recovery(&mut self, tokens: &[Token]) {
@@ -178,7 +190,7 @@ impl Parser<'_> {
 
     fn expr_paren(&mut self) -> Spanned<Expr> {
         self.next();
-        self.push_recovery(&[Token::LParen]);
+        self.push_recovery(&[Token::RParen]);
         let expr = self.expr();
         self.expect_token(&[Token::RParen]);
         self.pop_recovery();
@@ -255,13 +267,4 @@ impl Parser<'_> {
 
         Spanned::new(span, expr)
     }
-}
-
-#[derive(Debug, Error, Diagnostic)]
-#[error("syntax error")]
-#[diagnostic()]
-pub struct SyntaxError {
-    message: String,
-    #[label("{}", message)]
-    span: Span,
 }

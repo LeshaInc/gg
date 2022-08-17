@@ -25,8 +25,8 @@ fn main_expr() -> Result<()> {
 
     let expr = parser.expr();
 
-    for error in parser.errors() {
-        gg_expr::syntax::report(&input, error);
+    for diagnostic in parser.diagnostics() {
+        println!("{}", diagnostic);
     }
 
     dbg!(gg_expr::compiler::compile(&expr));
