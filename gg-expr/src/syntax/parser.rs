@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::ast::*;
-use crate::{tokenize, Span, Spanned, Token};
+use super::ast::*;
+use super::{tokenize, Span, Spanned, Token};
 
 pub struct Parser<'a> {
     source: &'a str,

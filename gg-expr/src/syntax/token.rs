@@ -1,6 +1,6 @@
 use logos::Logos;
 
-use crate::{Span, Spanned};
+use super::{Span, Spanned};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Logos)]
 #[logos(subpattern decimal = r"[0-9](?:_*[0-9])*")]

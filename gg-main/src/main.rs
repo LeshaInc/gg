@@ -21,12 +21,12 @@ fn main_expr() -> Result<()> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
 
-    let mut parser = gg_expr::Parser::new(&input);
+    let mut parser = gg_expr::syntax::Parser::new(&input);
 
     println!("{}", parser.expr());
 
     for error in parser.errors() {
-        gg_expr::report(&input, error);
+        gg_expr::syntax::report(&input, error);
     }
 
     Ok(())

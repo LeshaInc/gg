@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::{Spanned, Token};
+use super::{Spanned, Token};
 
 #[derive(Clone, Debug)]
 pub enum Expr {
