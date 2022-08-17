@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::*;
@@ -10,8 +9,6 @@ pub struct Parser<'a> {
     pos: usize,
     diagnostic_source: Arc<Source>,
     diagnostics: Vec<Diagnostic>,
-    recovery_set: HashMap<Token, u32>,
-    recovery_level: u32,
 }
 
 impl Parser<'_> {
@@ -23,8 +20,6 @@ impl Parser<'_> {
             pos: 0,
             diagnostic_source: Arc::new(Source::new("unknown.expr", source)),
             diagnostics: Vec::new(),
-            recovery_set: HashMap::new(),
-            recovery_level: 0,
         }
     }
 
@@ -58,6 +53,10 @@ impl Parser<'_> {
     }
 
     fn error(&mut self, span: Span, message: String) {
+        if !self.diagnostics.is_empty() {
+            return;
+        }
+
         self.diagnostics.push(Diagnostic {
             severity: Severity::Error,
             message: "syntax error".into(),
@@ -72,37 +71,13 @@ impl Parser<'_> {
         });
     }
 
-    fn push_recovery(&mut self, tokens: &[Token]) {
-        for &token in tokens {
-            self.recovery_set
-                .entry(token)
-                .or_insert(self.recovery_level);
-        }
-        self.recovery_level += 1;
-    }
-
-    fn pop_recovery(&mut self) {
-        self.recovery_level -= 1;
-        let level = self.recovery_level;
-        self.recovery_set.retain(|_, v| *v < level);
-    }
-
     fn unexpected_token(&mut self, expected: &str) -> Span {
         let token = self.next();
         let mut span = token.span;
         let message = format!("expected {} near {}", expected, token.item.explain());
 
-        loop {
-            let token = self.peek();
-            if token.item == Token::Eof || self.recovery_set.contains_key(&token.item) {
-                break;
-            } else {
-                span.end = token.span.end;
-                self.next();
-            }
-        }
-
         self.error(span, message);
+
         span
     }
 
@@ -185,10 +160,8 @@ impl Parser<'_> {
 
     fn expr_paren(&mut self) -> Spanned<Expr> {
         self.next();
-        self.push_recovery(&[Token::RParen]);
         let expr = self.expr();
         self.expect_token(&[Token::RParen]);
-        self.pop_recovery();
         expr
     }
 
@@ -225,7 +198,6 @@ impl Parser<'_> {
         let start = self.next().span.start;
 
         self.expect_token(&[Token::LParen]);
-        self.push_recovery(&[Token::RParen, Token::Comma]);
 
         loop {
             let token = self.peek();
@@ -250,7 +222,6 @@ impl Parser<'_> {
         }
 
         self.expect_token(&[Token::RParen]);
-        self.pop_recovery();
         self.expect_token(&[Token::Colon]);
 
         let inner = self.expr();
