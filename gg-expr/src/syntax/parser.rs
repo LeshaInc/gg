@@ -73,7 +73,7 @@ impl Parser<'_> {
 
     fn unexpected_token(&mut self, expected: &str) -> Span {
         let token = self.next();
-        let mut span = token.span;
+        let span = token.span;
         let message = format!("expected {} near {}", expected, token.item.explain());
 
         self.error(span, message);

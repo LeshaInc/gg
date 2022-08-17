@@ -18,6 +18,7 @@ impl Expr {
         match self {
             Expr::UnOp(v) => (255, v.op.binding_power()),
             Expr::BinOp(v) => v.op.binding_power(),
+            Expr::Func(_) => (0, 0),
             _ => (255, 255),
         }
     }

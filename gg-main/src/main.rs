@@ -25,6 +25,8 @@ fn main_expr() -> Result<()> {
 
     let expr = parser.expr();
 
+    println!("{}", expr);
+
     for diagnostic in parser.diagnostics() {
         println!("{}", diagnostic);
     }
