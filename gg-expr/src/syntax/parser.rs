@@ -154,6 +154,7 @@ impl Parser<'_> {
             Token::LBracket => self.expr_list(),
             Token::Fn => self.expr_fn(),
             Token::If => self.expr_if_else(),
+            Token::Let => self.expr_let_in(),
             _ => {
                 let span = self.unexpected_token("expression");
                 Spanned::new(span, Expr::Error)
@@ -285,6 +286,37 @@ impl Parser<'_> {
             cond: Box::new(cond),
             if_true: Box::new(if_true),
             if_false: Box::new(if_false),
+        });
+
+        Spanned::new(span, expr)
+    }
+
+    fn expr_let_in(&mut self) -> Spanned<Expr> {
+        let start = self.next().span.start;
+
+        let mut vars = Vec::new();
+
+        loop {
+            let span = self.expect_token(&[Token::Ident]).span;
+            let var = span.slice(self.source).to_owned();
+            self.expect_token(&[Token::Assign]);
+            let expr = self.expr();
+            vars.push((var, Box::new(expr)));
+
+            if self.peek().item == Token::Comma {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        self.expect_token(&[Token::In]);
+        let inner = self.expr();
+
+        let span = Span::new(start, inner.span.end);
+        let expr = Expr::LetIn(LetInExpr {
+            vars,
+            expr: Box::new(inner),
         });
 
         Spanned::new(span, expr)

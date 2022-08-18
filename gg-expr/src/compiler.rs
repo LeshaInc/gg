@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::syntax::{Expr, Spanned};
@@ -7,21 +8,44 @@ use crate::Value;
 
 #[derive(Default)]
 pub struct Compiler<'expr> {
-    args: &'expr [String],
-    captures: Vec<&'expr str>,
+    scope: Scope<'expr>,
+    parent_scopes: Vec<Scope<'expr>>,
     func: Func,
     parent: Option<Box<Compiler<'expr>>>,
     stack_len: u16,
 }
 
+#[derive(Clone, Default)]
+struct Scope<'expr> {
+    vars: HashMap<&'expr str, VarLocation>,
+}
+
+impl Scope<'_> {
+    fn from_args(args: &[String]) -> Scope {
+        Scope {
+            vars: args
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (&**v, VarLocation::Stack(i as u16)))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum VarLocation {
+    Stack(u16),
+    Capture(u16),
+}
+
 impl<'expr> Compiler<'expr> {
     pub fn new(args: &[String]) -> Compiler<'_> {
         Compiler {
-            args: &args,
-            captures: Vec::new(),
+            scope: Scope::from_args(args),
+            parent_scopes: Vec::new(),
             func: Func::new(args.len()),
             parent: None,
-            stack_len: 0,
+            stack_len: args.len() as u16,
         }
     }
 
@@ -50,11 +74,11 @@ impl<'expr> Compiler<'expr> {
             Expr::Func(expr) => {
                 let parent = std::mem::take(self);
                 let mut compiler = Compiler {
-                    args: &expr.args,
-                    captures: Vec::new(),
+                    scope: Scope::from_args(&expr.args),
+                    parent_scopes: Vec::new(),
                     func: Func::new(expr.args.len()),
                     parent: Some(Box::new(parent)),
-                    stack_len: 0,
+                    stack_len: expr.args.len() as u16,
                 };
 
                 compiler.compile(&expr.expr);
@@ -66,22 +90,28 @@ impl<'expr> Compiler<'expr> {
                 self.func.add_instr(Instr::NewFunc(num_captures));
             }
             Expr::Var(name) => {
-                let mut scope = &mut *self;
+                let mut current = &mut *self;
 
                 loop {
-                    if let Some(idx) = scope.args.iter().position(|s| s == name) {
-                        let pos = scope.stack_len + (idx as u16);
-                        scope.func.add_instr(Instr::PushCopy(pos));
+                    if let Some(location) = current.scope.vars.get(&**name) {
+                        match location {
+                            VarLocation::Stack(idx) => {
+                                let pos = current.stack_len + idx - 1;
+                                current.func.add_instr(Instr::PushCopy(pos));
+                            }
+                            VarLocation::Capture(idx) => {
+                                current.func.add_instr(Instr::PushCapture(*idx));
+                            }
+                        }
+
                         break;
-                    } else if let Some(idx) = scope.captures.iter().position(|s| s == name) {
-                        scope.func.add_instr(Instr::PushCapture(idx as u16));
-                        break;
-                    } else if let Some(parent) = &mut scope.parent {
-                        let idx = scope.captures.len() as u16;
-                        scope.func.add_instr(Instr::PushCapture(idx));
-                        scope.func.captures.push(Value::Null);
-                        scope.captures.push(name);
-                        scope = parent;
+                    } else if let Some(parent) = &mut current.parent {
+                        let idx = current.func.captures.len() as u16;
+                        let location = VarLocation::Capture(idx);
+                        current.scope.vars.insert(&**name, location);
+                        current.func.add_instr(Instr::PushCapture(idx));
+                        current.func.captures.push(Value::Null);
+                        current = parent;
                     } else {
                         panic!("cannot find {}", name);
                     }
@@ -112,6 +142,23 @@ impl<'expr> Compiler<'expr> {
 
                 let offset = i16::try_from(end - mid - 1).expect("jump too far");
                 self.func.instrs[mid] = Instr::Jump(offset);
+            }
+            Expr::LetIn(expr) => {
+                self.parent_scopes.push(self.scope.clone());
+
+                for (binding, expr) in &expr.vars {
+                    self.compile(expr);
+                    let idx = self.stack_len - 1;
+                    self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
+                }
+
+                self.compile(&expr.expr);
+
+                let num_vars = expr.vars.len() as u16;
+                self.func.add_instr(Instr::Swap(num_vars));
+                self.func.add_instr(Instr::Pop(num_vars));
+
+                self.parent_scopes.pop();
             }
             Expr::Error => {}
         }

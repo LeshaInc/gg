@@ -14,6 +14,7 @@ pub enum Expr {
     List(ListExpr),
     Func(FuncExpr),
     IfElse(IfElseExpr),
+    LetIn(LetInExpr),
     Error,
 }
 
@@ -22,7 +23,7 @@ impl Expr {
         match self {
             Expr::UnOp(v) => (255, v.op.binding_power()),
             Expr::BinOp(v) => v.op.binding_power(),
-            Expr::Func(_) | Expr::IfElse(_) => (0, 0),
+            Expr::Func(_) | Expr::IfElse(_) | Expr::LetIn(_) => (0, 0),
             _ => (255, 255),
         }
     }
@@ -40,6 +41,7 @@ impl Display for Expr {
             Expr::List(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
             Expr::IfElse(v) => v.fmt(f),
+            Expr::LetIn(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
         }
     }
@@ -259,5 +261,27 @@ impl Display for IfElseExpr {
             "if {} then {} else {}",
             self.cond, self.if_true, self.if_false
         )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LetInExpr {
+    pub vars: Vec<(String, Box<Spanned<Expr>>)>,
+    pub expr: Box<Spanned<Expr>>,
+}
+
+impl Display for LetInExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "let ")?;
+
+        for (i, (var, expr)) in self.vars.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{} = {}", var, expr)?;
+        }
+
+        write!(f, " in {}", self.expr)
     }
 }
