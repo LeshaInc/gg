@@ -109,9 +109,13 @@ pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
 
                 let func_ref = Arc::make_mut(&mut func);
 
-                for i in (0..captures).rev() {
-                    func_ref.captures[usize::from(i)] = stack.pop().unwrap();
+                func_ref.captures.clear();
+
+                for _ in 0..captures {
+                    func_ref.captures.push(stack.pop().unwrap());
                 }
+
+                func_ref.captures.reverse();
 
                 stack.push(Value::Func(func));
             }
