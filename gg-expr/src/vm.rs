@@ -59,21 +59,17 @@ impl Func {
 
 impl Debug for Func {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "fn(a: {}, c: {}):", self.arity, self.captures.len())?;
-
-        if !self.consts.is_empty() {
-            let mut f = indented(f);
-            writeln!(f, "consts:")?;
-
-            for (i, val) in self.consts.iter().enumerate() {
-                writeln!(indented(&mut f), "{}: {:?}", i, val)?;
-            }
-        }
+        writeln!(
+            f,
+            "fn({} args, {} captures):",
+            self.arity,
+            self.captures.len()
+        )?;
 
         let mut f = indented(f);
 
-        if self.instrs.is_empty() {
-            write!(f, "empty")?;
+        for (i, val) in self.consts.iter().enumerate() {
+            writeln!(f, "{}: {:?}", i, val)?;
         }
 
         for (i, instr) in self.instrs.iter().enumerate() {
