@@ -82,6 +82,7 @@ impl<'expr> Compiler<'expr> {
                 };
 
                 compiler.compile(&expr.expr);
+                compiler.finish();
                 *self = *compiler.parent.unwrap();
 
                 let num_captures = compiler.func.captures.len() as u16;
@@ -96,7 +97,7 @@ impl<'expr> Compiler<'expr> {
                     if let Some(location) = current.scope.vars.get(&**name) {
                         match location {
                             VarLocation::Stack(idx) => {
-                                let pos = current.stack_len + idx - 1;
+                                let pos = current.stack_len - idx - 1;
                                 current.func.add_instr(Instr::PushCopy(pos));
                             }
                             VarLocation::Capture(idx) => {
@@ -120,18 +121,19 @@ impl<'expr> Compiler<'expr> {
             Expr::BinOp(expr) => {
                 self.compile(&expr.lhs);
                 self.compile(&expr.rhs);
-                self.stack_len -= 2;
                 self.func.add_instr(Instr::BinOp(expr.op));
+                self.stack_len -= 2;
             }
             Expr::UnOp(expr) => {
                 self.compile(&expr.expr);
-                self.stack_len -= 2;
                 self.func.add_instr(Instr::UnOp(expr.op));
+                self.stack_len -= 1;
             }
             Expr::IfElse(expr) => {
                 self.compile(&expr.cond);
 
                 let start = self.func.add_instr(Instr::Nop);
+                self.stack_len -= 1;
                 self.compile(&expr.if_false);
                 let mid = self.func.add_instr(Instr::Nop);
                 self.compile(&expr.if_true);
@@ -147,16 +149,16 @@ impl<'expr> Compiler<'expr> {
                 self.parent_scopes.push(self.scope.clone());
 
                 for (binding, expr) in &expr.vars {
+                    let idx = self.stack_len;
                     self.compile(expr);
-                    let idx = self.stack_len - 1;
                     self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
                 }
 
                 self.compile(&expr.expr);
 
                 let num_vars = expr.vars.len() as u16;
-                self.func.add_instr(Instr::Swap(num_vars));
-                self.func.add_instr(Instr::Pop(num_vars));
+                self.func.add_instr(Instr::PopSwap(num_vars));
+                self.stack_len -= num_vars;
 
                 self.parent_scopes.pop();
             }
@@ -165,6 +167,14 @@ impl<'expr> Compiler<'expr> {
 
         self.stack_len += 1;
     }
+
+    fn finish(&mut self) {
+        let arity = self.func.arity as u16;
+        if arity > 0 {
+            self.func.add_instr(Instr::PopSwap(arity));
+        }
+        self.func.add_instr(Instr::Ret);
+    }
 }
 
 pub fn compile(expr: &Spanned<Expr>) -> Value {
@@ -172,11 +182,13 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
         Expr::Func(func) => {
             let mut compiler = Compiler::new(&func.args);
             compiler.compile(&func.expr);
+            compiler.finish();
             Value::Func(Arc::new(compiler.func))
         }
         _ => {
             let mut compiler = Compiler::new(&[]);
             compiler.compile(&expr);
+            compiler.finish();
             Value::Thunk(Arc::new(Thunk::new(compiler.func)))
         }
     }

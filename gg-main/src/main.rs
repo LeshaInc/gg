@@ -35,6 +35,9 @@ fn main_expr() -> Result<()> {
 
     println!();
     println!("{:?}", value);
+    println!();
+    value.force_eval();
+    println!("{:?}", value);
 
     Ok(())
 }

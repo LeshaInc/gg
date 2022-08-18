@@ -11,8 +11,8 @@ pub enum Instr {
     PushCopy(u16),
     PushConst(u16),
     PushCapture(u16),
-    Swap(u16),
-    Pop(u16),
+    PopSwap(u16),
+    Ret,
     Jump(i16),
     JumpIf(i16),
     UnOp(UnOp),
@@ -82,5 +82,53 @@ impl Debug for Func {
         }
 
         Ok(())
+    }
+}
+
+pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
+    let mut ip = 0;
+    loop {
+        let instr = func.instrs[ip];
+        ip += 1;
+
+        match instr {
+            Instr::Nop => todo!(),
+            Instr::PushCopy(offset) => {
+                let idx = stack.len() - usize::from(offset) - 1;
+                stack.push(stack[idx].clone());
+            }
+            Instr::PushConst(idx) => {
+                stack.push(func.consts[usize::from(idx)].clone());
+            }
+            Instr::PushCapture(idx) => {
+                stack.push(func.captures[usize::from(idx)].clone());
+            }
+            Instr::PopSwap(count) => {
+                let idx = stack.len() - usize::from(count) - 1;
+                let last = stack.len() - 1;
+                stack.swap(idx, last);
+                for _ in 0..count {
+                    stack.pop();
+                }
+            }
+            Instr::Ret => break,
+            Instr::Jump(offset) => {
+                ip = (ip as isize + isize::from(offset)) as usize;
+            }
+            Instr::JumpIf(offset) => {
+                if let Some(value) = stack.pop() {
+                    if value.is_true() {
+                        ip = (ip as isize + isize::from(offset)) as usize;
+                    }
+                }
+            }
+            Instr::BinOp(op) => {
+                let rhs = stack.pop().unwrap();
+                let lhs = stack.pop().unwrap();
+                let res = lhs.bin_op(&rhs, op);
+                stack.push(res);
+            }
+            _ => todo!(),
+        }
     }
 }
