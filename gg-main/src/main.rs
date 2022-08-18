@@ -36,8 +36,10 @@ fn main_expr() -> Result<()> {
     println!();
     println!("{:?}", value);
     println!();
+    let t = std::time::Instant::now();
     value.force_eval();
     println!("{:?}", value);
+    println!("took {:?}", t.elapsed());
 
     Ok(())
 }

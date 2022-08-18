@@ -90,6 +90,16 @@ impl<'expr> Compiler<'expr> {
                 self.func.add_instr(Instr::PushConst(id));
                 self.func.add_instr(Instr::NewFunc(num_captures));
             }
+            Expr::Call(expr) => {
+                for arg in &expr.args {
+                    self.compile(arg);
+                }
+
+                self.compile(&expr.func);
+                self.func.add_instr(Instr::Call);
+
+                self.stack_len -= expr.args.len() as u16 + 1;
+            }
             Expr::Var(name) => {
                 let mut current = &mut *self;
 
@@ -135,6 +145,7 @@ impl<'expr> Compiler<'expr> {
                 let start = self.func.add_instr(Instr::Nop);
                 self.stack_len -= 1;
                 self.compile(&expr.if_false);
+                self.stack_len -= 1;
                 let mid = self.func.add_instr(Instr::Nop);
                 self.compile(&expr.if_true);
                 let end = self.func.instrs.len();

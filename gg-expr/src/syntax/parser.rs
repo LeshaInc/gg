@@ -107,7 +107,23 @@ impl Parser<'_> {
     fn expr_bp(&mut self, min_bp: u8) -> Spanned<Expr> {
         let mut lhs = self.expr_lhs();
 
-        while let Some(op) = BinOp::from_token(self.peek().item) {
+        loop {
+            let token = self.peek().item;
+
+            if token == Token::LParen {
+                if 12 < min_bp {
+                    break;
+                }
+
+                lhs = self.expr_call(lhs);
+                continue;
+            }
+
+            let op = match BinOp::from_token(token) {
+                Some(v) => v,
+                None => break,
+            };
+
             let (l_bp, r_bp) = op.binding_power();
             if l_bp < min_bp {
                 break;
@@ -267,6 +283,32 @@ impl Parser<'_> {
         let expr = Expr::Func(FuncExpr {
             args,
             expr: Box::new(inner),
+        });
+
+        Spanned::new(span, expr)
+    }
+
+    fn expr_call(&mut self, func: Spanned<Expr>) -> Spanned<Expr> {
+        self.next();
+
+        let mut args = Vec::new();
+
+        while self.peek().item != Token::RParen {
+            args.push(self.expr());
+
+            if self.peek().item == Token::Comma {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        let end = self.expect_token(&[Token::RParen]).span.end;
+
+        let span = Span::new(func.span.start, end);
+        let expr = Expr::Call(CallExpr {
+            func: Box::new(func),
+            args,
         });
 
         Spanned::new(span, expr)

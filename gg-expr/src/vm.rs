@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug, Write};
+use std::sync::Arc;
 
 use indenter::indented;
 
@@ -12,6 +13,7 @@ pub enum Instr {
     PushConst(u16),
     PushCapture(u16),
     PopSwap(u16),
+    Call,
     Ret,
     Jump(i16),
     JumpIf(i16),
@@ -111,6 +113,12 @@ pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
                     stack.pop();
                 }
             }
+            Instr::Call => match stack.pop() {
+                Some(Value::Func(func)) => {
+                    interpret(&func, stack);
+                }
+                _ => panic!("not a func"),
+            },
             Instr::Ret => break,
             Instr::Jump(offset) => {
                 ip = (ip as isize + isize::from(offset)) as usize;
@@ -128,7 +136,21 @@ pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
                 let res = lhs.bin_op(&rhs, op);
                 stack.push(res);
             }
-            _ => todo!(),
+            Instr::NewFunc(captures) => {
+                let mut func = match stack.pop() {
+                    Some(Value::Func(func)) => func,
+                    _ => panic!("not a func"),
+                };
+
+                let func_ref = Arc::make_mut(&mut func);
+
+                for i in (0..captures).rev() {
+                    func_ref.captures[usize::from(i)] = stack.pop().unwrap();
+                }
+
+                stack.push(Value::Func(func));
+            }
+            _ => todo!("{:?}", instr),
         }
     }
 }

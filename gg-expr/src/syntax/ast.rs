@@ -13,6 +13,7 @@ pub enum Expr {
     UnOp(UnOpExpr),
     List(ListExpr),
     Func(FuncExpr),
+    Call(CallExpr),
     IfElse(IfElseExpr),
     LetIn(LetInExpr),
     Error,
@@ -40,6 +41,7 @@ impl Display for Expr {
             Expr::UnOp(v) => v.fmt(f),
             Expr::List(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
+            Expr::Call(v) => v.fmt(f),
             Expr::IfElse(v) => v.fmt(f),
             Expr::LetIn(v) => v.fmt(f),
             Expr::Error => write!(f, "error"),
@@ -244,6 +246,33 @@ impl Display for FuncExpr {
         }
 
         write!(f, "): {}", self.expr)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CallExpr {
+    pub func: Box<Spanned<Expr>>,
+    pub args: Vec<Spanned<Expr>>,
+}
+
+impl Display for CallExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (bp, _) = self.func.item.binding_power();
+        if bp < 255 {
+            write!(f, "({})(", self.func)?;
+        } else {
+            write!(f, "{}(", self.func)?;
+        }
+
+        for (i, arg) in self.args.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}", arg)?;
+        }
+
+        write!(f, ")")
     }
 }
 

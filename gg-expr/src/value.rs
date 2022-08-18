@@ -53,7 +53,9 @@ impl Value {
             BinOp::Sub => Value::Int(self.to_i64() - other.to_i64()),
             BinOp::Mul => Value::Int(self.to_i64() * other.to_i64()),
             BinOp::Pow => Value::Int(self.to_i64().pow(other.to_i64() as u32)),
+            BinOp::Lt => Value::Bool(self.to_i64() < other.to_i64()),
             BinOp::Gt => Value::Bool(self.to_i64() > other.to_i64()),
+            BinOp::Eq => Value::Bool(self.to_i64() == other.to_i64()),
             _ => todo!(),
         }
     }
