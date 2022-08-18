@@ -10,8 +10,11 @@ use crate::Value;
 pub struct Compiler<'expr> {
     scope: Scope<'expr>,
     parent_scopes: Vec<Scope<'expr>>,
-    func: Func,
     parent: Option<Box<Compiler<'expr>>>,
+    instrs: Vec<Instr>,
+    consts: Vec<Value>,
+    num_captures: u16,
+    arity: u16,
     stack_len: u16,
 }
 
@@ -43,25 +46,40 @@ impl<'expr> Compiler<'expr> {
         Compiler {
             scope: Scope::from_args(args),
             parent_scopes: Vec::new(),
-            func: Func::new(args.len()),
             parent: None,
+            instrs: Vec::new(),
+            consts: Vec::new(),
+            num_captures: 0,
+            arity: args.len() as u16,
             stack_len: args.len() as u16,
         }
+    }
+
+    fn add_instr(&mut self, instr: Instr) -> usize {
+        let idx = self.instrs.len();
+        self.instrs.push(instr);
+        idx
+    }
+
+    fn add_const(&mut self, value: Value) -> u16 {
+        let idx = self.consts.len() as u16;
+        self.consts.push(value);
+        idx
     }
 
     fn compile(&mut self, expr: &'expr Spanned<Expr>) {
         match &expr.item {
             Expr::Int(v) => {
-                let id = self.func.add_const(Value::Int(*v));
-                self.func.add_instr(Instr::PushConst(id));
+                let id = self.add_const(Value::Int(*v));
+                self.add_instr(Instr::PushConst(id));
             }
             Expr::Float(v) => {
-                let id = self.func.add_const(Value::Float(*v));
-                self.func.add_instr(Instr::PushConst(id));
+                let id = self.add_const(Value::Float(*v));
+                self.add_instr(Instr::PushConst(id));
             }
             Expr::String(v) => {
-                let id = self.func.add_const(Value::String(v.clone()));
-                self.func.add_instr(Instr::PushConst(id));
+                let id = self.add_const(Value::String(v.clone()));
+                self.add_instr(Instr::PushConst(id));
             }
             Expr::List(list) => {
                 for expr in &list.exprs {
@@ -69,26 +87,23 @@ impl<'expr> Compiler<'expr> {
                 }
 
                 let len = u16::try_from(list.exprs.len()).expect("list too long");
-                self.func.add_instr(Instr::NewList(len));
+                self.add_instr(Instr::NewList(len));
             }
             Expr::Func(expr) => {
                 let parent = std::mem::take(self);
-                let mut compiler = Compiler {
-                    scope: Scope::from_args(&expr.args),
-                    parent_scopes: Vec::new(),
-                    func: Func::new(expr.args.len()),
-                    parent: Some(Box::new(parent)),
-                    stack_len: expr.args.len() as u16,
-                };
-
+                let mut compiler = Compiler::new(&expr.args);
+                compiler.parent = Some(Box::new(parent));
                 compiler.compile(&expr.expr);
-                compiler.finish();
+                let func = compiler.finish();
                 *self = *compiler.parent.unwrap();
 
-                let num_captures = compiler.func.captures.len() as u16;
-                let id = self.func.add_const(Value::Func(Arc::new(compiler.func)));
-                self.func.add_instr(Instr::PushConst(id));
-                self.func.add_instr(Instr::NewFunc(num_captures));
+                let id = self.add_const(Value::Func(Arc::new(func)));
+                self.add_instr(Instr::PushConst(id));
+
+                let num_captures = compiler.num_captures;
+                if num_captures > 0 {
+                    self.add_instr(Instr::NewFunc(num_captures));
+                }
             }
             Expr::Call(expr) => {
                 for arg in &expr.args {
@@ -96,7 +111,7 @@ impl<'expr> Compiler<'expr> {
                 }
 
                 self.compile(&expr.func);
-                self.func.add_instr(Instr::Call);
+                self.add_instr(Instr::Call);
 
                 self.stack_len -= expr.args.len() as u16 + 1;
             }
@@ -108,20 +123,20 @@ impl<'expr> Compiler<'expr> {
                         match location {
                             VarLocation::Stack(idx) => {
                                 let pos = current.stack_len - idx - 1;
-                                current.func.add_instr(Instr::PushCopy(pos));
+                                current.add_instr(Instr::PushCopy(pos));
                             }
                             VarLocation::Capture(idx) => {
-                                current.func.add_instr(Instr::PushCapture(*idx));
+                                current.add_instr(Instr::PushCapture(*idx));
                             }
                         }
 
                         break;
                     } else if let Some(parent) = &mut current.parent {
-                        let idx = current.func.captures.len() as u16;
+                        let idx = current.num_captures;
                         let location = VarLocation::Capture(idx);
+                        current.instrs.push(Instr::PushCapture(idx));
                         current.scope.vars.insert(&**name, location);
-                        current.func.add_instr(Instr::PushCapture(idx));
-                        current.func.captures.push(Value::Null);
+                        current.num_captures += 1;
                         current = parent;
                     } else {
                         panic!("cannot find {}", name);
@@ -131,30 +146,30 @@ impl<'expr> Compiler<'expr> {
             Expr::BinOp(expr) => {
                 self.compile(&expr.lhs);
                 self.compile(&expr.rhs);
-                self.func.add_instr(Instr::BinOp(expr.op));
+                self.add_instr(Instr::BinOp(expr.op));
                 self.stack_len -= 2;
             }
             Expr::UnOp(expr) => {
                 self.compile(&expr.expr);
-                self.func.add_instr(Instr::UnOp(expr.op));
+                self.add_instr(Instr::UnOp(expr.op));
                 self.stack_len -= 1;
             }
             Expr::IfElse(expr) => {
                 self.compile(&expr.cond);
 
-                let start = self.func.add_instr(Instr::Nop);
+                let start = self.add_instr(Instr::Nop);
                 self.stack_len -= 1;
                 self.compile(&expr.if_false);
                 self.stack_len -= 1;
-                let mid = self.func.add_instr(Instr::Nop);
+                let mid = self.add_instr(Instr::Nop);
                 self.compile(&expr.if_true);
-                let end = self.func.instrs.len();
+                let end = self.instrs.len();
 
                 let offset = i16::try_from(mid - start).expect("jump too far");
-                self.func.instrs[start] = Instr::JumpIf(offset);
+                self.instrs[start] = Instr::JumpIf(offset);
 
                 let offset = i16::try_from(end - mid - 1).expect("jump too far");
-                self.func.instrs[mid] = Instr::Jump(offset);
+                self.instrs[mid] = Instr::Jump(offset);
             }
             Expr::LetIn(expr) => {
                 self.parent_scopes.push(self.scope.clone());
@@ -168,7 +183,7 @@ impl<'expr> Compiler<'expr> {
                 self.compile(&expr.expr);
 
                 let num_vars = expr.vars.len() as u16;
-                self.func.add_instr(Instr::PopSwap(num_vars));
+                self.add_instr(Instr::PopSwap(num_vars));
                 self.stack_len -= num_vars;
 
                 self.parent_scopes.pop();
@@ -179,12 +194,18 @@ impl<'expr> Compiler<'expr> {
         self.stack_len += 1;
     }
 
-    fn finish(&mut self) {
-        let arity = self.func.arity as u16;
-        if arity > 0 {
-            self.func.add_instr(Instr::PopSwap(arity));
+    fn finish(&mut self) -> Func {
+        if self.arity > 0 {
+            self.add_instr(Instr::PopSwap(self.arity));
         }
-        self.func.add_instr(Instr::Ret);
+
+        self.add_instr(Instr::Ret);
+
+        Func {
+            instrs: self.instrs.iter().copied().collect(),
+            consts: self.consts.iter().cloned().collect(),
+            captures: Vec::new(),
+        }
     }
 }
 
@@ -193,14 +214,14 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
         Expr::Func(func) => {
             let mut compiler = Compiler::new(&func.args);
             compiler.compile(&func.expr);
-            compiler.finish();
-            Value::Func(Arc::new(compiler.func))
+            let func = compiler.finish();
+            Value::Func(Arc::new(func))
         }
         _ => {
             let mut compiler = Compiler::new(&[]);
             compiler.compile(&expr);
-            compiler.finish();
-            Value::Thunk(Arc::new(Thunk::new(compiler.func)))
+            let func = compiler.finish();
+            Value::Thunk(Arc::new(Thunk::new(func)))
         }
     }
 }

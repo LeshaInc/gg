@@ -25,49 +25,14 @@ pub enum Instr {
 
 #[derive(Clone)]
 pub struct Func {
-    pub arity: usize,
-    pub instrs: Vec<Instr>,
-    pub consts: Vec<Value>,
+    pub instrs: Arc<[Instr]>,
+    pub consts: Arc<[Value]>,
     pub captures: Vec<Value>,
-}
-
-impl Default for Func {
-    fn default() -> Func {
-        Func::new(0)
-    }
-}
-
-impl Func {
-    pub fn new(arity: usize) -> Func {
-        Func {
-            arity,
-            instrs: Vec::new(),
-            consts: Vec::new(),
-            captures: Vec::new(),
-        }
-    }
-
-    pub fn add_const(&mut self, val: Value) -> u16 {
-        let id = u16::try_from(self.consts.len()).expect("too many constants");
-        self.consts.push(val);
-        id
-    }
-
-    pub fn add_instr(&mut self, instr: Instr) -> usize {
-        let idx = self.instrs.len();
-        self.instrs.push(instr);
-        idx
-    }
 }
 
 impl Debug for Func {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "fn({} args, {} captures):",
-            self.arity,
-            self.captures.len()
-        )?;
+        writeln!(f, "fn(...):")?;
 
         let mut f = indented(f);
 
