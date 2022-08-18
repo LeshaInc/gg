@@ -7,6 +7,7 @@ use crate::vm::Func;
 
 #[derive(Clone)]
 pub enum Value {
+    Null,
     Int(i64),
     Float(f64),
     String(Arc<String>),
@@ -19,6 +20,7 @@ pub enum Value {
 impl Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Value::Null => f.write_str("null"),
             Value::Int(v) => v.fmt(f),
             Value::Float(v) => v.fmt(f),
             Value::String(v) => v.fmt(f),

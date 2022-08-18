@@ -5,26 +5,19 @@ use indenter::indented;
 use crate::syntax::{BinOp, UnOp};
 use crate::Value;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConstId(pub u16);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StackPos(pub u16);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct InstrOffset(pub i16);
-
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
     Nop,
-    PushCopy(StackPos),
-    PushConst(ConstId),
+    PushCopy(u16),
+    PushConst(u16),
+    PushCapture(u16),
     Pop,
-    Jump(InstrOffset),
-    JumpIf(InstrOffset),
+    Jump(i16),
+    JumpIf(i16),
     UnOp(UnOp),
     BinOp(BinOp),
     NewList(u16),
+    NewFunc(u16),
 }
 
 #[derive(Clone)]
@@ -32,6 +25,13 @@ pub struct Func {
     pub arity: usize,
     pub instrs: Vec<Instr>,
     pub consts: Vec<Value>,
+    pub captures: Vec<Value>,
+}
+
+impl Default for Func {
+    fn default() -> Func {
+        Func::new(0)
+    }
 }
 
 impl Func {
@@ -40,13 +40,14 @@ impl Func {
             arity,
             instrs: Vec::new(),
             consts: Vec::new(),
+            captures: Vec::new(),
         }
     }
 
-    pub fn add_const(&mut self, val: Value) -> ConstId {
+    pub fn add_const(&mut self, val: Value) -> u16 {
         let id = u16::try_from(self.consts.len()).expect("too many constants");
         self.consts.push(val);
-        ConstId(id)
+        id
     }
 
     pub fn add_instr(&mut self, instr: Instr) -> usize {
@@ -58,7 +59,7 @@ impl Func {
 
 impl Debug for Func {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "fn({}):", self.arity)?;
+        writeln!(f, "fn(a: {}, c: {}):", self.arity, self.captures.len())?;
 
         if !self.consts.is_empty() {
             let mut f = indented(f);
