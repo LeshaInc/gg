@@ -12,6 +12,7 @@ pub enum Instr {
     PushCopy(u16),
     PushConst(u16),
     PushCapture(u16),
+    PushFunc(u16),
     PopSwap(u16),
     Call,
     Ret,
@@ -52,7 +53,9 @@ impl Debug for Func {
     }
 }
 
-pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
+pub fn interpret(stack: &mut Vec<Value>, callstack: &mut Vec<Arc<Func>>) {
+    let func = callstack[callstack.len() - 1].clone();
+
     let mut ip = 0;
     loop {
         let instr = func.instrs[ip];
@@ -70,6 +73,10 @@ pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
             Instr::PushCapture(idx) => {
                 stack.push(func.captures[usize::from(idx)].clone());
             }
+            Instr::PushFunc(offset) => {
+                let func = callstack[callstack.len() - usize::from(offset) - 1].clone();
+                stack.push(Value::Func(func));
+            }
             Instr::PopSwap(count) => {
                 let idx = stack.len() - usize::from(count) - 1;
                 let last = stack.len() - 1;
@@ -80,7 +87,8 @@ pub fn interpret(func: &Func, stack: &mut Vec<Value>) {
             }
             Instr::Call => match stack.pop() {
                 Some(Value::Func(func)) => {
-                    interpret(&func, stack);
+                    callstack.push(func);
+                    interpret(stack, callstack);
                 }
                 _ => panic!("not a func"),
             },

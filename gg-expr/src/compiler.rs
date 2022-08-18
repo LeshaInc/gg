@@ -8,6 +8,8 @@ use crate::Value;
 
 #[derive(Default)]
 pub struct Compiler<'expr> {
+    name: Option<&'expr str>,
+    inner_name: Option<&'expr str>,
     scope: Scope<'expr>,
     parent_scopes: Vec<Scope<'expr>>,
     parent: Option<Box<Compiler<'expr>>>,
@@ -44,6 +46,8 @@ enum VarLocation {
 impl<'expr> Compiler<'expr> {
     pub fn new(args: &[String]) -> Compiler<'_> {
         Compiler {
+            name: None,
+            inner_name: None,
             scope: Scope::from_args(args),
             parent_scopes: Vec::new(),
             parent: None,
@@ -92,6 +96,7 @@ impl<'expr> Compiler<'expr> {
             Expr::Func(expr) => {
                 let parent = std::mem::take(self);
                 let mut compiler = Compiler::new(&expr.args);
+                compiler.name = parent.inner_name;
                 compiler.parent = Some(Box::new(parent));
                 compiler.compile(&expr.expr);
                 let func = compiler.finish();
@@ -116,6 +121,7 @@ impl<'expr> Compiler<'expr> {
                 self.stack_len -= expr.args.len() as u16 + 1;
             }
             Expr::Var(name) => {
+                let mut depth = 0;
                 let mut current = &mut *self;
 
                 loop {
@@ -130,14 +136,24 @@ impl<'expr> Compiler<'expr> {
                             }
                         }
 
+                        current = &mut *self;
+
+                        for _ in 0..depth {
+                            let idx = current.num_captures;
+                            let location = VarLocation::Capture(idx);
+                            current.instrs.push(Instr::PushCapture(idx));
+                            current.scope.vars.insert(&**name, location);
+                            current.num_captures += 1;
+                            current = current.parent.as_mut().unwrap();
+                        }
+
+                        break;
+                    } else if current.name == Some(&**name) {
+                        self.add_instr(Instr::PushFunc(depth));
                         break;
                     } else if let Some(parent) = &mut current.parent {
-                        let idx = current.num_captures;
-                        let location = VarLocation::Capture(idx);
-                        current.instrs.push(Instr::PushCapture(idx));
-                        current.scope.vars.insert(&**name, location);
-                        current.num_captures += 1;
                         current = parent;
+                        depth += 1;
                     } else {
                         panic!("cannot find {}", name);
                     }
@@ -176,7 +192,9 @@ impl<'expr> Compiler<'expr> {
 
                 for (binding, expr) in &expr.vars {
                     let idx = self.stack_len;
+                    self.inner_name = Some(&*binding);
                     self.compile(expr);
+                    self.inner_name = None;
                     self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
                 }
 

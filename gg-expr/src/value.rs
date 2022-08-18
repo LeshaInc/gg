@@ -79,14 +79,14 @@ impl Value {
 }
 
 pub struct Thunk {
-    pub func: Func,
+    pub func: Arc<Func>,
     pub value: ArcSwapOption<Value>,
 }
 
 impl Thunk {
     pub fn new(func: Func) -> Thunk {
         Thunk {
-            func,
+            func: Arc::new(func),
             value: ArcSwapOption::new(None),
         }
     }
@@ -98,9 +98,8 @@ impl Thunk {
         }
 
         let mut stack = Vec::new();
-        interpret(&self.func, &mut stack);
-        let value = stack.pop().unwrap();
-        self.value.store(Some(Arc::new(value)));
+        interpret(&mut stack, &mut vec![self.func.clone()]);
+        self.value.store(stack.pop().map(Arc::new));
     }
 }
 
