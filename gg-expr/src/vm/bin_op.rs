@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 
 use crate::syntax::BinOp::{self, *};
-use crate::value::Type::{self, *};
+use crate::Type::{self, *};
 use crate::Value;
 
 macro_rules! as_int {

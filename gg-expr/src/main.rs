@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::time::Instant;
 
-use gg_expr::compiler::compile;
+use gg_expr::compile;
 use gg_expr::syntax::Parser;
 
 fn main() {

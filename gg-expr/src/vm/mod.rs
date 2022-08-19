@@ -1,15 +1,10 @@
 mod bin_op;
 
-use std::fmt::{self, Debug, Write};
-use std::sync::Arc;
-
-use indenter::indented;
-
 use crate::syntax::{BinOp, UnOp};
-use crate::Value;
+use crate::{Func, Value};
 
 #[derive(Clone, Copy, Debug)]
-pub enum Instr {
+pub enum Instruction {
     Nop,
     PushCopy(u16),
     PushConst(u16),
@@ -24,35 +19,6 @@ pub enum Instr {
     BinOp(BinOp),
     NewList(u16),
     NewFunc(u16),
-}
-
-#[derive(Clone)]
-pub struct Func {
-    pub instrs: Arc<[Instr]>,
-    pub consts: Arc<[Value]>,
-    pub captures: Vec<Value>,
-}
-
-impl Debug for Func {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "fn(...):")?;
-
-        let mut f = indented(f);
-
-        for (i, val) in self.consts.iter().enumerate() {
-            writeln!(f, "{}: {:?}", i, val)?;
-        }
-
-        for (i, instr) in self.instrs.iter().enumerate() {
-            if i > 0 {
-                writeln!(f)?;
-            }
-
-            write!(f, "{:?}", instr)?;
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Default)]
@@ -82,16 +48,16 @@ impl Vm {
             self.ip = self.ipstack[self.ipstack.len() - 1];
 
             'inner: loop {
-                let instr = func.instrs[self.ip];
+                let instr = func.instructions[self.ip];
                 self.ip += 1;
 
                 self.dispatch(&func, instr);
 
-                if matches!(instr, Instr::Ret) {
+                if matches!(instr, Instruction::Ret) {
                     break 'inner;
                 }
 
-                if matches!(instr, Instr::Call) {
+                if matches!(instr, Instruction::Call) {
                     continue 'outer;
                 }
             }
@@ -101,22 +67,22 @@ impl Vm {
         }
     }
 
-    fn dispatch(&mut self, func: &Func, instr: Instr) {
+    fn dispatch(&mut self, func: &Func, instr: Instruction) {
         match instr {
-            Instr::Nop => self.instr_nop(),
-            Instr::PushCopy(v) => self.instr_push_copy(v),
-            Instr::PushConst(v) => self.instr_push_const(func, v),
-            Instr::PushCapture(v) => self.instr_push_capture(func, v),
-            Instr::PushFunc(v) => self.instr_push_func(v),
-            Instr::PopSwap(v) => self.instr_pop_swap(v),
-            Instr::Call => self.instr_call(),
-            Instr::Ret => self.instr_ret(),
-            Instr::Jump(v) => self.instr_jump(v),
-            Instr::JumpIf(v) => self.instr_jump_if(v),
-            Instr::UnOp(v) => self.instr_un_op(v),
-            Instr::BinOp(v) => self.instr_bin_op(v),
-            Instr::NewList(v) => self.instr_new_list(v),
-            Instr::NewFunc(v) => self.instr_new_func(v),
+            Instruction::Nop => self.instr_nop(),
+            Instruction::PushCopy(v) => self.instr_push_copy(v),
+            Instruction::PushConst(v) => self.instr_push_const(func, v),
+            Instruction::PushCapture(v) => self.instr_push_capture(func, v),
+            Instruction::PushFunc(v) => self.instr_push_func(v),
+            Instruction::PopSwap(v) => self.instr_pop_swap(v),
+            Instruction::Call => self.instr_call(),
+            Instruction::Ret => self.instr_ret(),
+            Instruction::Jump(v) => self.instr_jump(v),
+            Instruction::JumpIf(v) => self.instr_jump_if(v),
+            Instruction::UnOp(v) => self.instr_un_op(v),
+            Instruction::BinOp(v) => self.instr_bin_op(v),
+            Instruction::NewList(v) => self.instr_new_list(v),
+            Instruction::NewFunc(v) => self.instr_new_func(v),
         }
     }
 

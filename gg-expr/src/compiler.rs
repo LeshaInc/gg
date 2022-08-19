@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use crate::syntax::{Expr, Spanned};
-use crate::value::Thunk;
-use crate::vm::{Func, Instr};
-use crate::Value;
+use crate::{Func, Instruction, Thunk, Value};
 
 #[derive(Default)]
 pub struct Compiler<'expr> {
@@ -12,7 +10,7 @@ pub struct Compiler<'expr> {
     scope: Scope<'expr>,
     parent_scopes: Vec<Scope<'expr>>,
     parent: Option<Box<Compiler<'expr>>>,
-    instrs: Vec<Instr>,
+    instrs: Vec<Instruction>,
     consts: Vec<Value>,
     num_captures: u16,
     arity: u16,
@@ -58,7 +56,7 @@ impl<'expr> Compiler<'expr> {
         }
     }
 
-    fn add_instr(&mut self, instr: Instr) -> usize {
+    fn add_instr(&mut self, instr: Instruction) -> usize {
         let idx = self.instrs.len();
         self.instrs.push(instr);
         idx
@@ -74,15 +72,15 @@ impl<'expr> Compiler<'expr> {
         match &expr.item {
             &Expr::Int(v) => {
                 let id = self.add_const(v.into());
-                self.add_instr(Instr::PushConst(id));
+                self.add_instr(Instruction::PushConst(id));
             }
             &Expr::Float(v) => {
                 let id = self.add_const(v.into());
-                self.add_instr(Instr::PushConst(id));
+                self.add_instr(Instruction::PushConst(id));
             }
             Expr::String(v) => {
                 let id = self.add_const((**v).clone().into());
-                self.add_instr(Instr::PushConst(id));
+                self.add_instr(Instruction::PushConst(id));
             }
             Expr::List(list) => {
                 for expr in &list.exprs {
@@ -90,7 +88,7 @@ impl<'expr> Compiler<'expr> {
                 }
 
                 let len = u16::try_from(list.exprs.len()).expect("list too long");
-                self.add_instr(Instr::NewList(len));
+                self.add_instr(Instruction::NewList(len));
             }
             Expr::Func(expr) => {
                 let parent = std::mem::take(self);
@@ -102,11 +100,11 @@ impl<'expr> Compiler<'expr> {
                 *self = *compiler.parent.unwrap();
 
                 let id = self.add_const(func.into());
-                self.add_instr(Instr::PushConst(id));
+                self.add_instr(Instruction::PushConst(id));
 
                 let num_captures = compiler.num_captures;
                 if num_captures > 0 {
-                    self.add_instr(Instr::NewFunc(num_captures));
+                    self.add_instr(Instruction::NewFunc(num_captures));
                 }
             }
             Expr::Call(expr) => {
@@ -115,7 +113,7 @@ impl<'expr> Compiler<'expr> {
                 }
 
                 self.compile(&expr.func);
-                self.add_instr(Instr::Call);
+                self.add_instr(Instruction::Call);
 
                 self.stack_len -= expr.args.len() as u16 + 1;
             }
@@ -128,10 +126,10 @@ impl<'expr> Compiler<'expr> {
                         match location {
                             VarLocation::Stack(idx) => {
                                 let pos = current.stack_len - idx - 1;
-                                current.add_instr(Instr::PushCopy(pos));
+                                current.add_instr(Instruction::PushCopy(pos));
                             }
                             VarLocation::Capture(idx) => {
-                                current.add_instr(Instr::PushCapture(*idx));
+                                current.add_instr(Instruction::PushCapture(*idx));
                             }
                         }
 
@@ -140,7 +138,7 @@ impl<'expr> Compiler<'expr> {
                         for _ in 0..depth {
                             let idx = current.num_captures;
                             let location = VarLocation::Capture(idx);
-                            current.instrs.push(Instr::PushCapture(idx));
+                            current.instrs.push(Instruction::PushCapture(idx));
                             current.scope.vars.insert(&**name, location);
                             current.num_captures += 1;
                             current = current.parent.as_mut().unwrap();
@@ -148,7 +146,7 @@ impl<'expr> Compiler<'expr> {
 
                         break;
                     } else if current.name == Some(&**name) {
-                        self.add_instr(Instr::PushFunc(depth));
+                        self.add_instr(Instruction::PushFunc(depth));
                         break;
                     } else if let Some(parent) = &mut current.parent {
                         current = parent;
@@ -161,30 +159,30 @@ impl<'expr> Compiler<'expr> {
             Expr::BinOp(expr) => {
                 self.compile(&expr.lhs);
                 self.compile(&expr.rhs);
-                self.add_instr(Instr::BinOp(expr.op));
+                self.add_instr(Instruction::BinOp(expr.op));
                 self.stack_len -= 2;
             }
             Expr::UnOp(expr) => {
                 self.compile(&expr.expr);
-                self.add_instr(Instr::UnOp(expr.op));
+                self.add_instr(Instruction::UnOp(expr.op));
                 self.stack_len -= 1;
             }
             Expr::IfElse(expr) => {
                 self.compile(&expr.cond);
 
-                let start = self.add_instr(Instr::Nop);
+                let start = self.add_instr(Instruction::Nop);
                 self.stack_len -= 1;
                 self.compile(&expr.if_false);
                 self.stack_len -= 1;
-                let mid = self.add_instr(Instr::Nop);
+                let mid = self.add_instr(Instruction::Nop);
                 self.compile(&expr.if_true);
                 let end = self.instrs.len();
 
                 let offset = i16::try_from(mid - start).expect("jump too far");
-                self.instrs[start] = Instr::JumpIf(offset);
+                self.instrs[start] = Instruction::JumpIf(offset);
 
                 let offset = i16::try_from(end - mid - 1).expect("jump too far");
-                self.instrs[mid] = Instr::Jump(offset);
+                self.instrs[mid] = Instruction::Jump(offset);
             }
             Expr::LetIn(expr) => {
                 self.parent_scopes.push(self.scope.clone());
@@ -200,7 +198,7 @@ impl<'expr> Compiler<'expr> {
                 self.compile(&expr.expr);
 
                 let num_vars = expr.vars.len() as u16;
-                self.add_instr(Instr::PopSwap(num_vars));
+                self.add_instr(Instruction::PopSwap(num_vars));
                 self.stack_len -= num_vars;
 
                 self.parent_scopes.pop();
@@ -213,13 +211,13 @@ impl<'expr> Compiler<'expr> {
 
     fn finish(&mut self) -> Func {
         if self.arity > 0 {
-            self.add_instr(Instr::PopSwap(self.arity));
+            self.add_instr(Instruction::PopSwap(self.arity));
         }
 
-        self.add_instr(Instr::Ret);
+        self.add_instr(Instruction::Ret);
 
         Func {
-            instrs: self.instrs.iter().copied().collect(),
+            instructions: self.instrs.iter().copied().collect(),
             consts: self.consts.iter().cloned().collect(),
             captures: Vec::new(),
         }
