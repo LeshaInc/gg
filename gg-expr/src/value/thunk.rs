@@ -1,40 +1,35 @@
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 
-use arc_swap::ArcSwapOption;
+use once_cell::sync::OnceCell;
 
 use crate::{Value, Vm};
 
 #[derive(Clone)]
 pub struct Thunk {
     pub func: Value,
-    pub value: Arc<ArcSwapOption<Value>>,
+    pub value: Arc<OnceCell<Value>>,
 }
 
 impl Thunk {
     pub fn new(func: Value) -> Thunk {
         Thunk {
             func,
-            value: Arc::new(ArcSwapOption::new(None)),
+            value: Arc::new(OnceCell::new()),
         }
     }
 
-    pub fn force_eval(&self) {
-        let value = self.value.load();
-        if value.is_some() {
-            return;
-        }
-
-        let mut vm = Vm::new();
-        let res = vm.eval(self.func.clone());
-        self.value.store(Some(Arc::new(res)));
+    pub fn force_eval(&self) -> &Value {
+        self.value.get_or_init(|| {
+            let mut vm = Vm::new();
+            vm.eval(self.func.clone())
+        })
     }
 }
 
 impl Debug for Thunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let opt = self.value.load();
-        if let Some(val) = &*opt {
+        if let Some(val) = self.value.get() {
             val.fmt(f)
         } else {
             writeln!(f, "thunk: {:?}", self.func)
