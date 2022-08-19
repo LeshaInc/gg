@@ -51,6 +51,48 @@ impl Debug for Value {
     }
 }
 
+impl From<i64> for Value {
+    fn from(value: i64) -> Value {
+        Value::Int(value)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Value {
+        Value::Float(value)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Value {
+        Value::Bool(value)
+    }
+}
+
+impl From<HeapValue> for Value {
+    fn from(value: HeapValue) -> Value {
+        Value::Heap(Arc::new(value))
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Value {
+        HeapValue::String(value).into()
+    }
+}
+
+impl From<Func> for Value {
+    fn from(value: Func) -> Value {
+        HeapValue::Func(value).into()
+    }
+}
+
+impl From<Thunk> for Value {
+    fn from(value: Thunk) -> Value {
+        HeapValue::Thunk(value).into()
+    }
+}
+
 impl Value {
     pub fn to_i64(&self) -> i64 {
         match self {

@@ -73,16 +73,16 @@ impl<'expr> Compiler<'expr> {
 
     fn compile(&mut self, expr: &'expr Spanned<Expr>) {
         match &expr.item {
-            Expr::Int(v) => {
-                let id = self.add_const(Value::Int(*v));
+            &Expr::Int(v) => {
+                let id = self.add_const(v.into());
                 self.add_instr(Instr::PushConst(id));
             }
-            Expr::Float(v) => {
-                let id = self.add_const(Value::Float(*v));
+            &Expr::Float(v) => {
+                let id = self.add_const(v.into());
                 self.add_instr(Instr::PushConst(id));
             }
             Expr::String(v) => {
-                let id = self.add_const(Value::Heap(Arc::new(HeapValue::String((**v).clone()))));
+                let id = self.add_const((**v).clone().into());
                 self.add_instr(Instr::PushConst(id));
             }
             Expr::List(list) => {
@@ -102,7 +102,7 @@ impl<'expr> Compiler<'expr> {
                 let func = compiler.finish();
                 *self = *compiler.parent.unwrap();
 
-                let id = self.add_const(Value::Heap(Arc::new(HeapValue::Func(func))));
+                let id = self.add_const(func.into());
                 self.add_instr(Instr::PushConst(id));
 
                 let num_captures = compiler.num_captures;
@@ -239,8 +239,7 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
             let mut compiler = Compiler::new(&[]);
             compiler.compile(&expr);
             let func = compiler.finish();
-            let func = Value::Heap(Arc::new(HeapValue::Func(func)));
-            Value::Heap(Arc::new(HeapValue::Thunk(Thunk::new(func))))
+            Thunk::new(func.into()).into()
         }
     }
 }
