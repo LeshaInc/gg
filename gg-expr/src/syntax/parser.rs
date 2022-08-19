@@ -1,30 +1,25 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::diagnostic::{Component, Diagnostic, Label, Severity, Source, SourceComponent};
+use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
+use crate::Source;
 
-pub struct Parser<'a> {
-    source: &'a str,
+pub struct Parser {
+    source: Arc<Source>,
     tokens: Vec<Spanned<Token>>,
     pos: usize,
-    diagnostic_source: Arc<Source>,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl Parser<'_> {
-    pub fn new(source: &str) -> Parser<'_> {
-        let tokens = tokenize(source);
+impl Parser {
+    pub fn new(source: Arc<Source>) -> Parser {
+        let tokens = tokenize(&source.text);
         Parser {
             source,
             tokens,
             pos: 0,
-            diagnostic_source: Arc::new(Source::new("unknown.expr", source)),
             diagnostics: Vec::new(),
         }
-    }
-
-    pub fn source(&self) -> &str {
-        self.source
     }
 
     pub fn diagnostics(&mut self) -> impl Iterator<Item = Diagnostic> + '_ {
@@ -35,7 +30,7 @@ impl Parser<'_> {
         if let Some(token) = self.tokens.get(self.pos) {
             *token
         } else {
-            let len = self.source.len() as u32;
+            let len = self.source.text.len() as u32;
             let span = if len > 0 {
                 Span::new(len - 1, len)
             } else {
@@ -61,7 +56,7 @@ impl Parser<'_> {
             severity: Severity::Error,
             message: "syntax error".into(),
             components: vec![Component::Source(SourceComponent {
-                source: self.diagnostic_source.clone(),
+                source: self.source.clone(),
                 labels: vec![Label {
                     severity: Severity::Error,
                     span,
@@ -187,7 +182,7 @@ impl Parser<'_> {
 
     fn expr_int(&mut self) -> Spanned<Expr> {
         let span = self.next().span;
-        let slice = span.slice(self.source);
+        let slice = span.slice(&self.source.text);
 
         let expr = if let Some(stripped) = slice.strip_prefix("0x") {
             i64::from_str_radix(stripped, 16)
@@ -202,14 +197,14 @@ impl Parser<'_> {
 
     fn expr_float(&mut self) -> Spanned<Expr> {
         let span = self.next().span;
-        let slice = span.slice(self.source);
+        let slice = span.slice(&self.source.text);
         let expr = slice.parse().map(Expr::Float).unwrap_or(Expr::Error);
         Spanned::new(span, expr)
     }
 
     fn expr_string(&mut self) -> Spanned<Expr> {
         let span = self.next().span;
-        let slice = span.slice(self.source);
+        let slice = span.slice(&self.source.text);
         let str = slice[1..slice.len() - 1]
             .replace("\\\\", "\\")
             .replace("\\r", "\r")
@@ -221,7 +216,7 @@ impl Parser<'_> {
 
     fn expr_var(&mut self) -> Spanned<Expr> {
         let span = self.next().span;
-        let expr = Expr::Var(span.slice(self.source).into());
+        let expr = Expr::Var(span.slice(&self.source.text).into());
         Spanned::new(span, expr)
     }
 
@@ -260,7 +255,7 @@ impl Parser<'_> {
                 Token::RParen => break,
                 Token::Ident => {
                     self.next();
-                    args.push(token.span.slice(self.source).into());
+                    args.push(token.span.slice(&self.source.text).into());
                 }
                 _ => {
                     self.unexpected_token("function argument");
@@ -340,7 +335,7 @@ impl Parser<'_> {
 
         loop {
             let span = self.expect_token(&[Token::Ident]).span;
-            let var = span.slice(self.source).to_owned();
+            let var = span.slice(&self.source.text).to_owned();
             self.expect_token(&[Token::Assign]);
             let expr = self.expr();
             vars.push((var, Box::new(expr)));

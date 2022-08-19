@@ -1,14 +1,16 @@
 use std::io::Read;
+use std::sync::Arc;
 use std::time::Instant;
 
-use gg_expr::compile;
 use gg_expr::syntax::Parser;
+use gg_expr::{compile, Source};
 
 fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
 
-    let mut parser = Parser::new(&input);
+    let source = Arc::new(Source::new("unknown.expr".into(), input));
+    let mut parser = Parser::new(source);
 
     let expr = parser.expr();
 

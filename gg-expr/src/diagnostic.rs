@@ -5,50 +5,7 @@ use unicode_width::UnicodeWidthStr;
 use yansi::{Color, Paint};
 
 use crate::syntax::Span;
-
-#[derive(Clone, Debug)]
-pub struct Source {
-    pub name: String,
-    pub lines: Vec<Line>,
-}
-
-impl Source {
-    pub fn new(name: &str, source: &str) -> Source {
-        Source {
-            name: name.into(),
-            lines: source
-                .lines()
-                .enumerate()
-                .map(|(i, line)| {
-                    let start = (line.as_ptr() as usize) - (source.as_ptr() as usize);
-                    let end = start + line.len();
-                    Line {
-                        number: (i as u32) + 1,
-                        span: Span::new(start as u32, end as u32),
-                        text: line.into(),
-                    }
-                })
-                .collect(),
-        }
-    }
-
-    pub fn lines_in_span(&self, span: Span, extra: usize) -> &[Line] {
-        let mut it = self.lines.iter();
-        let start = it.position(|v| v.span.intersects(span)).unwrap_or(0);
-
-        let mut it = self.lines.iter();
-        let end = it.rposition(|v| v.span.intersects(span)).unwrap_or(0);
-
-        &self.lines[start.saturating_sub(extra)..=(end + extra).min(self.lines.len() - 1)]
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Line {
-    pub number: u32,
-    pub span: Span,
-    pub text: String,
-}
+use crate::{Line, Source};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Severity {
@@ -135,7 +92,7 @@ impl Display for SourceComponent {
             return Ok(());
         }
 
-        let mut grid = HlGrid::new(&self.source.name, lines);
+        let mut grid = HlGrid::new(&self.source, lines);
         for label in &self.labels {
             grid.add_label(label);
         }
@@ -164,21 +121,24 @@ struct Connector {
 }
 
 impl HlGrid {
-    fn new(name: &str, lines: &[Line]) -> HlGrid {
+    fn new(source: &Source, lines: &[Line]) -> HlGrid {
         let lines = lines
             .iter()
-            .map(|line| HlLine {
-                number: line.number,
-                text: line.text.clone(),
-                text_width: line.text.width(),
-                span: line.span,
-                cells: Vec::new(),
-                labels: Vec::new(),
+            .map(|line| {
+                let text = line.span.slice(&source.text).to_string();
+                HlLine {
+                    number: line.number,
+                    text_width: text.width(),
+                    text,
+                    span: line.span,
+                    cells: Vec::new(),
+                    labels: Vec::new(),
+                }
             })
             .collect();
 
         HlGrid {
-            name: name.into(),
+            name: source.name.clone(),
             lines,
             connectors: Vec::new(),
             cells: Vec::new(),
