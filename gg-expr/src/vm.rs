@@ -4,6 +4,7 @@ use std::sync::Arc;
 use indenter::indented;
 
 use crate::syntax::{BinOp, UnOp};
+use crate::value::HeapValue;
 use crate::Value;
 
 #[derive(Clone, Copy, Debug)]
@@ -56,7 +57,8 @@ impl Debug for Func {
 #[derive(Default)]
 pub struct Vm {
     stack: Vec<Value>,
-    callstack: Vec<Arc<Func>>,
+    callstack: Vec<Value>,
+    ipstack: Vec<usize>,
     ip: usize,
 }
 
@@ -65,27 +67,37 @@ impl Vm {
         Vm::default()
     }
 
-    pub fn eval(&mut self, func: Arc<Func>) -> Value {
+    pub fn eval(&mut self, func: Value) -> Value {
+        self.ipstack.push(0);
         self.callstack.push(func);
         self.run();
         self.stack.pop().unwrap()
     }
 
     fn run(&mut self) {
-        let func = self.callstack[self.callstack.len() - 1].clone();
-        self.ip = 0;
-        loop {
-            let instr = func.instrs[self.ip];
-            self.ip += 1;
+        'outer: while self.callstack.len() > 0 {
+            let func = self.callstack[self.callstack.len() - 1].clone();
+            let func = func.as_func().unwrap();
+            self.ip = self.ipstack[self.ipstack.len() - 1];
 
-            if matches!(instr, Instr::Ret) {
-                break;
+            'inner: loop {
+                let instr = func.instrs[self.ip];
+                self.ip += 1;
+
+                self.dispatch(&func, instr);
+
+                if matches!(instr, Instr::Ret) {
+                    break 'inner;
+                }
+
+                if matches!(instr, Instr::Call) {
+                    continue 'outer;
+                }
             }
 
-            self.dispatch(&func, instr);
+            self.callstack.pop();
+            self.ipstack.pop();
         }
-
-        self.callstack.pop();
     }
 
     fn dispatch(&mut self, func: &Func, instr: Instr) {
@@ -124,7 +136,7 @@ impl Vm {
 
     fn instr_push_func(&mut self, offset: u16) {
         let func = self.callstack[self.callstack.len() - usize::from(offset) - 1].clone();
-        self.stack.push(Value::Func(func));
+        self.stack.push(func);
     }
 
     fn instr_pop_swap(&mut self, count: u16) {
@@ -137,15 +149,11 @@ impl Vm {
     }
 
     fn instr_call(&mut self) {
-        match self.stack.pop() {
-            Some(Value::Func(func)) => {
-                let old_ip = self.ip;
-                self.callstack.push(func);
-                self.run();
-                self.ip = old_ip;
-            }
-            _ => panic!("not a func"),
-        }
+        let func = self.stack.pop().unwrap();
+        self.callstack.push(func);
+        self.ipstack.pop();
+        self.ipstack.push(self.ip);
+        self.ipstack.push(0);
     }
 
     fn instr_ret(&mut self) {}
@@ -174,22 +182,25 @@ impl Vm {
     }
 
     fn instr_new_func(&mut self, num_captures: u16) {
-        let mut func = match self.stack.pop() {
-            Some(Value::Func(func)) => func,
+        let mut value = self.stack.pop().unwrap();
+
+        let func = match &mut value {
+            Value::Heap(val) => match Arc::make_mut(val) {
+                HeapValue::Func(func) => func,
+                _ => panic!("not a func"),
+            },
             _ => panic!("not a func"),
         };
 
-        let func_ref = Arc::make_mut(&mut func);
-
-        func_ref.captures.clear();
+        func.captures.clear();
 
         for _ in 0..num_captures {
-            func_ref.captures.push(self.stack.pop().unwrap());
+            func.captures.push(self.stack.pop().unwrap());
         }
 
-        func_ref.captures.reverse();
+        func.captures.reverse();
 
-        self.stack.push(Value::Func(func));
+        self.stack.push(value);
     }
 
     fn instr_new_list(&mut self, _: u16) {

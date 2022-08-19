@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::syntax::{Expr, Spanned};
-use crate::value::Thunk;
+use crate::value::{HeapValue, Thunk};
 use crate::vm::{Func, Instr};
 use crate::Value;
 
@@ -82,7 +82,7 @@ impl<'expr> Compiler<'expr> {
                 self.add_instr(Instr::PushConst(id));
             }
             Expr::String(v) => {
-                let id = self.add_const(Value::String(v.clone()));
+                let id = self.add_const(Value::Heap(Arc::new(HeapValue::String((**v).clone()))));
                 self.add_instr(Instr::PushConst(id));
             }
             Expr::List(list) => {
@@ -102,7 +102,7 @@ impl<'expr> Compiler<'expr> {
                 let func = compiler.finish();
                 *self = *compiler.parent.unwrap();
 
-                let id = self.add_const(Value::Func(Arc::new(func)));
+                let id = self.add_const(Value::Heap(Arc::new(HeapValue::Func(func))));
                 self.add_instr(Instr::PushConst(id));
 
                 let num_captures = compiler.num_captures;
@@ -233,13 +233,14 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
             let mut compiler = Compiler::new(&func.args);
             compiler.compile(&func.expr);
             let func = compiler.finish();
-            Value::Func(Arc::new(func))
+            Value::Heap(Arc::new(HeapValue::Func(func)))
         }
         _ => {
             let mut compiler = Compiler::new(&[]);
             compiler.compile(&expr);
             let func = compiler.finish();
-            Value::Thunk(Arc::new(Thunk::new(func)))
+            let func = Value::Heap(Arc::new(HeapValue::Func(func)));
+            Value::Heap(Arc::new(HeapValue::Thunk(Thunk::new(func))))
         }
     }
 }

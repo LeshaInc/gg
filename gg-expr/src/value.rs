@@ -6,17 +6,31 @@ use arc_swap::ArcSwapOption;
 use crate::syntax::BinOp;
 use crate::vm::{Func, Vm};
 
-#[derive(Clone)]
 pub enum Value {
     Null,
     Int(i64),
     Float(f64),
     Bool(bool),
-    String(Arc<String>),
-    Func(Arc<Func>),
-    Thunk(Arc<Thunk>),
-    List(Box<im::Vector<Value>>),
-    Map(Box<im::HashMap<Arc<String>, Value>>),
+    Heap(Arc<HeapValue>),
+}
+
+#[derive(Clone)]
+pub enum HeapValue {
+    String(String),
+    Func(Func),
+    Thunk(Thunk),
+    List(im::Vector<Value>),
+    Map(im::HashMap<String, Value>),
+}
+
+impl Clone for Value {
+    fn clone(&self) -> Value {
+        if let Value::Heap(v) = self {
+            Value::Heap(v.clone())
+        } else {
+            unsafe { std::ptr::read(self) }
+        }
+    }
 }
 
 impl Debug for Value {
@@ -26,11 +40,13 @@ impl Debug for Value {
             Value::Int(v) => v.fmt(f),
             Value::Float(v) => v.fmt(f),
             Value::Bool(v) => v.fmt(f),
-            Value::String(v) => v.fmt(f),
-            Value::Func(v) => v.fmt(f),
-            Value::Thunk(v) => v.fmt(f),
-            Value::List(v) => v.fmt(f),
-            Value::Map(v) => v.fmt(f),
+            Value::Heap(v) => match &**v {
+                HeapValue::String(v) => v.fmt(f),
+                HeapValue::Func(v) => v.fmt(f),
+                HeapValue::Thunk(v) => v.fmt(f),
+                HeapValue::List(v) => v.fmt(f),
+                HeapValue::Map(v) => v.fmt(f),
+            },
         }
     }
 }
@@ -40,6 +56,16 @@ impl Value {
         match self {
             Value::Int(v) => *v,
             _ => panic!("not an integer"),
+        }
+    }
+
+    pub fn as_func(&self) -> Option<&Func> {
+        match self {
+            Value::Heap(v) => match &**v {
+                HeapValue::Func(func) => Some(func),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
@@ -61,14 +87,19 @@ impl Value {
     }
 
     pub fn force_eval(&self) {
-        match self {
-            Value::Thunk(v) => v.force_eval(),
-            Value::List(list) => {
+        let value = match self {
+            Value::Heap(v) => &**v,
+            _ => return,
+        };
+
+        match value {
+            HeapValue::Thunk(v) => v.force_eval(),
+            HeapValue::List(list) => {
                 for value in list.iter() {
                     value.force_eval()
                 }
             }
-            Value::Map(map) => {
+            HeapValue::Map(map) => {
                 for value in map.values() {
                     value.force_eval();
                 }
@@ -78,16 +109,17 @@ impl Value {
     }
 }
 
+#[derive(Clone)]
 pub struct Thunk {
-    pub func: Arc<Func>,
-    pub value: ArcSwapOption<Value>,
+    pub func: Value,
+    pub value: Arc<ArcSwapOption<Value>>,
 }
 
 impl Thunk {
-    pub fn new(func: Func) -> Thunk {
+    pub fn new(func: Value) -> Thunk {
         Thunk {
-            func: Arc::new(func),
-            value: ArcSwapOption::new(None),
+            func,
+            value: Arc::new(ArcSwapOption::new(None)),
         }
     }
 
@@ -98,7 +130,8 @@ impl Thunk {
         }
 
         let mut vm = Vm::new();
-        self.value.store(Some(Arc::new(vm.eval(self.func.clone()))));
+        let res = vm.eval(self.func.clone());
+        self.value.store(Some(Arc::new(res)));
     }
 }
 
