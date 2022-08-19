@@ -80,28 +80,45 @@ impl Display for BinOpExpr {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BinOp {
-    Or,
+    Or = 0,
 
-    And,
+    And = 1,
 
-    Lt,
-    Le,
-    Eq,
-    Neq,
-    Ge,
-    Gt,
+    Lt = 2,
+    Le = 3,
+    Eq = 4,
+    Neq = 5,
+    Ge = 6,
+    Gt = 7,
 
-    Add,
-    Sub,
+    Add = 8,
+    Sub = 9,
 
-    Mul,
-    Div,
-    Rem,
+    Mul = 10,
+    Div = 11,
+    Rem = 12,
 
-    Pow,
+    Pow = 13,
 }
 
 impl BinOp {
+    pub const VALUES: [BinOp; 14] = [
+        BinOp::Or,
+        BinOp::And,
+        BinOp::Lt,
+        BinOp::Le,
+        BinOp::Eq,
+        BinOp::Neq,
+        BinOp::Ge,
+        BinOp::Gt,
+        BinOp::Add,
+        BinOp::Sub,
+        BinOp::Mul,
+        BinOp::Div,
+        BinOp::Rem,
+        BinOp::Pow,
+    ];
+
     pub fn from_token(token: Token) -> Option<BinOp> {
         Some(match token {
             Token::Or => BinOp::Or,

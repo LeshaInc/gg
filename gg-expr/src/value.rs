@@ -6,23 +6,34 @@ use std::sync::Arc;
 use arc_swap::ArcSwapOption;
 use thiserror::Error;
 
-use crate::syntax::BinOp;
 use crate::vm::{Func, Vm};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Type {
-    Null,
-    Int,
-    Float,
-    Bool,
-    String,
-    Func,
-    Thunk,
-    List,
-    Map,
+    Null = 0,
+    Int = 1,
+    Float = 2,
+    Bool = 3,
+    String = 4,
+    Func = 5,
+    Thunk = 6,
+    List = 7,
+    Map = 8,
 }
 
 impl Type {
+    pub const VALUES: [Type; 9] = [
+        Type::Null,
+        Type::Int,
+        Type::Float,
+        Type::Bool,
+        Type::String,
+        Type::Func,
+        Type::Thunk,
+        Type::List,
+        Type::Map,
+    ];
+
     fn is_heap(&self) -> bool {
         use Type::*;
         matches!(self, String | Func | Thunk | List | Map)
@@ -127,15 +138,6 @@ impl Value {
 
     pub fn is_truthy(&self) -> bool {
         !self.is_null() && self.as_bool() != Ok(false)
-    }
-
-    pub fn bin_op(&self, other: &Value, op: BinOp) -> Value {
-        match op {
-            BinOp::Add => (self.as_int().unwrap() + other.as_int().unwrap()).into(),
-            BinOp::Sub => (self.as_int().unwrap() - other.as_int().unwrap()).into(),
-            BinOp::Lt => (self.as_int().unwrap() < other.as_int().unwrap()).into(),
-            _ => todo!(),
-        }
     }
 
     pub fn force_eval(&self) {

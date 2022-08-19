@@ -1,3 +1,5 @@
+mod bin_op;
+
 use std::fmt::{self, Debug, Write};
 use std::sync::Arc;
 
@@ -176,7 +178,7 @@ impl Vm {
     fn instr_bin_op(&mut self, op: BinOp) {
         let rhs = self.stack.pop().unwrap();
         let lhs = self.stack.pop().unwrap();
-        let res = lhs.bin_op(&rhs, op);
+        let res = bin_op::bin_op(&lhs, &rhs, op);
         self.stack.push(res);
     }
 
