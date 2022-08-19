@@ -4,7 +4,6 @@ use std::sync::Arc;
 use indenter::indented;
 
 use crate::syntax::{BinOp, UnOp};
-use crate::value::HeapValue;
 use crate::Value;
 
 #[derive(Clone, Copy, Debug)]
@@ -164,7 +163,7 @@ impl Vm {
 
     fn instr_jump_if(&mut self, offset: i16) {
         if let Some(value) = self.stack.pop() {
-            if value.is_true() {
+            if value.is_truthy() {
                 self.ip = (self.ip as isize + isize::from(offset)) as usize;
             }
         }
@@ -184,14 +183,7 @@ impl Vm {
     fn instr_new_func(&mut self, num_captures: u16) {
         let mut value = self.stack.pop().unwrap();
 
-        let func = match &mut value {
-            Value::Heap(val) => match Arc::make_mut(val) {
-                HeapValue::Func(func) => func,
-                _ => panic!("not a func"),
-            },
-            _ => panic!("not a func"),
-        };
-
+        let func = value.as_func_mut().unwrap();
         func.captures.clear();
 
         for _ in 0..num_captures {

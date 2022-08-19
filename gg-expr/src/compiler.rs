@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::syntax::{Expr, Spanned};
-use crate::value::{HeapValue, Thunk};
+use crate::value::Thunk;
 use crate::vm::{Func, Instr};
 use crate::Value;
 
@@ -233,7 +232,7 @@ pub fn compile(expr: &Spanned<Expr>) -> Value {
             let mut compiler = Compiler::new(&func.args);
             compiler.compile(&func.expr);
             let func = compiler.finish();
-            Value::Heap(Arc::new(HeapValue::Func(func)))
+            func.into()
         }
         _ => {
             let mut compiler = Compiler::new(&[]);

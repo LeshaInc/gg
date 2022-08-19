@@ -644,6 +644,7 @@ dependencies = [
  "im",
  "indenter",
  "logos",
+ "thiserror",
  "unicode-width",
  "yansi",
 ]
