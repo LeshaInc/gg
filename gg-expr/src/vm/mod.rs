@@ -177,9 +177,8 @@ impl Vm {
 
     fn instr_bin_op(&mut self, op: BinOp) {
         let rhs = self.stack.pop().unwrap();
-        let lhs = self.stack.pop().unwrap();
-        let res = bin_op::bin_op(&lhs, &rhs, op);
-        self.stack.push(res);
+        let lhs = self.stack.last_mut().unwrap();
+        *lhs = bin_op::bin_op(&lhs, &rhs, op);
     }
 
     fn instr_new_func(&mut self, num_captures: u16) {
