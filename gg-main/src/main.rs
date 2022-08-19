@@ -1,6 +1,5 @@
 mod fps_counter;
 
-use std::io::Read;
 use std::time::Instant;
 
 use gg_assets::{Assets, DirSource};
@@ -17,39 +16,8 @@ use winit::window::WindowBuilder;
 
 use self::fps_counter::FpsCounter;
 
-fn main_expr() -> Result<()> {
-    let mut input = String::new();
-    std::io::stdin().read_to_string(&mut input)?;
-
-    let mut parser = gg_expr::syntax::Parser::new(&input);
-
-    let expr = parser.expr();
-
-    println!("{}", expr);
-
-    for diagnostic in parser.diagnostics() {
-        println!("{}", diagnostic);
-    }
-
-    let value = gg_expr::compiler::compile(&expr);
-
-    println!();
-    println!("{:?}", value);
-    println!();
-    let t = std::time::Instant::now();
-    value.force_eval();
-    println!("{:?}", value);
-    println!("took {:?}", t.elapsed());
-
-    Ok(())
-}
-
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-
-    if std::env::args().nth(1) == Some("expr".into()) {
-        return main_expr();
-    }
 
     let mut path = std::env::current_exe()?;
     path.pop();
