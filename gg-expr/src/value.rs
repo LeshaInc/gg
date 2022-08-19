@@ -4,7 +4,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwapOption;
 
 use crate::syntax::BinOp;
-use crate::vm::{interpret, Func};
+use crate::vm::{Func, Vm};
 
 #[derive(Clone)]
 pub enum Value {
@@ -97,9 +97,8 @@ impl Thunk {
             return;
         }
 
-        let mut stack = Vec::new();
-        interpret(&mut stack, &mut vec![self.func.clone()]);
-        self.value.store(stack.pop().map(Arc::new));
+        let mut vm = Vm::new();
+        self.value.store(Some(Arc::new(vm.eval(self.func.clone()))));
     }
 }
 
