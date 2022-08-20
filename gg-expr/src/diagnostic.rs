@@ -87,7 +87,7 @@ impl Display for SourceComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let max_span = max_span(self.labels.iter().map(|l| l.span));
 
-        let lines = self.source.lines_in_span(max_span, 1);
+        let lines = self.source.lines_in_span(max_span, 3);
         if lines.is_empty() {
             return Ok(());
         }
@@ -263,9 +263,8 @@ impl Display for HlGrid {
 
         writeln!(
             f,
-            " {0:>1$} {2} {3}",
-            "",
-            width,
+            "{}{} {}",
+            " ".repeat(width + 2),
             style.paint("╭──"),
             Color::Cyan.paint(&self.name).bold().underline()
         )?;
@@ -298,12 +297,7 @@ impl Display for HlGrid {
             }
         }
 
-        write!(
-            f,
-            "{}{} ",
-            style.paint("─".repeat(width + 2)),
-            style.paint("╯")
-        )?;
+        writeln!(f, "{}{} ", " ".repeat(width + 2), style.paint("╰──"))?;
 
         Ok(())
     }
@@ -362,7 +356,7 @@ impl HlLine {
         let len = self.text[start..end].width().max(1);
 
         let mut y = 0;
-        loop {
+        let cells = loop {
             self.extend_down(y + 1);
 
             let cells = &mut self.cells[y][pos..pos + len + 1];
@@ -371,35 +365,41 @@ impl HlLine {
                 continue;
             }
 
-            for cell in cells.iter_mut().take(len) {
-                *cell = ('━', color);
-            }
+            break cells;
+        };
 
-            if !extend_right {
-                cells[1.min(len - 1)] = ('┯', color);
-            }
-
-            if extend_right {
-                cells[cells.len() - 1] = ('╮', color);
-            }
-
-            break;
+        for cell in cells.iter_mut().take(len) {
+            *cell = ('━', color);
         }
 
         if extend_right {
+            cells[cells.len() - 1] = ('╮', color);
+
             let ny = self.height();
             self.extend_down(ny + 1);
 
-            for cell in &mut self.cells[ny] {
+            for cell in &mut self.cells[ny][..self.text_width] {
                 *cell = ('─', color);
             }
 
             self.cells[ny][self.text_width] = ('╯', color);
             self.vline(color, self.text_width, y + 1, ny - 1);
-        } else {
-            self.labels
-                .push((pos + 1.min(len - 1), y, color, label.message.clone()))
+            return;
         }
+
+        let mut label_pos = pos + 1.min(len - 1);
+        if self.labels.iter().any(|&(pos, ..)| pos == label_pos) {
+            label_pos = pos;
+        }
+
+        while label_pos < pos + len && self.labels.iter().any(|&(pos, ..)| pos == label_pos) {
+            label_pos += 1;
+        }
+
+        cells[label_pos - pos] = ('┯', color);
+
+        self.labels
+            .push((label_pos, y, color, label.message.clone()))
     }
 
     fn vline(&mut self, color: Color, x: usize, y0: usize, y1: usize) {

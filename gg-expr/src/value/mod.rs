@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-pub use self::func::Func;
+pub use self::func::{DebugInfo, Func};
 pub use self::thunk::Thunk;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
