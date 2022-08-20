@@ -232,6 +232,12 @@ impl From<String> for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(value: &str) -> Value {
+        Value::new_heap(Type::String, HeapValue::String(value.into()))
+    }
+}
+
 impl From<Func> for Value {
     fn from(value: Func) -> Value {
         Value::new_heap(Type::Func, HeapValue::Func(value))

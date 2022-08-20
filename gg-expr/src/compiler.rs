@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::syntax::{Expr, Span, Spanned};
+use crate::syntax::{
+    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, Span, Spanned, UnOpExpr,
+};
 use crate::{DebugInfo, Func, Instruction, Source, Thunk, Value};
 
 #[derive(Default)]
@@ -78,147 +80,170 @@ impl<'expr> Compiler<'expr> {
     }
 
     fn compile(&mut self, expr: &'expr Spanned<Expr>) {
+        let span = expr.span;
         match &expr.item {
-            &Expr::Int(v) => {
-                let id = self.add_const(v.into());
-                self.add_instr(vec![expr.span], Instruction::PushConst(id));
-            }
-            &Expr::Float(v) => {
-                let id = self.add_const(v.into());
-                self.add_instr(vec![expr.span], Instruction::PushConst(id));
-            }
-            Expr::String(v) => {
-                let id = self.add_const((**v).clone().into());
-                self.add_instr(vec![expr.span], Instruction::PushConst(id));
-            }
-            Expr::List(list) => {
-                for expr in &list.exprs {
-                    self.compile(expr);
-                }
-
-                let len = u16::try_from(list.exprs.len()).expect("list too long");
-                self.add_instr(vec![expr.span], Instruction::NewList(len));
-            }
-            Expr::Func(func) => {
-                let parent = std::mem::take(self);
-                let mut compiler = Compiler::new(parent.debug_info.source.clone(), &func.args);
-                compiler.name = parent.inner_name;
-                compiler.debug_info.span = expr.span;
-                compiler.parent = Some(Box::new(parent));
-                compiler.compile(&func.expr);
-                let func = compiler.finish();
-                *self = *compiler.parent.unwrap();
-
-                let id = self.add_const(func.into());
-                self.add_instr(vec![expr.span], Instruction::PushConst(id));
-
-                let num_captures = compiler.num_captures;
-                if num_captures > 0 {
-                    self.add_instr(vec![expr.span], Instruction::NewFunc(num_captures));
-                }
-            }
-            Expr::Call(call) => {
-                for arg in &call.args {
-                    self.compile(arg);
-                }
-
-                self.compile(&call.func);
-                self.add_instr(vec![expr.span, call.func.span], Instruction::Call);
-
-                self.stack_len -= call.args.len() as u16 + 1;
-            }
-            Expr::Var(name) => {
-                let mut depth = 0;
-                let mut current = &mut *self;
-
-                loop {
-                    if let Some(location) = current.scope.vars.get(&**name) {
-                        match location {
-                            VarLocation::Stack(idx) => {
-                                let pos = current.stack_len - idx - 1;
-                                current.add_instr(vec![], Instruction::PushCopy(pos));
-                            }
-                            VarLocation::Capture(idx) => {
-                                current.add_instr(vec![], Instruction::PushCapture(*idx));
-                            }
-                        }
-
-                        current = &mut *self;
-
-                        for _ in 0..depth {
-                            let idx = current.num_captures;
-                            let location = VarLocation::Capture(idx);
-                            current.instructions.push(Instruction::PushCapture(idx));
-                            current.scope.vars.insert(&**name, location);
-                            current.num_captures += 1;
-                            current = current.parent.as_mut().unwrap();
-                        }
-
-                        break;
-                    } else if current.name == Some(&**name) {
-                        self.add_instr(vec![], Instruction::PushFunc(depth));
-                        break;
-                    } else if let Some(parent) = &mut current.parent {
-                        current = parent;
-                        depth += 1;
-                    } else {
-                        panic!("cannot find {}", name);
-                    }
-                }
-            }
-            Expr::BinOp(bin_op) => {
-                self.compile(&bin_op.lhs);
-                self.compile(&bin_op.rhs);
-                let spans = vec![expr.span, bin_op.lhs.span, bin_op.rhs.span];
-                self.add_instr(spans, Instruction::BinOp(bin_op.op));
-                self.stack_len -= 2;
-            }
-            Expr::UnOp(un_op) => {
-                self.compile(&un_op.expr);
-                let spans = vec![expr.span, un_op.expr.span];
-                self.add_instr(spans, Instruction::UnOp(un_op.op));
-                self.stack_len -= 1;
-            }
-            Expr::IfElse(expr) => {
-                self.compile(&expr.cond);
-
-                let start = self.add_instr(vec![], Instruction::Nop);
-                self.stack_len -= 1;
-                self.compile(&expr.if_false);
-                self.stack_len -= 1;
-                let mid = self.add_instr(vec![], Instruction::Nop);
-                self.compile(&expr.if_true);
-                let end = self.instructions.len();
-
-                let offset = i16::try_from(mid - start).expect("jump too far");
-                self.instructions[start] = Instruction::JumpIf(offset);
-
-                let offset = i16::try_from(end - mid - 1).expect("jump too far");
-                self.instructions[mid] = Instruction::Jump(offset);
-            }
-            Expr::LetIn(expr) => {
-                self.parent_scopes.push(self.scope.clone());
-
-                for (binding, expr) in &expr.vars {
-                    let idx = self.stack_len;
-                    self.inner_name = Some(&*binding);
-                    self.compile(expr);
-                    self.inner_name = None;
-                    self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
-                }
-
-                self.compile(&expr.expr);
-
-                let num_vars = expr.vars.len() as u16;
-                self.add_instr(vec![], Instruction::PopSwap(num_vars));
-                self.stack_len -= num_vars;
-
-                self.parent_scopes.pop();
-            }
-            Expr::Error => {}
+            Expr::Int(int) => self.compile_int(span, *int),
+            Expr::Float(float) => self.compile_float(span, *float),
+            Expr::String(string) => self.compile_string(span, string),
+            Expr::Var(name) => self.compile_var(name),
+            Expr::BinOp(bin_op) => self.compile_bin_op(span, bin_op),
+            Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
+            Expr::List(list) => self.compile_list(span, &list.exprs),
+            Expr::Func(func) => self.compile_func(span, func),
+            Expr::Call(call) => self.compile_call(span, call),
+            Expr::IfElse(if_else) => self.compile_if_else(span, if_else),
+            Expr::LetIn(let_in) => self.compile_let_in(let_in),
+            _ => {}
         }
 
         self.stack_len += 1;
+    }
+
+    fn compile_int(&mut self, span: Span, int: i64) {
+        let id = self.add_const(int.into());
+        self.add_instr(vec![span], Instruction::PushConst(id));
+    }
+
+    fn compile_float(&mut self, span: Span, float: f64) {
+        let id = self.add_const(float.into());
+        self.add_instr(vec![span], Instruction::PushConst(id));
+    }
+
+    fn compile_string(&mut self, span: Span, string: &str) {
+        let id = self.add_const(string.into());
+        self.add_instr(vec![span], Instruction::PushConst(id));
+    }
+
+    fn compile_list(&mut self, span: Span, list: &'expr [Spanned<Expr>]) {
+        for expr in list {
+            self.compile(expr);
+        }
+
+        let len = u16::try_from(list.len()).expect("list too long");
+        self.add_instr(vec![span], Instruction::NewList(len));
+    }
+
+    fn compile_func(&mut self, span: Span, func: &'expr FuncExpr) {
+        let parent = std::mem::take(self);
+        let mut compiler = Compiler::new(parent.debug_info.source.clone(), &func.args);
+        compiler.name = parent.inner_name;
+        compiler.debug_info.span = span;
+        compiler.parent = Some(Box::new(parent));
+        compiler.compile(&func.expr);
+        let func = compiler.finish();
+        *self = *compiler.parent.unwrap();
+
+        let id = self.add_const(func.into());
+        self.add_instr(vec![span], Instruction::PushConst(id));
+
+        let num_captures = compiler.num_captures;
+        if num_captures > 0 {
+            self.add_instr(vec![span], Instruction::NewFunc(num_captures));
+        }
+    }
+
+    fn compile_call(&mut self, span: Span, call: &'expr CallExpr) {
+        for arg in &call.args {
+            self.compile(arg);
+        }
+
+        self.compile(&call.func);
+        self.add_instr(vec![span, call.func.span], Instruction::Call);
+
+        self.stack_len -= call.args.len() as u16 + 1;
+    }
+
+    fn compile_var(&mut self, name: &'expr str) {
+        let mut depth = 0;
+        let mut current = &mut *self;
+
+        loop {
+            if let Some(location) = current.scope.vars.get(name) {
+                match location {
+                    VarLocation::Stack(idx) => {
+                        let pos = current.stack_len - idx - 1;
+                        current.add_instr(vec![], Instruction::PushCopy(pos));
+                    }
+                    VarLocation::Capture(idx) => {
+                        current.add_instr(vec![], Instruction::PushCapture(*idx));
+                    }
+                }
+
+                current = &mut *self;
+
+                for _ in 0..depth {
+                    let idx = current.num_captures;
+                    let location = VarLocation::Capture(idx);
+                    current.instructions.push(Instruction::PushCapture(idx));
+                    current.scope.vars.insert(name, location);
+                    current.num_captures += 1;
+                    current = current.parent.as_mut().unwrap();
+                }
+
+                break;
+            } else if current.name == Some(name) {
+                self.add_instr(vec![], Instruction::PushFunc(depth));
+                break;
+            } else if let Some(parent) = &mut current.parent {
+                current = parent;
+                depth += 1;
+            } else {
+                panic!("cannot find {}", name);
+            }
+        }
+    }
+
+    fn compile_bin_op(&mut self, span: Span, bin_op: &'expr BinOpExpr) {
+        self.compile(&bin_op.lhs);
+        self.compile(&bin_op.rhs);
+        let spans = vec![span, bin_op.lhs.span, bin_op.rhs.span];
+        self.add_instr(spans, Instruction::BinOp(bin_op.op));
+        self.stack_len -= 2;
+    }
+
+    fn compile_un_op(&mut self, span: Span, un_op: &'expr UnOpExpr) {
+        self.compile(&un_op.expr);
+        let spans = vec![span, un_op.expr.span];
+        self.add_instr(spans, Instruction::UnOp(un_op.op));
+        self.stack_len -= 1;
+    }
+
+    fn compile_if_else(&mut self, span: Span, if_else: &'expr IfElseExpr) {
+        self.compile(&if_else.cond);
+
+        let start = self.add_instr(vec![span, if_else.cond.span], Instruction::Nop);
+        self.stack_len -= 1;
+        self.compile(&if_else.if_false);
+        self.stack_len -= 1;
+        let mid = self.add_instr(vec![], Instruction::Nop);
+        self.compile(&if_else.if_true);
+        let end = self.instructions.len();
+
+        let offset = i16::try_from(mid - start).expect("jump too far");
+        self.instructions[start] = Instruction::JumpIf(offset);
+
+        let offset = i16::try_from(end - mid - 1).expect("jump too far");
+        self.instructions[mid] = Instruction::Jump(offset);
+    }
+
+    fn compile_let_in(&mut self, let_in: &'expr LetInExpr) {
+        self.parent_scopes.push(self.scope.clone());
+
+        for (binding, expr) in &let_in.vars {
+            let idx = self.stack_len;
+            self.inner_name = Some(&*binding);
+            self.compile(expr);
+            self.inner_name = None;
+            self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
+        }
+
+        self.compile(&let_in.expr);
+
+        let num_vars = let_in.vars.len() as u16;
+        self.add_instr(vec![], Instruction::PopSwap(num_vars));
+        self.stack_len -= num_vars;
+
+        self.parent_scopes.pop();
     }
 
     fn finish(&mut self) -> Func {
