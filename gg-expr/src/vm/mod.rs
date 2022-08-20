@@ -34,17 +34,25 @@ impl Vm {
         Vm::default()
     }
 
-    pub fn eval(&mut self, func: Value) -> Value {
+    pub fn eval(&mut self, func: &Value, args: &[Value]) -> Value {
         self.ipstack.push(0);
-        self.callstack.push(func);
+        self.callstack.push(func.clone());
+        self.stack.extend(args.iter().cloned());
         self.run();
         self.stack.pop().unwrap()
     }
 
     fn run(&mut self) {
         'outer: while self.callstack.len() > 0 {
-            let func = self.callstack[self.callstack.len() - 1].clone();
-            let func = func.as_func().unwrap();
+            let value = self.callstack[self.callstack.len() - 1].clone();
+            let value = if let Ok(thunk) = value.as_thunk() {
+                thunk.force_eval()
+            } else {
+                &value
+            };
+
+            let func = value.as_func().unwrap();
+
             self.ip = self.ipstack[self.ipstack.len() - 1];
 
             'inner: loop {

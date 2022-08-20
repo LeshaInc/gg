@@ -24,6 +24,7 @@
         devShell = with pkgs; mkShell rec {
           buildInputs = [
             toolchain
+            cargo-criterion
             rnix-lsp
             vulkan-loader
             vulkan-validation-layers
@@ -31,6 +32,7 @@
             xorg.libXcursor
             xorg.libXrandr
             xorg.libXi
+            gnuplot
           ];
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;

@@ -22,7 +22,7 @@ impl Thunk {
     pub fn force_eval(&self) -> &Value {
         self.value.get_or_init(|| {
             let mut vm = Vm::new();
-            vm.eval(self.func.clone())
+            vm.eval(&self.func, &[])
         })
     }
 }
