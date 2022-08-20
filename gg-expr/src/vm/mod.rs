@@ -3,6 +3,7 @@ mod bin_op;
 use crate::syntax::{BinOp, UnOp};
 use crate::{Func, Value};
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum Instruction {
     Nop,
