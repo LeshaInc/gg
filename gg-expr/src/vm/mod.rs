@@ -6,19 +6,19 @@ use crate::{Func, Value};
 #[derive(Clone, Copy, Debug)]
 pub enum Instruction {
     Nop,
-    PushCopy(u16),
-    PushConst(u16),
-    PushCapture(u16),
-    PushFunc(u16),
-    PopSwap(u16),
+    PushCopy(u32),
+    PushConst(u32),
+    PushCapture(u32),
+    PushFunc(u32),
+    PopSwap(u32),
     Call,
     Ret,
-    Jump(i16),
-    JumpIf(i16),
+    Jump(i32),
+    JumpIf(i32),
     UnOp(UnOp),
     BinOp(BinOp),
-    NewList(u16),
-    NewFunc(u16),
+    NewList(u32),
+    NewFunc(u32),
 }
 
 #[derive(Default)]
@@ -88,26 +88,26 @@ impl Vm {
 
     fn instr_nop(&mut self) {}
 
-    fn instr_push_copy(&mut self, offset: u16) {
-        let idx = self.stack.len() - usize::from(offset) - 1;
+    fn instr_push_copy(&mut self, offset: u32) {
+        let idx = self.stack.len() - (offset as usize) - 1;
         self.stack.push(self.stack[idx].clone());
     }
 
-    fn instr_push_const(&mut self, func: &Func, idx: u16) {
-        self.stack.push(func.consts[usize::from(idx)].clone());
+    fn instr_push_const(&mut self, func: &Func, idx: u32) {
+        self.stack.push(func.consts[(idx as usize)].clone());
     }
 
-    fn instr_push_capture(&mut self, func: &Func, idx: u16) {
-        self.stack.push(func.captures[usize::from(idx)].clone());
+    fn instr_push_capture(&mut self, func: &Func, idx: u32) {
+        self.stack.push(func.captures[(idx as usize)].clone());
     }
 
-    fn instr_push_func(&mut self, offset: u16) {
-        let func = self.callstack[self.callstack.len() - usize::from(offset) - 1].clone();
+    fn instr_push_func(&mut self, offset: u32) {
+        let func = self.callstack[self.callstack.len() - (offset as usize) - 1].clone();
         self.stack.push(func);
     }
 
-    fn instr_pop_swap(&mut self, count: u16) {
-        let idx = self.stack.len() - usize::from(count) - 1;
+    fn instr_pop_swap(&mut self, count: u32) {
+        let idx = self.stack.len() - (count as usize) - 1;
         let last = self.stack.len() - 1;
         self.stack.swap(idx, last);
         for _ in 0..count {
@@ -125,14 +125,14 @@ impl Vm {
 
     fn instr_ret(&mut self) {}
 
-    fn instr_jump(&mut self, offset: i16) {
-        self.ip = (self.ip as isize + isize::from(offset)) as usize;
+    fn instr_jump(&mut self, offset: i32) {
+        self.ip = (self.ip as isize + (offset as isize)) as usize;
     }
 
-    fn instr_jump_if(&mut self, offset: i16) {
+    fn instr_jump_if(&mut self, offset: i32) {
         if let Some(value) = self.stack.pop() {
             if value.is_truthy() {
-                self.ip = (self.ip as isize + isize::from(offset)) as usize;
+                self.ip = (self.ip as isize + (offset as isize)) as usize;
             }
         }
     }
@@ -147,7 +147,7 @@ impl Vm {
         *lhs = bin_op::bin_op(&lhs, &rhs, op);
     }
 
-    fn instr_new_func(&mut self, num_captures: u16) {
+    fn instr_new_func(&mut self, num_captures: u32) {
         let mut value = self.stack.pop().unwrap();
 
         let func = value.as_func_mut().unwrap();
@@ -162,7 +162,7 @@ impl Vm {
         self.stack.push(value);
     }
 
-    fn instr_new_list(&mut self, _: u16) {
+    fn instr_new_list(&mut self, _: u32) {
         todo!()
     }
 }

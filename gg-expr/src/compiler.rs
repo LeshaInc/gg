@@ -16,9 +16,9 @@ pub struct Compiler<'expr> {
     instructions: Vec<Instruction>,
     consts: Vec<Value>,
     debug_info: DebugInfo,
-    num_captures: u16,
-    arity: u16,
-    stack_len: u16,
+    num_captures: u32,
+    arity: u32,
+    stack_len: u32,
 }
 
 #[derive(Clone, Default)]
@@ -32,7 +32,7 @@ impl Scope<'_> {
             vars: args
                 .iter()
                 .enumerate()
-                .map(|(i, v)| (&**v, VarLocation::Stack(i as u16)))
+                .map(|(i, v)| (&**v, VarLocation::Stack(i as u32)))
                 .collect(),
         }
     }
@@ -40,8 +40,8 @@ impl Scope<'_> {
 
 #[derive(Clone, Copy)]
 enum VarLocation {
-    Stack(u16),
-    Capture(u16),
+    Stack(u32),
+    Capture(u32),
 }
 
 impl<'expr> Compiler<'expr> {
@@ -56,8 +56,8 @@ impl<'expr> Compiler<'expr> {
             consts: Vec::new(),
             debug_info: DebugInfo::new(source),
             num_captures: 0,
-            arity: args.len() as u16,
-            stack_len: args.len() as u16,
+            arity: args.len() as u32,
+            stack_len: args.len() as u32,
         }
     }
 
@@ -68,8 +68,8 @@ impl<'expr> Compiler<'expr> {
         idx
     }
 
-    fn add_const(&mut self, value: Value) -> u16 {
-        let idx = self.consts.len() as u16;
+    fn add_const(&mut self, value: Value) -> u32 {
+        let idx = self.consts.len() as u32;
         self.consts.push(value);
         idx
     }
@@ -119,7 +119,7 @@ impl<'expr> Compiler<'expr> {
             self.compile(expr);
         }
 
-        let len = u16::try_from(list.len()).expect("list too long");
+        let len = u32::try_from(list.len()).expect("list too long");
         self.add_instr(vec![span], Instruction::NewList(len));
     }
 
@@ -150,7 +150,7 @@ impl<'expr> Compiler<'expr> {
         self.compile(&call.func);
         self.add_instr(vec![span, call.func.span], Instruction::Call);
 
-        self.stack_len -= call.args.len() as u16 + 1;
+        self.stack_len -= call.args.len() as u32 + 1;
     }
 
     fn compile_var(&mut self, name: &'expr str) {
@@ -219,10 +219,10 @@ impl<'expr> Compiler<'expr> {
         self.compile(&if_else.if_true);
         let end = self.instructions.len();
 
-        let offset = i16::try_from(mid - start).expect("jump too far");
+        let offset = i32::try_from(mid - start).expect("jump too far");
         self.instructions[start] = Instruction::JumpIf(offset);
 
-        let offset = i16::try_from(end - mid - 1).expect("jump too far");
+        let offset = i32::try_from(end - mid - 1).expect("jump too far");
         self.instructions[mid] = Instruction::Jump(offset);
     }
 
@@ -239,7 +239,7 @@ impl<'expr> Compiler<'expr> {
 
         self.compile(&let_in.expr);
 
-        let num_vars = let_in.vars.len() as u16;
+        let num_vars = let_in.vars.len() as u32;
         self.add_instr(vec![], Instruction::PopSwap(num_vars));
         self.stack_len -= num_vars;
 
