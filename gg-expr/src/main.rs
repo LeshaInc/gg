@@ -21,7 +21,11 @@ fn main() {
         println!("{}", diagnostic);
     }
 
-    let value = compile(source, &expr);
+    let (value, diagnostics) = compile(source, &expr);
+
+    for diagnostic in diagnostics {
+        println!("{}", diagnostic);
+    }
 
     if let Ok(thunk) = value.as_thunk() {
         let func = thunk.func.as_func().unwrap();

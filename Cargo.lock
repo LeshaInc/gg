@@ -768,6 +768,7 @@ dependencies = [
  "indenter",
  "logos",
  "once_cell",
+ "strsim",
  "thiserror",
  "unicode-width",
  "yansi",

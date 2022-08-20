@@ -7,6 +7,7 @@ use crate::{Func, Value};
 #[derive(Clone, Copy, Debug)]
 pub enum Instruction {
     Nop,
+    Panic,
     PushCopy(u32),
     PushConst(u32),
     PushCapture(u32),
@@ -79,6 +80,7 @@ impl Vm {
     fn dispatch(&mut self, func: &Func, instr: Instruction) {
         match instr {
             Instruction::Nop => self.instr_nop(),
+            Instruction::Panic => self.instr_panic(),
             Instruction::PushCopy(v) => self.instr_push_copy(v),
             Instruction::PushConst(v) => self.instr_push_const(func, v),
             Instruction::PushCapture(v) => self.instr_push_capture(func, v),
@@ -96,6 +98,10 @@ impl Vm {
     }
 
     fn instr_nop(&mut self) {}
+
+    fn instr_panic(&mut self) {
+        panic!("vm panicked!");
+    }
 
     fn instr_push_copy(&mut self, offset: u32) {
         let idx = self.stack.len() - (offset as usize) - 1;

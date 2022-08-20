@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::sync::Arc;
 
+use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
 use crate::syntax::{
     BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, Span, Spanned, UnOpExpr,
 };
@@ -16,6 +18,7 @@ pub struct Compiler<'expr> {
     instructions: Vec<Instruction>,
     consts: Vec<Value>,
     debug_info: DebugInfo,
+    diagnostics: Vec<Diagnostic>,
     num_captures: u32,
     arity: u32,
     stack_len: u32,
@@ -55,9 +58,55 @@ impl<'expr> Compiler<'expr> {
             instructions: Vec::new(),
             consts: Vec::new(),
             debug_info: DebugInfo::new(source),
+            diagnostics: Vec::new(),
             num_captures: 0,
             arity: args.len() as u32,
             stack_len: args.len() as u32,
+        }
+    }
+
+    pub fn diagnostics(&mut self) -> impl Iterator<Item = Diagnostic> + '_ {
+        self.diagnostics.drain(..)
+    }
+
+    fn add_error(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
+        self.instructions.push(Instruction::Panic);
+    }
+
+    fn add_simple_error(&mut self, span: Span, message: &str, label: &str) {
+        self.add_error(Diagnostic {
+            severity: Severity::Error,
+            message: message.into(),
+            components: vec![Component::Source(SourceComponent {
+                source: self.debug_info.source.clone(),
+                labels: vec![Label {
+                    severity: Severity::Error,
+                    span,
+                    message: label.into(),
+                }],
+            })],
+        });
+    }
+
+    fn try_from_usize<U: Default + TryFrom<usize>>(
+        &mut self,
+        span: Span,
+        message: &str,
+        value: usize,
+    ) -> U {
+        match value.try_into() {
+            Ok(v) => v,
+            Err(_) => {
+                let label = format!(
+                    "`{}` does not fit into `{}`",
+                    value,
+                    std::any::type_name::<U>()
+                );
+
+                self.add_simple_error(span, message, &label);
+                U::default()
+            }
         }
     }
 
@@ -68,10 +117,10 @@ impl<'expr> Compiler<'expr> {
         idx
     }
 
-    fn add_const(&mut self, value: Value) -> u32 {
-        let idx = self.consts.len() as u32;
+    fn compile_const(&mut self, span: Span, value: Value) {
+        let idx = self.try_from_usize(span, "too many constants", self.consts.len());
         self.consts.push(value);
-        idx
+        self.add_instr(vec![span], Instruction::PushConst(idx));
     }
 
     fn compile_root(&mut self, expr: &'expr Spanned<Expr>) {
@@ -85,33 +134,34 @@ impl<'expr> Compiler<'expr> {
             Expr::Int(int) => self.compile_int(span, *int),
             Expr::Float(float) => self.compile_float(span, *float),
             Expr::String(string) => self.compile_string(span, string),
-            Expr::Var(name) => self.compile_var(name),
+            Expr::Var(name) => self.compile_var(span, name),
             Expr::BinOp(bin_op) => self.compile_bin_op(span, bin_op),
             Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
             Expr::List(list) => self.compile_list(span, &list.exprs),
             Expr::Func(func) => self.compile_func(span, func),
             Expr::Call(call) => self.compile_call(span, call),
             Expr::IfElse(if_else) => self.compile_if_else(span, if_else),
-            Expr::LetIn(let_in) => self.compile_let_in(let_in),
+            Expr::LetIn(let_in) => self.compile_let_in(span, let_in),
             _ => {}
         }
 
-        self.stack_len += 1;
+        if self.stack_len == u32::MAX {
+            self.add_simple_error(span, "stack overflow", "reached `2**32-1` stack entries");
+        } else {
+            self.stack_len += 1;
+        }
     }
 
     fn compile_int(&mut self, span: Span, int: i64) {
-        let id = self.add_const(int.into());
-        self.add_instr(vec![span], Instruction::PushConst(id));
+        self.compile_const(span, int.into());
     }
 
     fn compile_float(&mut self, span: Span, float: f64) {
-        let id = self.add_const(float.into());
-        self.add_instr(vec![span], Instruction::PushConst(id));
+        self.compile_const(span, float.into());
     }
 
     fn compile_string(&mut self, span: Span, string: &str) {
-        let id = self.add_const(string.into());
-        self.add_instr(vec![span], Instruction::PushConst(id));
+        self.compile_const(span, string.into());
     }
 
     fn compile_list(&mut self, span: Span, list: &'expr [Spanned<Expr>]) {
@@ -119,22 +169,23 @@ impl<'expr> Compiler<'expr> {
             self.compile(expr);
         }
 
-        let len = u32::try_from(list.len()).expect("list too long");
+        let len = self.try_from_usize(span, "list too long", list.len());
         self.add_instr(vec![span], Instruction::NewList(len));
     }
 
     fn compile_func(&mut self, span: Span, func: &'expr FuncExpr) {
-        let parent = std::mem::take(self);
+        let mut parent = std::mem::take(self);
         let mut compiler = Compiler::new(parent.debug_info.source.clone(), &func.args);
         compiler.name = parent.inner_name;
         compiler.debug_info.span = span;
+        compiler.diagnostics = std::mem::take(&mut parent.diagnostics);
         compiler.parent = Some(Box::new(parent));
         compiler.compile(&func.expr);
         let func = compiler.finish();
         *self = *compiler.parent.unwrap();
+        self.diagnostics = compiler.diagnostics;
 
-        let id = self.add_const(func.into());
-        self.add_instr(vec![span], Instruction::PushConst(id));
+        self.compile_const(span, func.into());
 
         let num_captures = compiler.num_captures;
         if num_captures > 0 {
@@ -143,6 +194,8 @@ impl<'expr> Compiler<'expr> {
     }
 
     fn compile_call(&mut self, span: Span, call: &'expr CallExpr) {
+        let num_args: u32 = self.try_from_usize(span, "too many arguments", call.args.len());
+
         for arg in &call.args {
             self.compile(arg);
         }
@@ -150,10 +203,11 @@ impl<'expr> Compiler<'expr> {
         self.compile(&call.func);
         self.add_instr(vec![span, call.func.span], Instruction::Call);
 
-        self.stack_len -= call.args.len() as u32 + 1;
+        self.stack_len -= num_args;
+        self.stack_len -= 1;
     }
 
-    fn compile_var(&mut self, name: &'expr str) {
+    fn compile_var(&mut self, span: Span, name: &'expr str) {
         let mut depth = 0;
         let mut current = &mut *self;
 
@@ -188,9 +242,60 @@ impl<'expr> Compiler<'expr> {
                 current = parent;
                 depth += 1;
             } else {
-                panic!("cannot find {}", name);
+                self.no_such_binding(span, name);
+                break;
             }
         }
+    }
+
+    fn bindings_in_scope(&self) -> Vec<&'expr str> {
+        let mut bindings = HashSet::new();
+        let mut current = &*self;
+        loop {
+            for binding in current.scope.vars.keys().copied().chain(current.name) {
+                if !bindings.contains(binding) {
+                    bindings.insert(binding);
+                }
+            }
+
+            if let Some(parent) = &current.parent {
+                current = parent;
+            } else {
+                break;
+            }
+        }
+
+        bindings.into_iter().collect()
+    }
+
+    fn no_such_binding(&mut self, span: Span, name: &str) {
+        let mut in_scope = self.bindings_in_scope();
+        in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, name));
+
+        let mut hint = String::from("perhaps you meant ");
+        for (i, var) in in_scope.iter().take(3).enumerate() {
+            if i > 0 {
+                hint.push_str(", ");
+            }
+
+            let _ = write!(&mut hint, "`{}`", var);
+        }
+
+        self.add_error(Diagnostic {
+            severity: Severity::Error,
+            message: format!("cannot find binding `{}`", name),
+            components: vec![
+                Component::Source(SourceComponent {
+                    source: self.debug_info.source.clone(),
+                    labels: vec![Label {
+                        severity: Severity::Error,
+                        span,
+                        message: "no such binding".into(),
+                    }],
+                }),
+                Component::Hint(hint),
+            ],
+        });
     }
 
     fn compile_bin_op(&mut self, span: Span, bin_op: &'expr BinOpExpr) {
@@ -219,14 +324,14 @@ impl<'expr> Compiler<'expr> {
         self.compile(&if_else.if_true);
         let end = self.instructions.len();
 
-        let offset = i32::try_from(mid - start).expect("jump too far");
+        let offset = self.try_from_usize(span, "if expression too long", mid - start);
         self.instructions[start] = Instruction::JumpIf(offset);
 
-        let offset = i32::try_from(end - mid - 1).expect("jump too far");
+        let offset = self.try_from_usize(span, "if expression too long", end - mid - 1);
         self.instructions[mid] = Instruction::Jump(offset);
     }
 
-    fn compile_let_in(&mut self, let_in: &'expr LetInExpr) {
+    fn compile_let_in(&mut self, span: Span, let_in: &'expr LetInExpr) {
         self.parent_scopes.push(self.scope.clone());
 
         for (binding, expr) in &let_in.vars {
@@ -239,7 +344,7 @@ impl<'expr> Compiler<'expr> {
 
         self.compile(&let_in.expr);
 
-        let num_vars = let_in.vars.len() as u32;
+        let num_vars = self.try_from_usize(span, "too many variables", let_in.vars.len());
         self.add_instr(vec![], Instruction::PopSwap(num_vars));
         self.stack_len -= num_vars;
 
@@ -264,20 +369,23 @@ impl<'expr> Compiler<'expr> {
     }
 }
 
-pub fn compile(source: Arc<Source>, expr: &Spanned<Expr>) -> Value {
+pub fn compile(source: Arc<Source>, expr: &Spanned<Expr>) -> (Value, Vec<Diagnostic>) {
     match &expr.item {
         Expr::Func(func) => {
             let mut compiler = Compiler::new(source, &func.args);
             compiler.compile_root(&func.expr);
             let func = compiler.finish();
-            func.into()
+            (func.into(), compiler.diagnostics().collect())
         }
         _ => {
             let mut compiler = Compiler::new(source, &[]);
             compiler.debug_info.name = Some("<thunk>".into());
             compiler.compile_root(&expr);
             let func = compiler.finish();
-            Thunk::new(func.into()).into()
+            (
+                Thunk::new(func.into()).into(),
+                compiler.diagnostics().collect(),
+            )
         }
     }
 }

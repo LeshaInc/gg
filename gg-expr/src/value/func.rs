@@ -24,7 +24,7 @@ impl Debug for Func {
 
         if let Some(di) = &self.debug_info {
             let span = di.source.span_to_line_col(di.span);
-            write!(f, " # in {} at {} ", di.source.name, span)?;
+            write!(f, " // in {} at {} ", di.source.name, span)?;
         }
 
         writeln!(f)?;
@@ -50,7 +50,7 @@ impl Debug for Func {
                 _ => continue,
             };
 
-            write!(f, " # ")?;
+            write!(f, " // ")?;
 
             for (i, &span) in spans.iter().enumerate() {
                 if i > 0 {

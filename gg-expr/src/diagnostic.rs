@@ -59,12 +59,22 @@ impl Display for Diagnostic {
 
 #[derive(Clone, Debug)]
 pub enum Component {
+    Hint(String),
     Source(SourceComponent),
 }
 
 impl Display for Component {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Component::Hint(v) => {
+                writeln!(
+                    f,
+                    "   {}{}{}",
+                    Paint::cyan("help").bold(),
+                    Paint::new(": ").bold(),
+                    Paint::new(v).bold()
+                )
+            }
             Component::Source(v) => v.fmt(f),
         }
     }
