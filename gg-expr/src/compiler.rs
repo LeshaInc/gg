@@ -171,6 +171,8 @@ impl<'expr> Compiler<'expr> {
 
         let len = self.try_from_usize(span, "list too long", list.len());
         self.add_instr(vec![span], Instruction::NewList(len));
+
+        self.stack_len -= len;
     }
 
     fn compile_func(&mut self, span: Span, func: &'expr FuncExpr) {

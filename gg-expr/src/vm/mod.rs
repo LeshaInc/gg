@@ -221,7 +221,13 @@ impl Vm {
         self.stack.push(value);
     }
 
-    fn instr_new_list(&mut self, _: u32) {
-        todo!()
+    fn instr_new_list(&mut self, count: u32) {
+        let mut list = im::Vector::new();
+
+        for _ in 0..count {
+            list.push_front(self.stack.pop().unwrap());
+        }
+
+        self.stack.push(list.into());
     }
 }

@@ -27,10 +27,10 @@ fn main() {
         println!("{}", diagnostic);
     }
 
-    if let Ok(thunk) = value.as_thunk() {
-        let func = thunk.func.as_func().unwrap();
-        show_spans(func);
-    }
+    // if let Ok(thunk) = value.as_thunk() {
+    //     let func = thunk.func.as_func().unwrap();
+    //     show_spans(func);
+    // }
 
     println!();
     println!("{:?}", value);
@@ -46,6 +46,7 @@ fn main() {
     println!("took {:?}", t.elapsed());
 }
 
+#[allow(dead_code)]
 fn show_spans(func: &Func) {
     let di = match &func.debug_info {
         Some(v) => v,

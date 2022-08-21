@@ -13,6 +13,15 @@ macro_rules! as_int {
     };
 }
 
+macro_rules! as_list {
+    ($val:expr) => {
+        match $val.as_list() {
+            Ok(v) => v,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    };
+}
+
 macro_rules! add_ops {
     ($ctx:ident, $lut:ident { $(($lhs:expr, $rhs:expr, $op:expr) => |$x:ident, $y:ident| $func:expr,)* }) => {
         $(
@@ -42,6 +51,21 @@ macro_rules! add_ops {
         (Int, Int, Neq) => |x, y| as_int!(x) != as_int!(y),
         (Int, Int, Ge) => |x, y| as_int!(x) >= as_int!(y),
         (Int, Int, Gt) => |x, y| as_int!(x) > as_int!(y),
+
+        (List, List, Add) => |x, y| {
+            let mut x = as_list!(x).clone();
+            x.append(as_list!(y).clone());
+            x
+        },
+
+        (List, Int, Mul) => |x, y| {
+            let x = as_list!(x);
+            let mut res = im::Vector::new();
+            for _ in 0..as_int!(y) {
+                res.append(x.clone());
+            }
+            res
+        },
     })};
 }
 
