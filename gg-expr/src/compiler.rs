@@ -293,7 +293,7 @@ impl<'expr> Compiler<'expr> {
                         message: "no such binding".into(),
                     }],
                 }),
-                Component::Hint(hint),
+                Component::Help(hint),
             ],
         });
     }

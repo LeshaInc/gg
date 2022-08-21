@@ -1,5 +1,6 @@
 mod compiler;
 pub mod diagnostic;
+mod error;
 mod source;
 pub mod syntax;
 mod value;
@@ -8,6 +9,7 @@ mod vm;
 use std::sync::Arc;
 
 pub use self::compiler::{compile, Compiler};
+pub use self::error::Error;
 pub use self::source::{Line, Source};
 pub use self::value::{DebugInfo, Func, Thunk, Type, Value};
 pub use self::vm::{Instruction, Vm};

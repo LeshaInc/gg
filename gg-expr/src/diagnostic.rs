@@ -45,6 +45,26 @@ pub struct Diagnostic {
     pub components: Vec<Component>,
 }
 
+impl Diagnostic {
+    pub fn new(severity: Severity, message: impl Into<String>) -> Diagnostic {
+        Diagnostic {
+            severity,
+            message: message.into(),
+            components: Vec::new(),
+        }
+    }
+
+    pub fn with_help(mut self, help: String) -> Diagnostic {
+        self.components.push(Component::Help(help));
+        self
+    }
+
+    pub fn with_source(mut self, source: SourceComponent) -> Diagnostic {
+        self.components.push(Component::Source(source));
+        self
+    }
+}
+
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}: {}", self.severity, Paint::new(&self.message).bold())?;
@@ -59,14 +79,14 @@ impl Display for Diagnostic {
 
 #[derive(Clone, Debug)]
 pub enum Component {
-    Hint(String),
+    Help(String),
     Source(SourceComponent),
 }
 
 impl Display for Component {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Component::Hint(v) => {
+            Component::Help(v) => {
                 writeln!(
                     f,
                     "   {}{}{}",
@@ -84,6 +104,30 @@ impl Display for Component {
 pub struct SourceComponent {
     pub source: Arc<Source>,
     pub labels: Vec<Label>,
+}
+
+impl SourceComponent {
+    pub fn new(source: Arc<Source>) -> SourceComponent {
+        SourceComponent {
+            source,
+            labels: Vec::new(),
+        }
+    }
+
+    pub fn with_label(
+        mut self,
+        severity: Severity,
+        span: Span,
+        message: impl Into<String>,
+    ) -> SourceComponent {
+        self.labels.push(Label {
+            severity,
+            span,
+            message: message.into(),
+        });
+
+        self
+    }
 }
 
 #[derive(Clone, Debug)]

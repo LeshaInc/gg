@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use gg_expr::{compile_text, Value, Vm};
 
 fn fib(vm: &mut Vm, func: &Value, arg: i64) -> i64 {
-    vm.eval(func, &[arg.into()]).as_int().unwrap()
+    vm.eval(func, &[arg.into()]).unwrap().as_int().unwrap()
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

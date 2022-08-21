@@ -37,7 +37,10 @@ fn main() {
     println!();
 
     let t = Instant::now();
-    value.force_eval();
+    if let Err(e) = value.force_eval() {
+        println!("{}", e);
+        return;
+    }
 
     println!("{:?}", value);
     println!("took {:?}", t.elapsed());

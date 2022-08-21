@@ -21,8 +21,8 @@ macro_rules! add_ops {
             && $ctx.bin_op == $op as usize
         {
             #[inline(never)]
-            fn operator($x: &Value, $y: &Value) ->  Value {
-                ($func).into()
+            fn operator($x: &Value, $y: &Value) -> Option<Value> {
+                Some(($func).into())
             }
 
             $lut[$lhs as usize][$rhs as usize][$op as usize] = operator;
@@ -45,15 +45,15 @@ macro_rules! add_ops {
     })};
 }
 
-type Operator = fn(&Value, &Value) -> Value;
+type Operator = fn(&Value, &Value) -> Option<Value>;
 
 const NUM_TYPES: usize = Type::VALUES.len();
 const NUM_OPS: usize = BinOp::VALUES.len();
 
 type Lut = [[[Operator; NUM_OPS]; NUM_TYPES]; NUM_TYPES];
 
-fn bin_op_err(_: &Value, _: &Value) -> Value {
-    panic!("invalid op")
+fn bin_op_err(_: &Value, _: &Value) -> Option<Value> {
+    None
 }
 
 struct Context {
@@ -93,7 +93,7 @@ const fn build_lut() -> Lut {
 
 static LUT: Lut = build_lut();
 
-pub fn bin_op(lhs: &Value, rhs: &Value, op: BinOp) -> Value {
+pub fn bin_op(lhs: &Value, rhs: &Value, op: BinOp) -> Option<Value> {
     let func = LUT[lhs.ty() as usize][rhs.ty() as usize][op as usize];
     func(lhs, rhs)
 }

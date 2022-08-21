@@ -6,10 +6,9 @@ use std::hint::unreachable_unchecked;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use thiserror::Error;
-
 pub use self::func::{DebugInfo, Func};
 pub use self::thunk::Thunk;
+use crate::Error;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Type {
@@ -143,18 +142,20 @@ impl Value {
         !self.is_null() && self.as_bool() != Ok(false)
     }
 
-    pub fn force_eval(&self) {
+    pub fn force_eval(&self) -> Result<(), Error> {
         if let Ok(thunk) = self.as_thunk() {
-            thunk.force_eval();
+            thunk.force_eval()?;
         } else if let Ok(list) = self.as_list() {
             for value in list.iter() {
-                value.force_eval()
+                value.force_eval()?;
             }
         } else if let Ok(map) = self.as_map() {
             for value in map.values() {
-                value.force_eval()
+                value.force_eval()?;
             }
         }
+
+        Ok(())
     }
 }
 
@@ -262,7 +263,7 @@ impl From<im::HashMap<String, Value>> for Value {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("expected {:?}, found {:?}", self.expected, self.got)]
 pub struct FromValueError {
     pub expected: Type,

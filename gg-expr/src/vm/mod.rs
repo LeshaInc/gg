@@ -1,7 +1,8 @@
 mod bin_op;
 
+use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{BinOp, UnOp};
-use crate::{Func, Value};
+use crate::{Error, Func, Value};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -36,19 +37,19 @@ impl Vm {
         Vm::default()
     }
 
-    pub fn eval(&mut self, func: &Value, args: &[Value]) -> Value {
+    pub fn eval(&mut self, func: &Value, args: &[Value]) -> Result<Value, Error> {
         self.ipstack.push(0);
         self.callstack.push(func.clone());
         self.stack.extend(args.iter().cloned());
-        self.run();
-        self.stack.pop().unwrap()
+        self.run()?;
+        Ok(self.stack.pop().unwrap()) // TODO
     }
 
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<(), Error> {
         'outer: while self.callstack.len() > 0 {
             let value = self.callstack[self.callstack.len() - 1].clone();
             let value = if let Ok(thunk) = value.as_thunk() {
-                thunk.force_eval()
+                thunk.force_eval()?
             } else {
                 &value
             };
@@ -61,7 +62,7 @@ impl Vm {
                 let instr = func.instructions[self.ip];
                 self.ip += 1;
 
-                self.dispatch(&func, instr);
+                self.dispatch(&func, instr)?;
 
                 if matches!(instr, Instruction::Ret) {
                     break 'inner;
@@ -75,9 +76,11 @@ impl Vm {
             self.callstack.pop();
             self.ipstack.pop();
         }
+
+        Ok(())
     }
 
-    fn dispatch(&mut self, func: &Func, instr: Instruction) {
+    fn dispatch(&mut self, func: &Func, instr: Instruction) -> Result<(), Error> {
         match instr {
             Instruction::Nop => self.instr_nop(),
             Instruction::Panic => self.instr_panic(),
@@ -91,10 +94,12 @@ impl Vm {
             Instruction::Jump(v) => self.instr_jump(v),
             Instruction::JumpIf(v) => self.instr_jump_if(v),
             Instruction::UnOp(v) => self.instr_un_op(v),
-            Instruction::BinOp(v) => self.instr_bin_op(v),
+            Instruction::BinOp(v) => self.instr_bin_op(v)?,
             Instruction::NewList(v) => self.instr_new_list(v),
             Instruction::NewFunc(v) => self.instr_new_func(v),
         }
+
+        Ok(())
     }
 
     fn instr_nop(&mut self) {}
@@ -156,10 +161,49 @@ impl Vm {
         todo!()
     }
 
-    fn instr_bin_op(&mut self, op: BinOp) {
+    fn instr_bin_op(&mut self, op: BinOp) -> Result<(), Error> {
         let rhs = self.stack.pop().unwrap();
         let lhs = self.stack.last_mut().unwrap();
-        *lhs = bin_op::bin_op(&lhs, &rhs, op);
+        match bin_op::bin_op(&lhs, &rhs, op) {
+            Some(v) => {
+                *lhs = v;
+                Ok(())
+            }
+            None => {
+                let lhs = self.stack.pop().unwrap();
+                Err(self.error_bin_op(&lhs, &rhs, op))
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn error_bin_op(&self, lhs: &Value, rhs: &Value, op: BinOp) -> Error {
+        let message = format!(
+            "operation `{}` cannot be applied to `{:?}` and `{:?}`",
+            op,
+            lhs.ty(),
+            rhs.ty()
+        );
+
+        let diagnostic = Diagnostic::new(Severity::Error, message);
+
+        let value = self.callstack.last().unwrap();
+        let func = value.as_func().unwrap();
+
+        let debug_info = match &func.debug_info {
+            Some(v) => v,
+            None => {
+                return Error::new(diagnostic);
+            }
+        };
+
+        let spans = &debug_info.instruction_spans[self.ip - 1];
+
+        let source = SourceComponent::new(debug_info.source.clone())
+            .with_label(Severity::Error, spans[1], format!("`{:?}`", lhs.ty()))
+            .with_label(Severity::Error, spans[2], format!("`{:?}`", rhs.ty()));
+
+        Error::new(diagnostic.with_source(source))
     }
 
     fn instr_new_func(&mut self, num_captures: u32) {
