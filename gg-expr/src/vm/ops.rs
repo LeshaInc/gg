@@ -21,6 +21,15 @@ macro_rules! as_int {
     };
 }
 
+macro_rules! as_float {
+    ($val:expr) => {
+        match $val.as_float() {
+            Ok(v) => v,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    };
+}
+
 macro_rules! as_list {
     ($val:expr) => {
         match $val.as_list() {
@@ -30,19 +39,69 @@ macro_rules! as_list {
     };
 }
 
+macro_rules! as_string {
+    ($val:expr) => {
+        match $val.as_string() {
+            Ok(v) => v,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    };
+}
+
 macro_rules! add_bin_ops {
     ($ctx:ident, $lut:ident) => {add_bin_ops!($ctx, $lut {
-        (Int, Int, Add) => |x, y| as_int!(x) + as_int!(y),
-        (Int, Int, Sub) => |x, y| as_int!(x) - as_int!(y),
-        (Int, Int, Mul) => |x, y| as_int!(x) * as_int!(y),
-        (Int, Int, Div) => |x, y| as_int!(x) as f64 / as_int!(y) as f64,
+        (Int, Int, Add) => |x, y| {
+            let (x, y) = (as_int!(x), as_int!(y));
+            x.checked_add(y).map(Value::from)
+                .unwrap_or_else(|| ((x as f64) + (y as f64)).into())
+        },
+        (Int, Int, Sub) => |x, y| {
+            let (x, y) = (as_int!(x), as_int!(y));
+            x.checked_sub(y).map(Value::from)
+                .unwrap_or_else(|| ((x as f64) - (y as f64)).into())
+        },
+        (Int, Int, Mul) => |x, y| {
+            let (x, y) = (as_int!(x), as_int!(y));
+            x.checked_mul(y).map(Value::from)
+                .unwrap_or_else(|| ((x as f64) * (y as f64)).into())
+        },
+        (Int, Int, Div) => |x, y| {
+            (as_int!(x) as f64) / (as_int!(y) as f64)
+        },
+        (Int, Int, Rem) => |x, y| {
+            as_int!(x).wrapping_rem(as_int!(y))
+        },
+        (Int, Int, Pow) => |x, y| {
+            let (x, y) = (as_int!(x), as_int!(y));
+            if y > 0 {
+                let y = y.min(i32::MAX.into()) as u32;
+                x.checked_pow(y).map(Value::from)
+                    .unwrap_or_else(|| ((x as f64).powi(y as i32)).into())
+            } else {
+                (x as f64).powf(y as f64).into()
+            }
+        },
 
-        (Int, Int, Lt) => |x, y| as_int!(x) < as_int!(y),
-        (Int, Int, Le) => |x, y| as_int!(x) <= as_int!(y),
-        (Int, Int, Eq) => |x, y| as_int!(x) == as_int!(y),
-        (Int, Int, Neq) => |x, y| as_int!(x) != as_int!(y),
-        (Int, Int, Ge) => |x, y| as_int!(x) >= as_int!(y),
-        (Int, Int, Gt) => |x, y| as_int!(x) > as_int!(y),
+        (Int, Float, Add) => |x, y| (as_int!(x) as f64) + as_float!(y),
+        (Int, Float, Sub) => |x, y| (as_int!(x) as f64) - as_float!(y),
+        (Int, Float, Mul) => |x, y| (as_int!(x) as f64) * as_float!(y),
+        (Int, Float, Div) => |x, y| (as_int!(x) as f64) / as_float!(y),
+        (Int, Float, Rem) => |x, y| (as_int!(x) as f64) % as_float!(y),
+        (Int, Float, Pow) => |x, y| (as_int!(x) as f64).powf(as_float!(y)),
+
+        (Float, Int, Add) => |x, y| as_float!(x) + (as_int!(y) as f64),
+        (Float, Int, Sub) => |x, y| as_float!(x) - (as_int!(y) as f64),
+        (Float, Int, Mul) => |x, y| as_float!(x) * (as_int!(y) as f64),
+        (Float, Int, Div) => |x, y| as_float!(x) / (as_int!(y) as f64),
+        (Float, Int, Rem) => |x, y| as_float!(x) % (as_int!(y) as f64),
+        (Float, Int, Pow) => |x, y| as_float!(x).powf(as_int!(y) as f64),
+
+        (Float, Float, Add) => |x, y| as_float!(x) + as_float!(y),
+        (Float, Float, Sub) => |x, y| as_float!(x) - as_float!(y),
+        (Float, Float, Mul) => |x, y| as_float!(x) * as_float!(y),
+        (Float, Float, Div) => |x, y| as_float!(x) / as_float!(y),
+        (Float, Float, Rem) => |x, y| as_float!(x) % as_float!(y),
+        (Float, Float, Pow) => |x, y| as_float!(x).powf(as_float!(y)),
 
         (List, List, Add) => |x, y| {
             let mut x = as_list!(x).clone();
@@ -58,6 +117,56 @@ macro_rules! add_bin_ops {
             }
             res
         },
+
+        (String, String, Add) => |x, y| {
+            let mut x = as_string!(x).to_owned();
+            x.push_str(as_string!(y));
+            x
+        },
+
+        (String, Int, Mul) => |x, y| {
+            let y = as_int!(y);
+            if y > 0 {
+                as_string!(x).repeat(y as usize)
+            } else {
+                "".into()
+            }
+        },
+
+        (Int, Int, Lt) => |x, y| as_int!(x) < as_int!(y),
+        (Int, Int, Le) => |x, y| as_int!(x) <= as_int!(y),
+        (Int, Int, Eq) => |x, y| as_int!(x) == as_int!(y),
+        (Int, Int, Neq) => |x, y| as_int!(x) != as_int!(y),
+        (Int, Int, Ge) => |x, y| as_int!(x) >= as_int!(y),
+        (Int, Int, Gt) => |x, y| as_int!(x) > as_int!(y),
+
+        (Float, Int, Lt) => |x, y| as_float!(x) < (as_int!(y) as f64),
+        (Float, Int, Le) => |x, y| as_float!(x) <= (as_int!(y) as f64),
+        (Float, Int, Eq) => |x, y| as_float!(x) == (as_int!(y) as f64),
+        (Float, Int, Neq) => |x, y| as_float!(x) != (as_int!(y) as f64),
+        (Float, Int, Ge) => |x, y| as_float!(x) >= (as_int!(y) as f64),
+        (Float, Int, Gt) => |x, y| as_float!(x) > (as_int!(y) as f64),
+
+        (Int, Float, Lt) => |x, y| (as_int!(x) as f64) < as_float!(y),
+        (Int, Float, Le) => |x, y| (as_int!(x) as f64) <= as_float!(y),
+        (Int, Float, Eq) => |x, y| (as_int!(x) as f64) == as_float!(y),
+        (Int, Float, Neq) => |x, y| (as_int!(x) as f64) != as_float!(y),
+        (Int, Float, Ge) => |x, y| (as_int!(x) as f64) >= as_float!(y),
+        (Int, Float, Gt) => |x, y| (as_int!(x) as f64) > as_float!(y),
+
+        (Float, Float, Lt) => |x, y| as_float!(x) < as_float!(y),
+        (Float, Float, Le) => |x, y| as_float!(x) <= as_float!(y),
+        (Float, Float, Eq) => |x, y| as_float!(x) == as_float!(y),
+        (Float, Float, Neq) => |x, y| as_float!(x) != as_float!(y),
+        (Float, Float, Ge) => |x, y| as_float!(x) >= as_float!(y),
+        (Float, Float, Gt) => |x, y| as_float!(x) > as_float!(y),
+
+        (String, String, Lt) => |x, y| as_string!(x) < as_string!(y),
+        (String, String, Le) => |x, y| as_string!(x) <= as_string!(y),
+        (String, String, Eq) => |x, y| as_string!(x) == as_string!(y),
+        (String, String, Neq) => |x, y| as_string!(x) != as_string!(y),
+        (String, String, Ge) => |x, y| as_string!(x) >= as_string!(y),
+        (String, String, Gt) => |x, y| as_string!(x) > as_string!(y),
     })};
 
     ($ctx:ident, $lut:ident { $(($lhs:expr, $rhs:expr, $op:expr) => |$x:ident, $y:ident| $func:expr,)* }) => {
@@ -75,6 +184,22 @@ macro_rules! add_bin_ops {
         }
         )*
     };
+}
+
+fn bin_op_and(lhs: &Value, rhs: &Value) -> Option<Value> {
+    if lhs.is_truthy() {
+        Some(rhs.clone())
+    } else {
+        Some(lhs.clone())
+    }
+}
+
+fn bin_op_or(lhs: &Value, rhs: &Value) -> Option<Value> {
+    if lhs.is_truthy() {
+        Some(lhs.clone())
+    } else {
+        Some(rhs.clone())
+    }
 }
 
 macro_rules! add_un_ops {
@@ -132,6 +257,9 @@ const fn build_bin_op_lut() -> BinOpLut {
 
                 bin_op += 1;
             }
+
+            lut[type_lhs][type_rhs][BinOp::And as usize] = bin_op_and;
+            lut[type_lhs][type_rhs][BinOp::Or as usize] = bin_op_or;
 
             type_rhs += 1;
         }
