@@ -201,6 +201,8 @@ pub enum UnOp {
 }
 
 impl UnOp {
+    pub const VALUES: [UnOp; 2] = [UnOp::Neg, UnOp::Not];
+
     pub fn from_token(token: Token) -> Option<UnOp> {
         Some(match token {
             Token::Sub => UnOp::Neg,

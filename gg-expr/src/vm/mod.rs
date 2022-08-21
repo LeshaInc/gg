@@ -1,4 +1,4 @@
-mod bin_op;
+mod ops;
 
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{BinOp, UnOp};
@@ -93,7 +93,7 @@ impl Vm {
             Instruction::Ret => self.instr_ret(),
             Instruction::Jump(v) => self.instr_jump(v),
             Instruction::JumpIf(v) => self.instr_jump_if(v),
-            Instruction::UnOp(v) => self.instr_un_op(v),
+            Instruction::UnOp(v) => self.instr_un_op(v)?,
             Instruction::BinOp(v) => self.instr_bin_op(v)?,
             Instruction::NewList(v) => self.instr_new_list(v),
             Instruction::NewFunc(v) => self.instr_new_func(v),
@@ -157,27 +157,68 @@ impl Vm {
         }
     }
 
-    fn instr_un_op(&mut self, _: UnOp) {
-        todo!()
+    fn instr_un_op(&mut self, op: UnOp) -> Result<(), Error> {
+        let val = self.stack.last_mut().unwrap();
+        match ops::un_op(&val, op) {
+            Some(v) => {
+                *val = v;
+                Ok(())
+            }
+            None => {
+                let val = self.stack.pop().unwrap();
+                Err(self.error_un_op(val, op))
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn error_un_op(&self, val: Value, op: UnOp) -> Error {
+        let message = format!(
+            "unary operation `{}` cannot be applied to `{:?}`",
+            op,
+            val.ty(),
+        );
+
+        let diagnostic = Diagnostic::new(Severity::Error, message);
+
+        let value = self.callstack.last().unwrap();
+        let func = value.as_func().unwrap();
+
+        let debug_info = match &func.debug_info {
+            Some(v) => v,
+            None => {
+                return Error::new(diagnostic);
+            }
+        };
+
+        let spans = &debug_info.instruction_spans[self.ip - 1];
+
+        let source = SourceComponent::new(debug_info.source.clone()).with_label(
+            Severity::Error,
+            spans[1],
+            format!("`{:?}`", val.ty()),
+        );
+
+        Error::new(diagnostic.with_source(source))
     }
 
     fn instr_bin_op(&mut self, op: BinOp) -> Result<(), Error> {
         let rhs = self.stack.pop().unwrap();
         let lhs = self.stack.last_mut().unwrap();
-        match bin_op::bin_op(&lhs, &rhs, op) {
+        match ops::bin_op(&lhs, &rhs, op) {
             Some(v) => {
                 *lhs = v;
                 Ok(())
             }
             None => {
                 let lhs = self.stack.pop().unwrap();
-                Err(self.error_bin_op(&lhs, &rhs, op))
+                Err(self.error_bin_op(lhs, rhs, op))
             }
         }
     }
 
     #[inline(never)]
-    fn error_bin_op(&self, lhs: &Value, rhs: &Value, op: BinOp) -> Error {
+    fn error_bin_op(&self, lhs: Value, rhs: Value, op: BinOp) -> Error {
         let message = format!(
             "operation `{}` cannot be applied to `{:?}` and `{:?}`",
             op,
