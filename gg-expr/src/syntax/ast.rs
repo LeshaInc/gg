@@ -11,23 +11,13 @@ pub enum Expr {
     Var(String),
     BinOp(BinOpExpr),
     UnOp(UnOpExpr),
+    Paren(Box<Spanned<Expr>>),
     List(ListExpr),
     Func(FuncExpr),
     Call(CallExpr),
     IfElse(IfElseExpr),
     LetIn(LetInExpr),
     Error,
-}
-
-impl Expr {
-    pub fn binding_power(&self) -> (u8, u8) {
-        match self {
-            Expr::UnOp(v) => (255, v.op.binding_power()),
-            Expr::BinOp(v) => v.op.binding_power(),
-            Expr::Func(_) | Expr::IfElse(_) | Expr::LetIn(_) => (0, 0),
-            _ => (255, 255),
-        }
-    }
 }
 
 impl Display for Expr {
@@ -39,6 +29,7 @@ impl Display for Expr {
             Expr::Var(v) => v.fmt(f),
             Expr::BinOp(v) => v.fmt(f),
             Expr::UnOp(v) => v.fmt(f),
+            Expr::Paren(v) => write!(f, "({})", v),
             Expr::List(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
             Expr::Call(v) => v.fmt(f),
@@ -58,121 +49,70 @@ pub struct BinOpExpr {
 
 impl Display for BinOpExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (l_bp, r_bp) = self.op.binding_power();
-
-        if l_bp > self.lhs.item.binding_power().1 {
-            write!(f, "({})", self.lhs)?;
-        } else {
-            write!(f, "{}", self.lhs)?;
-        }
-
-        write!(f, " {} ", self.op)?;
-
-        if r_bp > self.rhs.item.binding_power().0 {
-            write!(f, "({})", self.rhs)?;
-        } else {
-            write!(f, "{}", self.rhs)?;
-        }
-
-        Ok(())
+        write!(f, "{} {} {}", self.lhs, self.op, self.rhs)
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BinOp {
-    Or = 0,
-
-    And = 1,
-
-    Lt = 2,
-    Le = 3,
-    Eq = 4,
-    Neq = 5,
-    Ge = 6,
-    Gt = 7,
-
-    Add = 8,
-    Sub = 9,
-
-    Mul = 10,
-    Div = 11,
-    Rem = 12,
-
-    Pow = 13,
-}
-
-impl BinOp {
-    pub const VALUES: [BinOp; 14] = [
-        BinOp::Or,
-        BinOp::And,
-        BinOp::Lt,
-        BinOp::Le,
-        BinOp::Eq,
-        BinOp::Neq,
-        BinOp::Ge,
-        BinOp::Gt,
-        BinOp::Add,
-        BinOp::Sub,
-        BinOp::Mul,
-        BinOp::Div,
-        BinOp::Rem,
-        BinOp::Pow,
-    ];
-
-    pub fn from_token(token: Token) -> Option<BinOp> {
-        Some(match token {
-            Token::Or => BinOp::Or,
-            Token::And => BinOp::And,
-            Token::Lt => BinOp::Lt,
-            Token::Le => BinOp::Le,
-            Token::Eq => BinOp::Eq,
-            Token::Neq => BinOp::Neq,
-            Token::Ge => BinOp::Ge,
-            Token::Gt => BinOp::Gt,
-            Token::Add => BinOp::Add,
-            Token::Sub => BinOp::Sub,
-            Token::Mul => BinOp::Mul,
-            Token::Div => BinOp::Div,
-            Token::Rem => BinOp::Rem,
-            Token::Pow => BinOp::Pow,
-            _ => return None,
-        })
-    }
-
-    pub fn binding_power(self) -> (u8, u8) {
-        use BinOp::*;
-
-        match self {
-            Or => (1, 2),
-            And => (3, 4),
-            Lt | Le | Eq | Neq | Ge | Gt => (5, 6),
-            Add | Sub => (7, 8),
-            Mul | Div | Rem => (9, 10),
-            Pow => (14, 13),
+macro_rules! define_op {
+    (pub enum $ty:ident { $($name:ident($token:ident, $repr:expr),)* }) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum $ty {
+             $($name,)*
         }
+
+        impl $ty {
+            pub const VALUES: [$ty ; define_op!(@len $($name,)*)] = [
+                $($ty ::$name,)*
+            ];
+
+            pub fn from_token(token: Token) -> Option<$ty > {
+                match token {
+                    $(Token::$token => Some($ty ::$name),)*
+                    _ => None,
+                }
+            }
+
+            pub fn into_token(self) -> Token {
+                match self {
+                    $($ty::$name => Token::$token,)*
+                }
+            }
+        }
+
+        impl Display for $ty {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(match self {
+                    $($ty::$name => $repr,)*
+                })
+            }
+        }
+    };
+
+    (@len) => {
+        0
+    };
+
+    (@len $first:ident, $($rest:ident,)*) => {
+        1 + define_op!(@len $($rest,)*)
     }
 }
 
-impl Display for BinOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use BinOp::*;
-
-        f.write_str(match self {
-            Or => "||",
-            And => "&&",
-            Lt => "<",
-            Le => "<=",
-            Eq => "==",
-            Neq => "!=",
-            Ge => ">=",
-            Gt => ">",
-            Add => "+",
-            Sub => "-",
-            Mul => "*",
-            Div => "/",
-            Rem => "%",
-            Pow => "**",
-        })
+define_op! {
+    pub enum BinOp {
+        Or(Or, "||"),
+        And(And, "&&"),
+        Lt(Lt, "<"),
+        Le(Le, "<="),
+        Eq(Eq, "=="),
+        Neq(Neq, "!="),
+        Ge(Ge, ">="),
+        Gt(Gt, ">"),
+        Add(Add, "+"),
+        Sub(Sub, "-"),
+        Mul(Mul, "*"),
+        Div(Div, "/"),
+        Rem(Rem, "%"),
+        Pow(Pow, "**"),
     }
 }
 
@@ -184,44 +124,14 @@ pub struct UnOpExpr {
 
 impl Display for UnOpExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bp = self.op.binding_power();
-
-        if bp > self.expr.item.binding_power().0 {
-            write!(f, "{}({})", self.op, self.expr)
-        } else {
-            write!(f, "{}{}", self.op, self.expr)
-        }
+        write!(f, "{}{}", self.op, self.expr)
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UnOp {
-    Neg,
-    Not,
-}
-
-impl UnOp {
-    pub const VALUES: [UnOp; 2] = [UnOp::Neg, UnOp::Not];
-
-    pub fn from_token(token: Token) -> Option<UnOp> {
-        Some(match token {
-            Token::Sub => UnOp::Neg,
-            Token::Not => UnOp::Not,
-            _ => return None,
-        })
-    }
-
-    pub fn binding_power(self) -> u8 {
-        12
-    }
-}
-
-impl Display for UnOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            UnOp::Neg => "-",
-            UnOp::Not => "!",
-        })
+define_op! {
+    pub enum UnOp {
+        Neg(Sub, "-"),
+        Not(Not, "!"),
     }
 }
 
@@ -276,12 +186,7 @@ pub struct CallExpr {
 
 impl Display for CallExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (bp, _) = self.func.item.binding_power();
-        if bp < 255 {
-            write!(f, "({})(", self.func)?;
-        } else {
-            write!(f, "{}(", self.func)?;
-        }
+        write!(f, "{}(", self.func)?;
 
         for (i, arg) in self.args.iter().enumerate() {
             if i > 0 {

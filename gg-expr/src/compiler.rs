@@ -137,12 +137,13 @@ impl<'expr> Compiler<'expr> {
             Expr::Var(name) => self.compile_var(span, name),
             Expr::BinOp(bin_op) => self.compile_bin_op(span, bin_op),
             Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
+            Expr::Paren(expr) => self.compile(&expr),
             Expr::List(list) => self.compile_list(span, &list.exprs),
             Expr::Func(func) => self.compile_func(span, func),
             Expr::Call(call) => self.compile_call(span, call),
             Expr::IfElse(if_else) => self.compile_if_else(span, if_else),
             Expr::LetIn(let_in) => self.compile_let_in(span, let_in),
-            _ => {}
+            Expr::Error => {}
         }
 
         if self.stack_len == u32::MAX {

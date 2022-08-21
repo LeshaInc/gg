@@ -105,36 +105,41 @@ impl Parser {
         loop {
             let token = self.peek().item;
 
-            if token == Token::LParen {
-                if 12 < min_bp {
+            if let Some(l_bp) = postfix_bp(token) {
+                if l_bp < min_bp {
                     break;
                 }
 
-                lhs = self.expr_call(lhs);
+                match token {
+                    Token::LParen => lhs = self.expr_call(lhs),
+                    _ => {}
+                }
+
                 continue;
             }
 
-            let op = match BinOp::from_token(token) {
-                Some(v) => v,
-                None => break,
-            };
+            if let Some((l_bp, r_bp)) = infix_bp(token) {
+                if l_bp < min_bp {
+                    break;
+                }
 
-            let (l_bp, r_bp) = op.binding_power();
-            if l_bp < min_bp {
-                break;
+                let op = BinOp::from_token(token).unwrap();
+
+                self.next();
+
+                let rhs = self.expr_bp(r_bp);
+                let span = Span::new(lhs.span.start, rhs.span.end);
+                let expr = Expr::BinOp(BinOpExpr {
+                    lhs: Box::new(lhs),
+                    op,
+                    rhs: Box::new(rhs),
+                });
+
+                lhs = Spanned::new(span, expr);
+                continue;
             }
 
-            self.next();
-
-            let rhs = self.expr_bp(r_bp);
-            let span = Span::new(lhs.span.start, rhs.span.end);
-            let expr = Expr::BinOp(BinOpExpr {
-                lhs: Box::new(lhs),
-                op,
-                rhs: Box::new(rhs),
-            });
-
-            lhs = Spanned::new(span, expr);
+            break;
         }
 
         lhs
@@ -143,10 +148,11 @@ impl Parser {
     fn expr_lhs(&mut self) -> Spanned<Expr> {
         let token = self.peek();
 
-        if let Some(op) = UnOp::from_token(token.item) {
+        if let Some(r_bp) = prefix_bp(token.item) {
+            let op = UnOp::from_token(token.item).unwrap();
             self.next();
 
-            let rhs = self.expr_bp(op.binding_power());
+            let rhs = self.expr_bp(r_bp);
             let span = Span::new(token.span.start, rhs.span.end);
             let expr = Expr::UnOp(UnOpExpr {
                 op,
@@ -174,10 +180,13 @@ impl Parser {
     }
 
     fn expr_paren(&mut self) -> Spanned<Expr> {
-        self.next();
+        let start = self.next().span.start;
         let expr = self.expr();
-        self.expect_token(&[Token::RParen]);
-        expr
+        let end = self.expect_token(&[Token::RParen]).span.end;
+
+        let span = Span::new(start, end);
+        let expr = Expr::Paren(Box::new(expr));
+        Spanned::new(span, expr)
     }
 
     fn expr_int(&mut self) -> Spanned<Expr> {
@@ -358,4 +367,32 @@ impl Parser {
 
         Spanned::new(span, expr)
     }
+}
+
+pub fn prefix_bp(token: Token) -> Option<u8> {
+    Some(match token {
+        Token::Sub | Token::Not => 12,
+        _ => return None,
+    })
+}
+
+pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
+    use Token::*;
+
+    Some(match token {
+        Or => (1, 2),
+        And => (3, 4),
+        Lt | Le | Eq | Neq | Ge | Gt => (5, 6),
+        Add | Sub => (7, 8),
+        Mul | Div | Rem => (9, 10),
+        Pow => (13, 14),
+        _ => return None,
+    })
+}
+
+pub fn postfix_bp(token: Token) -> Option<u8> {
+    Some(match token {
+        Token::LParen | Token::LBracket => 15,
+        _ => return None,
+    })
 }
