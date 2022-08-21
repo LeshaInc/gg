@@ -200,6 +200,26 @@ impl Debug for Value {
     }
 }
 
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        if self.ty != other.ty {
+            return false;
+        }
+
+        match self.ty {
+            Type::Null => true,
+            Type::Int => self.as_int() == other.as_int(),
+            Type::Float => self.as_float() == other.as_float(),
+            Type::Bool => self.as_bool() == other.as_bool(),
+            Type::String => self.as_string() == other.as_string(),
+            Type::Func => self.as_func() == other.as_func(),
+            Type::Thunk => self.as_thunk() == other.as_thunk(),
+            Type::List => self.as_list() == other.as_list(),
+            Type::Map => self.as_map() == other.as_map(),
+        }
+    }
+}
+
 impl From<i64> for Value {
     fn from(int: i64) -> Value {
         Value {

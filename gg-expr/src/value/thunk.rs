@@ -5,7 +5,7 @@ use once_cell::sync::OnceCell;
 
 use crate::{Error, Value, Vm};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Thunk {
     pub func: Value,
     pub value: Arc<OnceCell<Value>>,

@@ -183,6 +183,10 @@ macro_rules! add_bin_ops {
         (Bool, Null, Or) => |x, _| as_bool!(x),
         (Null, Bool, And) => |_, _| false,
         (Null, Bool, Or) => |_, y| as_bool!(y),
+
+        (Bool, Bool, Eq) => |x, y| as_bool!(x) == as_bool!(y),
+        (String, String, Eq) => |x, y| as_string!(x) == as_string!(y),
+        (List, List, Eq) => |x, y| as_list!(x) == as_list!(y),
     })};
 
     ($ctx:ident, $lut:ident { $(($lhs:expr, $rhs:expr, $op:expr) => |$x:pat_param, $y:pat_param| $func:expr,)* }) => {
@@ -233,6 +237,10 @@ fn bin_op_err(_: &Value, _: &Value) -> Option<Value> {
     None
 }
 
+fn bin_op_eq(a: &Value, b: &Value) -> Option<Value> {
+    Some((a == b).into())
+}
+
 const fn build_bin_op_lut() -> BinOpLut {
     let mut lut: BinOpLut = [[[bin_op_err; NUM_BIN_OPS]; NUM_TYPES]; NUM_TYPES];
 
@@ -253,6 +261,10 @@ const fn build_bin_op_lut() -> BinOpLut {
                     type_rhs,
                     bin_op,
                 };
+
+                if bin_op == BinOp::Eq as usize {
+                    lut[type_lhs][type_rhs][bin_op] = bin_op_eq;
+                }
 
                 add_bin_ops!(ctx, lut);
 

@@ -5,7 +5,7 @@ use crate::syntax::{BinOp, UnOp};
 use crate::{Error, Func, Value};
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Instruction {
     Nop,
     Panic,
