@@ -30,6 +30,15 @@ macro_rules! as_float {
     };
 }
 
+macro_rules! as_bool {
+    ($val:expr) => {
+        match $val.as_bool() {
+            Ok(v) => v,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    };
+}
+
 macro_rules! as_list {
     ($val:expr) => {
         match $val.as_list() {
@@ -167,15 +176,21 @@ macro_rules! add_bin_ops {
         (String, String, Neq) => |x, y| as_string!(x) != as_string!(y),
         (String, String, Ge) => |x, y| as_string!(x) >= as_string!(y),
         (String, String, Gt) => |x, y| as_string!(x) > as_string!(y),
+
+        (Bool, Bool, And) => |x, y| as_bool!(x) & as_bool!(y),
+        (Bool, Bool, Or) => |x, y| as_bool!(x) | as_bool!(y),
+        (Bool, Null, And) => |_, _| false,
+        (Bool, Null, Or) => |x, _| as_bool!(x),
+        (Null, Bool, And) => |_, _| false,
+        (Null, Bool, Or) => |_, y| as_bool!(y),
     })};
 
-    ($ctx:ident, $lut:ident { $(($lhs:expr, $rhs:expr, $op:expr) => |$x:ident, $y:ident| $func:expr,)* }) => {
+    ($ctx:ident, $lut:ident { $(($lhs:expr, $rhs:expr, $op:expr) => |$x:pat_param, $y:pat_param| $func:expr,)* }) => {
         $(
         if $ctx.type_lhs == $lhs as usize
             && $ctx.type_rhs == $rhs as usize
             && $ctx.bin_op == $op as usize
         {
-            #[inline(never)]
             fn operator($x: &Value, $y: &Value) -> Option<Value> {
                 Some(($func).into())
             }
@@ -186,34 +201,20 @@ macro_rules! add_bin_ops {
     };
 }
 
-fn bin_op_and(lhs: &Value, rhs: &Value) -> Option<Value> {
-    if lhs.is_truthy() {
-        Some(rhs.clone())
-    } else {
-        Some(lhs.clone())
-    }
-}
-
-fn bin_op_or(lhs: &Value, rhs: &Value) -> Option<Value> {
-    if lhs.is_truthy() {
-        Some(lhs.clone())
-    } else {
-        Some(rhs.clone())
-    }
-}
-
 macro_rules! add_un_ops {
     ($ctx:ident, $lut:ident) => {add_un_ops!($ctx, $lut {
         (Int, Neg) => |x| -as_int!(x),
         (Int, Not) => |x| !as_int!(x),
+
+        (Bool, Not) => |x| !as_bool!(x),
+        (Null, Not) => |_| true,
     })};
 
-    ($ctx:ident, $lut:ident { $(($val:expr, $op:expr) => |$x:ident| $func:expr,)* }) => {
+    ($ctx:ident, $lut:ident { $(($val:expr, $op:expr) => |$x:pat_param| $func:expr,)* }) => {
         $(
         if $ctx.type_val == $val as usize
             && $ctx.un_op == $op as usize
         {
-            #[inline(never)]
             fn operator($x: &Value) -> Option<Value> {
                 Some(($func).into())
             }
@@ -257,9 +258,6 @@ const fn build_bin_op_lut() -> BinOpLut {
 
                 bin_op += 1;
             }
-
-            lut[type_lhs][type_rhs][BinOp::And as usize] = bin_op_and;
-            lut[type_lhs][type_rhs][BinOp::Or as usize] = bin_op_or;
 
             type_rhs += 1;
         }
