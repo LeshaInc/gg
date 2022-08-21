@@ -275,30 +275,30 @@ impl<'expr> Compiler<'expr> {
         let mut in_scope = self.bindings_in_scope();
         in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, name));
 
-        let mut hint = String::from("perhaps you meant ");
+        let mut help = String::from("perhaps you meant ");
         for (i, var) in in_scope.iter().take(3).enumerate() {
             if i > 0 {
-                hint.push_str(", ");
+                help.push_str(", ");
             }
 
-            let _ = write!(&mut hint, "`{}`", var);
+            let _ = write!(&mut help, "`{}`", var);
         }
 
-        self.add_error(Diagnostic {
-            severity: Severity::Error,
-            message: format!("cannot find binding `{}`", name),
-            components: vec![
-                Component::Source(SourceComponent {
-                    source: self.debug_info.source.clone(),
-                    labels: vec![Label {
-                        severity: Severity::Error,
+        let mut diagnostic =
+            Diagnostic::new(Severity::Error, format!("cannot find binding `{}`", name))
+                .with_source(
+                    SourceComponent::new(self.debug_info.source.clone()).with_label(
+                        Severity::Error,
                         span,
-                        message: "no such binding".into(),
-                    }],
-                }),
-                Component::Help(hint),
-            ],
-        });
+                        "no such binding",
+                    ),
+                );
+
+        if !in_scope.is_empty() {
+            diagnostic = diagnostic.with_help(help);
+        }
+
+        self.add_error(diagnostic);
     }
 
     fn compile_bin_op(&mut self, span: Span, bin_op: &'expr BinOpExpr) {
