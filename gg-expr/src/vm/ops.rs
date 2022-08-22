@@ -252,6 +252,14 @@ fn bin_op_eq(a: &Value, b: &Value) -> Option<Value> {
     Some((a == b).into())
 }
 
+fn bin_op_ret_a(a: &Value, _: &Value) -> Option<Value> {
+    Some(a.clone())
+}
+
+fn bin_op_ret_b(_: &Value, b: &Value) -> Option<Value> {
+    Some(b.clone())
+}
+
 const fn build_bin_op_lut() -> BinOpLut {
     let mut lut: BinOpLut = [[[bin_op_err; NUM_BIN_OPS]; NUM_TYPES]; NUM_TYPES];
 
@@ -273,8 +281,16 @@ const fn build_bin_op_lut() -> BinOpLut {
                     bin_op,
                 };
 
-                if bin_op == BinOp::Eq as usize {
+                if bin_op == Eq as usize {
                     lut[type_lhs][type_rhs][bin_op] = bin_op_eq;
+                }
+
+                if bin_op == Coalesce as usize {
+                    lut[type_lhs][type_rhs][bin_op] = if type_lhs == Null as usize {
+                        bin_op_ret_b
+                    } else {
+                        bin_op_ret_a
+                    };
                 }
 
                 add_bin_ops!(ctx, lut);

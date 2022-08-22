@@ -400,7 +400,7 @@ pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
     use Token::*;
 
     Some(match token {
-        Or => (1, 2),
+        Or | Coalesce => (1, 2),
         And => (3, 4),
         Eq | Neq => (5, 6),
         Lt | Le | Ge | Gt => (7, 8),

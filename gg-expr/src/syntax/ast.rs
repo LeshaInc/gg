@@ -105,6 +105,7 @@ macro_rules! define_op {
 define_op! {
     pub enum BinOp {
         Or(Or, "||"),
+        Coalesce(Coalesce, "??"),
         And(And, "&&"),
         Lt(Lt, "<"),
         Le(Le, "<="),

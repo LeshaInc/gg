@@ -21,6 +21,8 @@ pub enum Token {
     And,
     #[token("||")]
     Or,
+    #[token("??")]
+    Coalesce,
     #[token("!")]
     Not,
 
@@ -117,6 +119,7 @@ impl Token {
             Rem => "`%`",
             And => "`&&`",
             Or => "`||`",
+            Coalesce => "`??`",
             Not => "`!`",
 
             Assign => "`=`",
