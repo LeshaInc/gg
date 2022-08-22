@@ -169,6 +169,7 @@ impl Parser {
             Token::String => self.expr_string(),
             Token::Ident => self.expr_var(),
             Token::LBracket => self.expr_list(),
+            Token::LBrace => self.expr_map(),
             Token::Fn => self.expr_fn(),
             Token::If => self.expr_if_else(),
             Token::Let => self.expr_let_in(),
@@ -247,6 +248,51 @@ impl Parser {
         let end = self.expect_token(&[Token::RBracket]).span.end;
         let span = Span::new(start, end);
         let expr = Expr::List(ListExpr { exprs });
+
+        Spanned::new(span, expr)
+    }
+
+    fn expr_map(&mut self) -> Spanned<Expr> {
+        let start = self.next().span.start;
+
+        let mut pairs = Vec::new();
+
+        while self.peek().item != Token::RBrace {
+            let token = self.peek();
+            let key = match token.item {
+                Token::LBracket => {
+                    self.next();
+                    let key = self.expr();
+                    self.expect_token(&[Token::RBracket]);
+                    key
+                }
+                Token::Ident => {
+                    self.next();
+                    let text = token.span.slice(&self.source.text).to_string();
+                    Spanned::new(token.span, Expr::String(text.into()))
+                }
+                Token::String => self.expr_string(),
+                _ => {
+                    self.expect_token(&[Token::LBracket, Token::Ident, Token::String]);
+                    Spanned::new(token.span, Expr::Error)
+                }
+            };
+
+            self.expect_token(&[Token::Assign]);
+            let value = self.expr();
+
+            pairs.push((key, value));
+
+            if self.peek().item == Token::Comma {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        let end = self.expect_token(&[Token::RBrace]).span.end;
+        let span = Span::new(start, end);
+        let expr = Expr::Map(MapExpr { pairs });
 
         Spanned::new(span, expr)
     }

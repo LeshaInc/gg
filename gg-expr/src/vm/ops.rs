@@ -48,6 +48,15 @@ macro_rules! as_list {
     };
 }
 
+macro_rules! as_map {
+    ($val:expr) => {
+        match $val.as_map() {
+            Ok(v) => v,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    };
+}
+
 macro_rules! as_string {
     ($val:expr) => {
         match $val.as_string() {
@@ -136,6 +145,14 @@ macro_rules! add_bin_ops {
             usize::try_from(as_int!(y)).ok()
                 .and_then(|idx| as_list!(x).get(idx)?.clone().into())
                 .unwrap_or(Value::null())
+        },
+
+        (Map, String, Index) => |x, y| {
+            as_map!(x).get(as_string!(y))?.clone()
+        },
+
+        (Map, String, IndexNullable) => |x, y| {
+            as_map!(x).get(as_string!(y)).cloned().unwrap_or(Value::null())
         },
 
         (String, String, Add) => |x, y| {

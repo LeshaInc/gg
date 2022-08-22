@@ -227,9 +227,24 @@ impl Debug for Value {
             Type::Func => self.as_func().unwrap().fmt(f),
             Type::Thunk => self.as_thunk().unwrap().fmt(f),
             Type::List => self.as_list().unwrap().fmt(f),
-            Type::Map => self.as_map().unwrap().fmt(f),
+            Type::Map => fmt_map(self.as_map().unwrap(), f),
         }
     }
+}
+
+fn fmt_map(map: &im::HashMap<String, Value>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{{")?;
+
+    for (i, (k, v)) in map.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+
+        // TODO: fancier string keys
+        write!(f, "[{:?}] = {:?}", k, v)?;
+    }
+
+    write!(f, "}}")
 }
 
 impl PartialEq for Value {

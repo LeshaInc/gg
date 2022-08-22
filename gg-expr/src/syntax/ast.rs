@@ -13,6 +13,7 @@ pub enum Expr {
     UnOp(UnOpExpr),
     Paren(Box<Spanned<Expr>>),
     List(ListExpr),
+    Map(MapExpr),
     Func(FuncExpr),
     Call(CallExpr),
     IfElse(IfElseExpr),
@@ -31,6 +32,7 @@ impl Display for Expr {
             Expr::UnOp(v) => v.fmt(f),
             Expr::Paren(v) => write!(f, "({})", v),
             Expr::List(v) => v.fmt(f),
+            Expr::Map(v) => v.fmt(f),
             Expr::Func(v) => v.fmt(f),
             Expr::Call(v) => v.fmt(f),
             Expr::IfElse(v) => v.fmt(f),
@@ -161,6 +163,27 @@ impl Display for ListExpr {
         }
 
         write!(f, "]")
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MapExpr {
+    pub pairs: Vec<(Spanned<Expr>, Spanned<Expr>)>,
+}
+
+impl Display for MapExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+
+        for (i, (k, v)) in self.pairs.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "[{}] = {}", k, v)?;
+        }
+
+        write!(f, "}}")
     }
 }
 

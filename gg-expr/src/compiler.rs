@@ -139,6 +139,7 @@ impl<'expr> Compiler<'expr> {
             Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
             Expr::Paren(expr) => self.compile(expr),
             Expr::List(list) => self.compile_list(span, &list.exprs),
+            Expr::Map(map) => self.compile_map(span, &map.pairs),
             Expr::Func(func) => self.compile_func(span, func),
             Expr::Call(call) => self.compile_call(span, call),
             Expr::IfElse(if_else) => self.compile_if_else(span, if_else),
@@ -172,6 +173,18 @@ impl<'expr> Compiler<'expr> {
 
         let len = self.try_from_usize(span, "list too long", list.len());
         self.add_instr(vec![span], Instruction::NewList(len));
+
+        self.stack_len -= len;
+    }
+
+    fn compile_map(&mut self, span: Span, pairs: &'expr [(Spanned<Expr>, Spanned<Expr>)]) {
+        for (key, value) in pairs {
+            self.compile(key);
+            self.compile(value);
+        }
+
+        let len = self.try_from_usize(span, "map too long", pairs.len());
+        self.add_instr(vec![span], Instruction::NewMap(len));
 
         self.stack_len -= len;
     }

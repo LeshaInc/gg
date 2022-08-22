@@ -21,6 +21,7 @@ pub enum Instruction {
     UnOp(UnOp),
     BinOp(BinOp),
     NewList(u32),
+    NewMap(u32),
     NewFunc(u32),
 }
 
@@ -109,6 +110,7 @@ impl Vm {
             Instruction::UnOp(v) => self.instr_un_op(v)?,
             Instruction::BinOp(v) => self.instr_bin_op(v)?,
             Instruction::NewList(v) => self.instr_new_list(v),
+            Instruction::NewMap(v) => self.instr_new_map(v),
             Instruction::NewFunc(v) => self.instr_new_func(v),
         }
 
@@ -308,5 +310,20 @@ impl Vm {
         }
 
         self.stack.push(list.into());
+    }
+
+    fn instr_new_map(&mut self, count: u32) {
+        let mut map = im::HashMap::new();
+
+        for _ in 0..count {
+            let value = self.stack.pop().unwrap();
+
+            let key = self.stack.pop().unwrap();
+            let key = key.as_string().unwrap().to_string(); // TODO
+
+            map.insert(key, value);
+        }
+
+        self.stack.push(map.into());
     }
 }
