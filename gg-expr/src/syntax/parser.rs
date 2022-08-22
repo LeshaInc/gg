@@ -112,7 +112,9 @@ impl Parser {
 
                 lhs = match token {
                     Token::LParen => self.expr_call(lhs),
-                    Token::LBracket | Token::QuestionLBracket => self.expr_index(lhs),
+                    Token::LBracket | Token::QuestionLBracket | Token::Dot | Token::QuestionDot => {
+                        self.expr_index(lhs)
+                    }
                     _ => continue,
                 };
                 continue;
@@ -365,14 +367,27 @@ impl Parser {
     }
 
     fn expr_index(&mut self, lhs: Spanned<Expr>) -> Spanned<Expr> {
-        let op = match self.next().item {
-            Token::LBracket => BinOp::Index,
-            Token::QuestionLBracket => BinOp::IndexNullable,
+        let (op, short) = match self.next().item {
+            Token::LBracket => (BinOp::Index, false),
+            Token::QuestionLBracket => (BinOp::IndexNullable, false),
+            Token::Dot => (BinOp::Index, true),
+            Token::QuestionDot => (BinOp::IndexNullable, true),
             _ => unreachable!(),
         };
 
-        let rhs = self.expr();
-        let end = self.expect_token(&[Token::RBracket]).span.end;
+        let rhs = if short {
+            let token = self.expect_token(&[Token::Ident]);
+            let str = token.span.slice(&self.source.text).to_string();
+            Spanned::new(token.span, Expr::String(Arc::new(str)))
+        } else {
+            self.expr()
+        };
+
+        let end = if short {
+            rhs.span.end
+        } else {
+            self.expect_token(&[Token::RBracket]).span.end
+        };
 
         let span = Span::new(lhs.span.start, end);
         let expr = Expr::BinOp(BinOpExpr {
@@ -458,8 +473,10 @@ pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
 }
 
 pub fn postfix_bp(token: Token) -> Option<u8> {
+    use Token::*;
+
     Some(match token {
-        Token::LParen | Token::LBracket | Token::QuestionLBracket => 17,
+        LParen | LBracket | QuestionLBracket | Dot | QuestionDot => 17,
         _ => return None,
     })
 }

@@ -40,7 +40,7 @@ impl Debug for Func {
                 writeln!(f)?;
             }
 
-            write!(f, "{:15}", format!("{:?}", instr))?;
+            write!(f, "{:20}", format!("{:?}", instr))?;
 
             let (di, spans) = match &self.debug_info {
                 Some(di) => match di.instruction_spans.get(i) {
