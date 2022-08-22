@@ -391,7 +391,7 @@ impl Parser {
 
 pub fn prefix_bp(token: Token) -> Option<u8> {
     Some(match token {
-        Token::Sub | Token::Not => 12,
+        Token::Sub | Token::Not => 14,
         _ => return None,
     })
 }
@@ -402,17 +402,18 @@ pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
     Some(match token {
         Or => (1, 2),
         And => (3, 4),
-        Lt | Le | Eq | Neq | Ge | Gt => (5, 6),
-        Add | Sub => (7, 8),
-        Mul | Div | Rem => (9, 10),
-        Pow => (13, 14),
+        Eq | Neq => (5, 6),
+        Lt | Le | Ge | Gt => (7, 8),
+        Add | Sub => (9, 10),
+        Mul | Div | Rem => (11, 12),
+        Pow => (15, 16),
         _ => return None,
     })
 }
 
 pub fn postfix_bp(token: Token) -> Option<u8> {
     Some(match token {
-        Token::LParen | Token::LBracket | Token::QuestionLBracket => 15,
+        Token::LParen | Token::LBracket | Token::QuestionLBracket => 17,
         _ => return None,
     })
 }
