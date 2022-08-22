@@ -199,7 +199,7 @@ impl Clone for Value {
             Value {
                 ty: self.ty,
                 payload: Payload {
-                    heap: ManuallyDrop::new(Arc::clone(&heap)),
+                    heap: ManuallyDrop::new(Arc::clone(heap)),
                 },
             }
         } else {

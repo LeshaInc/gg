@@ -86,7 +86,7 @@ fn show_spans(func: &Func) {
         severity: Severity::Info,
         message: format!(
             "func {} in {}",
-            di.name.as_deref().unwrap_or_else(|| "?"),
+            di.name.as_deref().unwrap_or("?"),
             di.source.span_to_line_col(di.span)
         ),
         components,

@@ -59,7 +59,7 @@ impl Vm {
     }
 
     fn run(&mut self) -> Result<(), Error> {
-        'outer: while self.callstack.len() > 0 {
+        'outer: while !self.callstack.is_empty() {
             let value = self.callstack[self.callstack.len() - 1].clone();
             let value = if let Ok(thunk) = value.as_thunk() {
                 thunk.force_eval()?
@@ -75,7 +75,7 @@ impl Vm {
                 let instr = func.instructions[self.ip];
                 self.ip += 1;
 
-                self.dispatch(&func, instr)?;
+                self.dispatch(func, instr)?;
 
                 if matches!(instr, Instruction::Ret) {
                     break 'inner;
@@ -172,7 +172,7 @@ impl Vm {
 
     fn instr_un_op(&mut self, op: UnOp) -> Result<(), Error> {
         let val = self.stack.last_mut().unwrap();
-        match ops::un_op(&val, op) {
+        match ops::un_op(val, op) {
             Some(v) => {
                 *val = v;
                 Ok(())
@@ -213,7 +213,7 @@ impl Vm {
     fn instr_bin_op(&mut self, op: BinOp) -> Result<(), Error> {
         let rhs = self.stack.pop().unwrap();
         let lhs = self.stack.last_mut().unwrap();
-        match ops::bin_op(&lhs, &rhs, op) {
+        match ops::bin_op(lhs, &rhs, op) {
             Some(v) => {
                 *lhs = v;
                 Ok(())
@@ -266,7 +266,7 @@ impl Vm {
                 lhs.len()
             )
         } else {
-            format!("list index out of bounds: attempt to index an empty list")
+            "list index out of bounds: attempt to index an empty list".to_string()
         };
 
         let diagnostic = Diagnostic::new(Severity::Error, message);

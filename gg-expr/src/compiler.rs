@@ -137,7 +137,7 @@ impl<'expr> Compiler<'expr> {
             Expr::Var(name) => self.compile_var(span, name),
             Expr::BinOp(bin_op) => self.compile_bin_op(span, bin_op),
             Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
-            Expr::Paren(expr) => self.compile(&expr),
+            Expr::Paren(expr) => self.compile(expr),
             Expr::List(list) => self.compile_list(span, &list.exprs),
             Expr::Func(func) => self.compile_func(span, func),
             Expr::Call(call) => self.compile_call(span, call),
@@ -253,7 +253,7 @@ impl<'expr> Compiler<'expr> {
 
     fn bindings_in_scope(&self) -> Vec<&'expr str> {
         let mut bindings = HashSet::new();
-        let mut current = &*self;
+        let mut current = self;
         loop {
             for binding in current.scope.vars.keys().copied().chain(current.name) {
                 if !bindings.contains(binding) {
@@ -339,10 +339,10 @@ impl<'expr> Compiler<'expr> {
 
         for (binding, expr) in &let_in.vars {
             let idx = self.stack_len;
-            self.inner_name = Some(&*binding);
+            self.inner_name = Some(binding);
             self.compile(expr);
             self.inner_name = None;
-            self.scope.vars.insert(&*binding, VarLocation::Stack(idx));
+            self.scope.vars.insert(binding, VarLocation::Stack(idx));
         }
 
         self.compile(&let_in.expr);
@@ -383,7 +383,7 @@ pub fn compile(source: Arc<Source>, expr: &Spanned<Expr>) -> (Value, Vec<Diagnos
         _ => {
             let mut compiler = Compiler::new(source, &[]);
             compiler.debug_info.name = Some("<thunk>".into());
-            compiler.compile_root(&expr);
+            compiler.compile_root(expr);
             let func = compiler.finish();
             (
                 Thunk::new(func.into()).into(),

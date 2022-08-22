@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use crate::syntax::Span;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Source {
     pub name: String,
     pub text: String,

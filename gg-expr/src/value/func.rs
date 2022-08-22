@@ -66,7 +66,7 @@ impl Debug for Func {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DebugInfo {
     pub source: Arc<Source>,
     pub span: Span,
