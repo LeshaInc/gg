@@ -92,20 +92,40 @@ impl Value {
         self.ty == Type::Null
     }
 
+    pub fn is_int(&self) -> bool {
+        self.ty == Type::Int
+    }
+
     pub fn as_int(&self) -> Result<i64, FromValueError> {
         self.try_into()
+    }
+
+    pub fn is_float(&self) -> bool {
+        self.ty == Type::Float
     }
 
     pub fn as_float(&self) -> Result<f64, FromValueError> {
         self.try_into()
     }
 
+    pub fn is_bool(&self) -> bool {
+        self.ty == Type::Bool
+    }
+
     pub fn as_bool(&self) -> Result<bool, FromValueError> {
         self.try_into()
     }
 
+    pub fn is_string(&self) -> bool {
+        self.ty == Type::String
+    }
+
     pub fn as_string(&self) -> Result<&str, FromValueError> {
         self.try_into()
+    }
+
+    pub fn is_func(&self) -> bool {
+        self.ty == Type::Func
     }
 
     pub fn as_func(&self) -> Result<&Func, FromValueError> {
@@ -126,12 +146,24 @@ impl Value {
         }
     }
 
+    pub fn is_thunk(&self) -> bool {
+        self.ty == Type::Thunk
+    }
+
     pub fn as_thunk(&self) -> Result<&Thunk, FromValueError> {
         self.try_into()
     }
 
+    pub fn is_list(&self) -> bool {
+        self.ty == Type::List
+    }
+
     pub fn as_list(&self) -> Result<&im::Vector<Value>, FromValueError> {
         self.try_into()
+    }
+
+    pub fn is_map(&self) -> bool {
+        self.ty == Type::Map
     }
 
     pub fn as_map(&self) -> Result<&im::HashMap<String, Value>, FromValueError> {

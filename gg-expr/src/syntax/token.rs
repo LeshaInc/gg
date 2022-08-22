@@ -51,6 +51,8 @@ pub enum Token {
     LBracket,
     #[token("]")]
     RBracket,
+    #[token("?[")]
+    QuestionLBracket,
 
     #[token(",")]
     Comma,
@@ -131,6 +133,7 @@ impl Token {
             RBrace => "`}`",
             LBracket => "`[`",
             RBracket => "`]`",
+            QuestionLBracket => "`?`",
 
             Comma => "`,`",
             Colon => "`:`",

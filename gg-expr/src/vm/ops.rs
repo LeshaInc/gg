@@ -127,6 +127,17 @@ macro_rules! add_bin_ops {
             res
         },
 
+        (List, Int, Index) => |x, y| {
+            let index = usize::try_from(as_int!(y)).ok()?;
+            as_list!(x).get(index)?.clone()
+        },
+
+        (List, Int, IndexNullable) => |x, y| {
+            usize::try_from(as_int!(y)).ok()
+                .and_then(|idx| as_list!(x).get(idx)?.clone().into())
+                .unwrap_or(Value::null())
+        },
+
         (String, String, Add) => |x, y| {
             let mut x = as_string!(x).to_owned();
             x.push_str(as_string!(y));

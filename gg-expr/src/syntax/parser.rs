@@ -110,11 +110,11 @@ impl Parser {
                     break;
                 }
 
-                match token {
-                    Token::LParen => lhs = self.expr_call(lhs),
-                    _ => {}
-                }
-
+                lhs = match token {
+                    Token::LParen => self.expr_call(lhs),
+                    Token::LBracket | Token::QuestionLBracket => self.expr_index(lhs),
+                    _ => continue,
+                };
                 continue;
             }
 
@@ -318,6 +318,26 @@ impl Parser {
         Spanned::new(span, expr)
     }
 
+    fn expr_index(&mut self, lhs: Spanned<Expr>) -> Spanned<Expr> {
+        let op = match self.next().item {
+            Token::LBracket => BinOp::Index,
+            Token::QuestionLBracket => BinOp::IndexNullable,
+            _ => unreachable!(),
+        };
+
+        let rhs = self.expr();
+        let end = self.expect_token(&[Token::RBracket]).span.end;
+
+        let span = Span::new(lhs.span.start, end);
+        let expr = Expr::BinOp(BinOpExpr {
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        });
+
+        Spanned::new(span, expr)
+    }
+
     fn expr_if_else(&mut self) -> Spanned<Expr> {
         let start = self.next().span.start;
 
@@ -392,7 +412,7 @@ pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
 
 pub fn postfix_bp(token: Token) -> Option<u8> {
     Some(match token {
-        Token::LParen | Token::LBracket => 15,
+        Token::LParen | Token::LBracket | Token::QuestionLBracket => 15,
         _ => return None,
     })
 }

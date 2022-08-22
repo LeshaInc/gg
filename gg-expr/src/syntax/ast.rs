@@ -49,7 +49,11 @@ pub struct BinOpExpr {
 
 impl Display for BinOpExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.lhs, self.op, self.rhs)
+        match self.op {
+            BinOp::Index => write!(f, "{}[{}]", self.lhs, self.rhs),
+            BinOp::IndexNullable => write!(f, "{}?[{}]", self.lhs, self.rhs),
+            _ => write!(f, "{} {} {}", self.lhs, self.op, self.rhs),
+        }
     }
 }
 
@@ -65,6 +69,7 @@ macro_rules! define_op {
                 $($ty ::$name,)*
             ];
 
+            #[allow(unreachable_patterns)]
             pub fn from_token(token: Token) -> Option<$ty > {
                 match token {
                     $(Token::$token => Some($ty ::$name),)*
@@ -113,6 +118,8 @@ define_op! {
         Div(Div, "/"),
         Rem(Rem, "%"),
         Pow(Pow, "**"),
+        Index(LBracket, "[]"),
+        IndexNullable(QuestionLBracket, "?[]"),
     }
 }
 

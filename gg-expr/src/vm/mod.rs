@@ -1,8 +1,8 @@
 mod ops;
 
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::syntax::{BinOp, UnOp};
-use crate::{Error, Func, Value};
+use crate::syntax::{BinOp, Span, UnOp};
+use crate::{DebugInfo, Error, Func, Value};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,6 +43,19 @@ impl Vm {
         self.stack.extend(args.iter().cloned());
         self.run()?;
         Ok(self.stack.pop().unwrap()) // TODO
+    }
+
+    fn get_current_debug_info(&self) -> Option<&DebugInfo> {
+        let value = self.callstack.last().unwrap();
+        let func = value.as_func().unwrap();
+        func.debug_info.as_deref()
+    }
+
+    fn get_current_spans(&self) -> &[Span] {
+        match self.get_current_debug_info() {
+            Some(info) => &info.instruction_spans[self.ip - 1],
+            None => &[],
+        }
     }
 
     fn run(&mut self) -> Result<(), Error> {
@@ -174,24 +187,19 @@ impl Vm {
     #[inline(never)]
     fn error_un_op(&self, val: Value, op: UnOp) -> Error {
         let message = format!(
-            "unary operation `{}` cannot be applied to `{:?}`",
+            "unary operator `{}` cannot be applied to `{:?}`",
             op,
             val.ty(),
         );
 
         let diagnostic = Diagnostic::new(Severity::Error, message);
 
-        let value = self.callstack.last().unwrap();
-        let func = value.as_func().unwrap();
-
-        let debug_info = match &func.debug_info {
+        let debug_info = match self.get_current_debug_info() {
             Some(v) => v,
-            None => {
-                return Error::new(diagnostic);
-            }
+            None => return Error::new(diagnostic),
         };
 
-        let spans = &debug_info.instruction_spans[self.ip - 1];
+        let spans = self.get_current_spans();
 
         let source = SourceComponent::new(debug_info.source.clone()).with_label(
             Severity::Error,
@@ -219,8 +227,12 @@ impl Vm {
 
     #[inline(never)]
     fn error_bin_op(&self, lhs: Value, rhs: Value, op: BinOp) -> Error {
+        if lhs.is_list() && rhs.is_int() && op == BinOp::Index {
+            return self.error_list_index_oob(lhs, rhs);
+        }
+
         let message = format!(
-            "operation `{}` cannot be applied to `{:?}` and `{:?}`",
+            "operator `{}` cannot be applied to `{:?}` and `{:?}`",
             op,
             lhs.ty(),
             rhs.ty()
@@ -228,21 +240,47 @@ impl Vm {
 
         let diagnostic = Diagnostic::new(Severity::Error, message);
 
-        let value = self.callstack.last().unwrap();
-        let func = value.as_func().unwrap();
-
-        let debug_info = match &func.debug_info {
+        let debug_info = match self.get_current_debug_info() {
             Some(v) => v,
-            None => {
-                return Error::new(diagnostic);
-            }
+            None => return Error::new(diagnostic),
         };
 
-        let spans = &debug_info.instruction_spans[self.ip - 1];
+        let spans = self.get_current_spans();
 
         let source = SourceComponent::new(debug_info.source.clone())
             .with_label(Severity::Error, spans[1], format!("`{:?}`", lhs.ty()))
             .with_label(Severity::Error, spans[2], format!("`{:?}`", rhs.ty()));
+
+        Error::new(diagnostic.with_source(source))
+    }
+
+    #[inline(never)]
+    fn error_list_index_oob(&self, lhs: Value, rhs: Value) -> Error {
+        let lhs = lhs.as_list().unwrap();
+        let rhs = rhs.as_int().unwrap();
+
+        let message = if !lhs.is_empty() {
+            format!(
+                "list index out of bounds: {} not in [0, {})",
+                rhs,
+                lhs.len()
+            )
+        } else {
+            format!("list index out of bounds: attempt to index an empty list")
+        };
+
+        let diagnostic = Diagnostic::new(Severity::Error, message);
+
+        let debug_info = match self.get_current_debug_info() {
+            Some(v) => v,
+            None => return Error::new(diagnostic),
+        };
+
+        let spans = self.get_current_spans();
+
+        let source = SourceComponent::new(debug_info.source.clone())
+            .with_label(Severity::Error, spans[1], format!("length: {}", lhs.len()))
+            .with_label(Severity::Error, spans[2], format!("index: {}", rhs));
 
         Error::new(diagnostic.with_source(source))
     }
