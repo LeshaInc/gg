@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
 use crate::syntax::{
-    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, Span, Spanned, UnOpExpr,
+    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, MapKey, Span, Spanned, UnOpExpr,
 };
 use crate::{DebugInfo, Func, Instruction, Source, Thunk, Value};
 
@@ -177,16 +177,34 @@ impl<'expr> Compiler<'expr> {
         self.stack_len -= len;
     }
 
-    fn compile_map(&mut self, span: Span, pairs: &'expr [(Spanned<Expr>, Spanned<Expr>)]) {
+    fn compile_map(&mut self, span: Span, pairs: &'expr [(MapKey, Spanned<Expr>)]) {
+        self.parent_scopes.push(self.scope.clone());
+
         for (key, value) in pairs {
-            self.compile(key);
+            match key {
+                MapKey::Ident(key) => {
+                    self.compile_string(key.span, &key.item);
+                    self.stack_len += 1;
+                }
+                MapKey::Expr(key) => {
+                    self.compile(key);
+                }
+            }
+
             self.compile(value);
+
+            if let MapKey::Ident(key) = key {
+                let loc = VarLocation::Stack(self.stack_len - 1);
+                self.scope.vars.insert(&key.item, loc);
+            }
         }
+
+        self.scope = self.parent_scopes.pop().unwrap();
 
         let len = self.try_from_usize(span, "map too long", pairs.len());
         self.add_instr(vec![span], Instruction::NewMap(len));
 
-        self.stack_len -= len;
+        self.stack_len -= len * 2;
     }
 
     fn compile_func(&mut self, span: Span, func: &'expr FuncExpr) {
@@ -364,7 +382,7 @@ impl<'expr> Compiler<'expr> {
         self.add_instr(vec![], Instruction::PopSwap(num_vars));
         self.stack_len -= num_vars;
 
-        self.parent_scopes.pop();
+        self.scope = self.parent_scopes.pop().unwrap();
     }
 
     fn finish(&mut self) -> Func {

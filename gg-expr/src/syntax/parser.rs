@@ -264,17 +264,17 @@ impl Parser {
                     self.next();
                     let key = self.expr();
                     self.expect_token(&[Token::RBracket]);
-                    key
+                    MapKey::Expr(key)
                 }
+                Token::String => MapKey::Expr(self.expr_string()),
                 Token::Ident => {
                     self.next();
                     let text = token.span.slice(&self.source.text).to_string();
-                    Spanned::new(token.span, Expr::String(text.into()))
+                    MapKey::Ident(Spanned::new(token.span, text.into()))
                 }
-                Token::String => self.expr_string(),
                 _ => {
                     self.expect_token(&[Token::LBracket, Token::Ident, Token::String]);
-                    Spanned::new(token.span, Expr::Error)
+                    MapKey::Expr(Spanned::new(token.span, Expr::Error))
                 }
             };
 

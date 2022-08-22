@@ -168,7 +168,13 @@ impl Display for ListExpr {
 
 #[derive(Clone, Debug)]
 pub struct MapExpr {
-    pub pairs: Vec<(Spanned<Expr>, Spanned<Expr>)>,
+    pub pairs: Vec<(MapKey, Spanned<Expr>)>,
+}
+
+#[derive(Clone, Debug)]
+pub enum MapKey {
+    Ident(Spanned<String>),
+    Expr(Spanned<Expr>),
 }
 
 impl Display for MapExpr {
@@ -180,7 +186,10 @@ impl Display for MapExpr {
                 write!(f, ", ")?;
             }
 
-            write!(f, "[{}] = {}", k, v)?;
+            match k {
+                MapKey::Ident(k) => write!(f, "{} = {}", k, v)?,
+                MapKey::Expr(k) => write!(f, "[{}] = {}", k, v)?,
+            }
         }
 
         write!(f, "}}")
