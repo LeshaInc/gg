@@ -1,11 +1,12 @@
 use std::fmt::{self, Debug};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
 
 use crate::{Error, Value, Vm};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Thunk {
     pub func: Value,
     pub value: Arc<OnceCell<Value>>,
@@ -34,5 +35,19 @@ impl Debug for Thunk {
         } else {
             writeln!(f, "thunk: {:?}", self.func)
         }
+    }
+}
+
+impl Eq for Thunk {}
+
+impl PartialEq for Thunk {
+    fn eq(&self, other: &Self) -> bool {
+        self.func == other.func
+    }
+}
+
+impl Hash for Thunk {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.func.hash(state)
     }
 }

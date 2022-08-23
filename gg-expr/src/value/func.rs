@@ -6,7 +6,7 @@ use indenter::indented;
 use crate::syntax::Span;
 use crate::{Instruction, Source, Value};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Func {
     pub instructions: Arc<[Instruction]>,
     pub consts: Arc<[Value]>,
@@ -66,7 +66,7 @@ impl Debug for Func {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct DebugInfo {
     pub source: Arc<Source>,
     pub span: Span,

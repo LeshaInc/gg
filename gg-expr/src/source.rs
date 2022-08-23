@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use crate::syntax::Span;
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct Source {
     pub name: String,
     pub text: String,
@@ -62,7 +62,7 @@ impl Source {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Line {
     pub number: u32,
     pub span: Span,

@@ -2,6 +2,7 @@ mod func;
 mod thunk;
 
 use std::fmt::{self, Debug};
+use std::hash::{Hash, Hasher};
 use std::hint::unreachable_unchecked;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ pub use self::func::{DebugInfo, Func};
 pub use self::thunk::Thunk;
 use crate::Error;
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Type {
     Null = 0,
     Int = 1,
@@ -166,7 +167,7 @@ impl Value {
         self.ty == Type::Map
     }
 
-    pub fn as_map(&self) -> Result<&im::HashMap<String, Value>, FromValueError> {
+    pub fn as_map(&self) -> Result<&im::HashMap<Value, Value>, FromValueError> {
         self.try_into()
     }
 
@@ -232,7 +233,7 @@ impl Debug for Value {
     }
 }
 
-fn fmt_map(map: &im::HashMap<String, Value>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+fn fmt_map(map: &im::HashMap<Value, Value>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{{")?;
 
     for (i, (k, v)) in map.iter().enumerate() {
@@ -247,6 +248,8 @@ fn fmt_map(map: &im::HashMap<String, Value>, f: &mut fmt::Formatter<'_>) -> fmt:
     write!(f, "}}")
 }
 
+impl Eq for Value {}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         if self.ty != other.ty {
@@ -256,13 +259,37 @@ impl PartialEq for Value {
         match self.ty {
             Type::Null => true,
             Type::Int => self.as_int() == other.as_int(),
-            Type::Float => self.as_float() == other.as_float(),
+            Type::Float => {
+                let (a, b) = (self.as_float().unwrap(), other.as_float().unwrap());
+                if a.is_nan() {
+                    b.is_nan()
+                } else {
+                    a == b
+                }
+            }
             Type::Bool => self.as_bool() == other.as_bool(),
             Type::String => self.as_string() == other.as_string(),
             Type::Func => self.as_func() == other.as_func(),
             Type::Thunk => self.as_thunk() == other.as_thunk(),
             Type::List => self.as_list() == other.as_list(),
             Type::Map => self.as_map() == other.as_map(),
+        }
+    }
+}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ty.hash(state);
+
+        match self.ty {
+            Type::Null => {}
+            Type::Int => self.as_int().unwrap().hash(state),
+            Type::Float => {
+                let x = self.as_float().unwrap();
+                if x.is_nan() { f64::NAN } else { x }.to_bits().hash(state);
+            }
+            Type::Bool => self.as_bool().unwrap().hash(state),
+            _ => unsafe { self.payload.heap.hash(state) },
         }
     }
 }
@@ -324,8 +351,8 @@ impl From<im::Vector<Value>> for Value {
     }
 }
 
-impl From<im::HashMap<String, Value>> for Value {
-    fn from(value: im::HashMap<String, Value>) -> Value {
+impl From<im::HashMap<Value, Value>> for Value {
+    fn from(value: im::HashMap<Value, Value>) -> Value {
         Value::new_heap(Type::Map, HeapValue::Map(value))
     }
 }
@@ -458,10 +485,10 @@ impl<'a> TryFrom<&'a Value> for &'a im::Vector<Value> {
     }
 }
 
-impl<'a> TryFrom<&'a Value> for &'a im::HashMap<String, Value> {
+impl<'a> TryFrom<&'a Value> for &'a im::HashMap<Value, Value> {
     type Error = FromValueError;
 
-    fn try_from(value: &'a Value) -> Result<&'a im::HashMap<String, Value>, FromValueError> {
+    fn try_from(value: &'a Value) -> Result<&'a im::HashMap<Value, Value>, FromValueError> {
         if value.ty == Type::Map {
             let heap = unsafe { &**value.payload.heap };
             match heap {
@@ -485,11 +512,11 @@ union Payload {
     heap: ManuallyDrop<Arc<HeapValue>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 enum HeapValue {
     String(String),
     Func(Func),
     Thunk(Thunk),
     List(im::Vector<Value>),
-    Map(im::HashMap<String, Value>),
+    Map(im::HashMap<Value, Value>),
 }

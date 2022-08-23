@@ -61,7 +61,7 @@ impl Display for BinOpExpr {
 
 macro_rules! define_op {
     (pub enum $ty:ident { $($name:ident($token:ident, $repr:expr),)* }) => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
         pub enum $ty {
              $($name,)*
         }

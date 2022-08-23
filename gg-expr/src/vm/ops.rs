@@ -147,14 +147,6 @@ macro_rules! add_bin_ops {
                 .unwrap_or(Value::null())
         },
 
-        (Map, String, Index) => |x, y| {
-            as_map!(x).get(as_string!(y))?.clone()
-        },
-
-        (Map, String, IndexNullable) => |x, y| {
-            as_map!(x).get(as_string!(y)).cloned().unwrap_or(Value::null())
-        },
-
         (String, String, Add) => |x, y| {
             let mut x = as_string!(x).to_owned();
             x.push_str(as_string!(y));
@@ -277,6 +269,14 @@ fn bin_op_ret_b(_: &Value, b: &Value) -> Option<Value> {
     Some(b.clone())
 }
 
+fn bin_op_map_idx(map: &Value, idx: &Value) -> Option<Value> {
+    as_map!(map).get(idx).cloned()
+}
+
+fn bin_op_map_idx_nullable(map: &Value, idx: &Value) -> Option<Value> {
+    Some(as_map!(map).get(idx).cloned().unwrap_or_else(Value::null))
+}
+
 const fn build_bin_op_lut() -> BinOpLut {
     let mut lut: BinOpLut = [[[bin_op_err; NUM_BIN_OPS]; NUM_TYPES]; NUM_TYPES];
 
@@ -298,19 +298,21 @@ const fn build_bin_op_lut() -> BinOpLut {
                     bin_op,
                 };
 
-                if bin_op == Eq as usize {
-                    lut[type_lhs][type_rhs][bin_op] = bin_op_eq;
-                }
-
-                if bin_op == Coalesce as usize {
-                    lut[type_lhs][type_rhs][bin_op] = if type_lhs == Null as usize {
-                        bin_op_ret_b
-                    } else {
-                        bin_op_ret_a
-                    };
-                }
-
-                add_bin_ops!(ctx, lut);
+                lut[type_lhs][type_rhs][bin_op] = if bin_op == Eq as usize {
+                    bin_op_eq
+                } else if bin_op == Coalesce as usize && type_lhs == Null as usize {
+                    bin_op_ret_b
+                } else if bin_op == Coalesce as usize {
+                    bin_op_ret_a
+                } else if bin_op == Index as usize && type_lhs == Map as usize {
+                    bin_op_map_idx
+                } else if bin_op == IndexNullable as usize && type_lhs == Map as usize {
+                    bin_op_map_idx_nullable
+                } else {
+                    add_bin_ops!(ctx, lut);
+                    bin_op += 1;
+                    continue;
+                };
 
                 bin_op += 1;
             }

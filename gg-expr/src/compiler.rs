@@ -307,6 +307,7 @@ impl<'expr> Compiler<'expr> {
         in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, name));
 
         let mut help = String::from("perhaps you meant ");
+
         for (i, var) in in_scope.iter().take(3).enumerate() {
             if i > 0 {
                 help.push_str(", ");

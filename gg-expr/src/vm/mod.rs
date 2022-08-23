@@ -1,11 +1,13 @@
 mod ops;
 
+use std::fmt::Write;
+
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{BinOp, Span, UnOp};
 use crate::{DebugInfo, Error, Func, Value};
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Instruction {
     Nop,
     Panic,
@@ -229,8 +231,12 @@ impl Vm {
 
     #[cold]
     fn error_bin_op(&self, lhs: Value, rhs: Value, op: BinOp) -> Error {
-        if lhs.is_list() && rhs.is_int() && op == BinOp::Index {
-            return self.error_list_index_oob(lhs, rhs);
+        if op == BinOp::Index {
+            if lhs.is_list() {
+                return self.error_list_index_oob(lhs, rhs);
+            } else if lhs.is_map() {
+                return self.error_no_such_key(lhs, rhs);
+            }
         }
 
         let message = format!(
@@ -287,6 +293,58 @@ impl Vm {
         Error::new(diagnostic.with_source(source))
     }
 
+    #[cold]
+    fn error_no_such_key(&self, lhs: Value, rhs: Value) -> Error {
+        let lhs = lhs.as_map().unwrap();
+
+        let lhs_label = format!("map of {} entries", lhs.len());
+        let (message, rhs_label) =
+            if rhs.is_string() || rhs.is_int() || rhs.is_float() || rhs.is_bool() {
+                (
+                    format!("key not present in map: {:?}", rhs),
+                    format!("key: {:?}", rhs),
+                )
+            } else {
+                ("key not present in map".to_string(), "key".to_string())
+            };
+
+        let mut diagnostic = Diagnostic::new(Severity::Error, message);
+
+        let debug_info = match self.get_current_debug_info() {
+            Some(v) => v,
+            None => return Error::new(diagnostic),
+        };
+
+        let spans = self.get_current_spans();
+
+        diagnostic = diagnostic.with_source(
+            SourceComponent::new(debug_info.source.clone())
+                .with_label(Severity::Error, spans[1], lhs_label)
+                .with_label(Severity::Error, spans[2], rhs_label),
+        );
+
+        if let Ok(str) = rhs.as_string() {
+            let mut keys = lhs.keys().flat_map(|k| k.as_string()).collect::<Vec<_>>();
+            keys.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, str));
+
+            let mut help = String::from("perhaps you meant ");
+
+            for (i, var) in keys.iter().take(3).enumerate() {
+                if i > 0 {
+                    help.push_str(", ");
+                }
+
+                let _ = write!(&mut help, "{:?}", var);
+            }
+
+            if !keys.is_empty() {
+                diagnostic = diagnostic.with_help(help);
+            }
+        }
+
+        Error::new(diagnostic)
+    }
+
     fn instr_new_func(&mut self, num_captures: u32) {
         let mut value = self.stack.pop().unwrap();
 
@@ -317,10 +375,7 @@ impl Vm {
 
         for _ in 0..count {
             let value = self.stack.pop().unwrap();
-
             let key = self.stack.pop().unwrap();
-            let key = key.as_string().unwrap().to_string(); // TODO
-
             map.insert(key, value);
         }
 
