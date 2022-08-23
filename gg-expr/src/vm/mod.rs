@@ -186,7 +186,7 @@ impl Vm {
         }
     }
 
-    #[inline(never)]
+    #[cold]
     fn error_un_op(&self, val: Value, op: UnOp) -> Error {
         let message = format!(
             "unary operator `{}` cannot be applied to `{:?}`",
@@ -227,7 +227,7 @@ impl Vm {
         }
     }
 
-    #[inline(never)]
+    #[cold]
     fn error_bin_op(&self, lhs: Value, rhs: Value, op: BinOp) -> Error {
         if lhs.is_list() && rhs.is_int() && op == BinOp::Index {
             return self.error_list_index_oob(lhs, rhs);
@@ -256,7 +256,7 @@ impl Vm {
         Error::new(diagnostic.with_source(source))
     }
 
-    #[inline(never)]
+    #[cold]
     fn error_list_index_oob(&self, lhs: Value, rhs: Value) -> Error {
         let lhs = lhs.as_list().unwrap();
         let rhs = rhs.as_int().unwrap();
