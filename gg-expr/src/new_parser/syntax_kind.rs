@@ -71,6 +71,8 @@ pub enum SyntaxKind {
     TokRest,
     #[token("_")]
     TokHole,
+    #[token("null")]
+    TokNull,
     #[token("true")]
     TokTrue,
     #[token("false")]
@@ -101,7 +103,9 @@ pub enum SyntaxKind {
 
     Root,
 
+    ExprNull,
     ExprInt,
+    ExprBool,
     ExprFloat,
     ExprString,
     ExprBinding,
@@ -129,8 +133,6 @@ pub enum SyntaxKind {
     LetBinding,
     FnArgs,
     CallArgs,
-    BinaryOp,
-    UnaryOp,
 
     #[error]
     Error,
@@ -164,3 +166,7 @@ impl From<SyntaxKind> for rowan::SyntaxKind {
         Self(v as u16)
     }
 }
+
+pub type SyntaxNode = rowan::SyntaxNode<ExprLang>;
+pub type SyntaxToken = rowan::SyntaxToken<ExprLang>;
+pub type SyntaxElement = rowan::SyntaxElement<ExprLang>;

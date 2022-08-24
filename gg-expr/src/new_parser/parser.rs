@@ -46,13 +46,6 @@ impl Parser<'_> {
         }
     }
 
-    fn wrap(&mut self, token: SyntaxKind) {
-        self.start_node(token);
-        let tok = self.bump();
-        self.finish_node();
-        tok
-    }
-
     fn checkpoint(&self) -> Checkpoint {
         self.builder.checkpoint()
     }
@@ -74,14 +67,20 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn expect(&mut self, expected: SyntaxKind) {
-        if self.peek() == Some(expected) {
-            return self.bump();
+    fn expect_one_of(&mut self, expected: &[SyntaxKind]) {
+        if let Some(token) = self.peek() {
+            if expected.contains(&token) {
+                return self.bump();
+            }
         }
 
         self.start_error("unexpected token");
         self.bump();
         self.finish_node();
+    }
+
+    fn expect(&mut self, expected: SyntaxKind) {
+        self.expect_one_of(&[expected]);
     }
 
     fn comma_separated(&mut self, end: SyntaxKind, mut func: impl FnMut(&mut Self)) {
@@ -135,7 +134,7 @@ impl Parser<'_> {
                 }
 
                 self.start_node_at(root, ExprBinary);
-                self.wrap(BinaryOp);
+                self.bump();
                 self.expr_bp(r_bp);
                 self.finish_node();
                 continue;
@@ -148,7 +147,7 @@ impl Parser<'_> {
     fn expr_lhs(&mut self) {
         if let Some(r_bp) = self.peek().and_then(prefix_bp) {
             self.start_node(ExprUnary);
-            self.wrap(UnaryOp);
+            self.bump();
             self.expr_bp(r_bp);
             self.finish_node();
             return;
@@ -160,6 +159,8 @@ impl Parser<'_> {
             Some(TokLBrace) => self.expr_map(),
             Some(TokFn) => self.expr_fn(),
             Some(TokLet) => self.expr_let_in(),
+            Some(TokNull) => self.expr_null(),
+            Some(TokTrue | TokFalse) => self.expr_bool(),
             Some(TokInt) => self.expr_int(),
             Some(TokFloat) => self.expr_float(),
             Some(TokString) => self.expr_string(),
@@ -276,6 +277,18 @@ impl Parser<'_> {
         self.finish_node();
     }
 
+    fn expr_null(&mut self) {
+        self.start_node(ExprNull);
+        self.expect(TokNull);
+        self.finish_node();
+    }
+
+    fn expr_bool(&mut self) {
+        self.start_node(ExprBool);
+        self.expect_one_of(&[TokTrue, TokFalse]);
+        self.finish_node();
+    }
+
     fn expr_int(&mut self) {
         self.start_node(ExprInt);
         self.expect(TokInt);
@@ -375,7 +388,7 @@ impl Parser<'_> {
     }
 
     fn pat_hole(&mut self) {
-        self.start_node(PatBinding);
+        self.start_node(PatHole);
         self.expect(TokHole);
         self.finish_node();
     }
@@ -406,4 +419,20 @@ fn postfix_bp(token: SyntaxKind) -> Option<u8> {
         TokLParen | TokLBracket | TokQuestionLBracket | TokDot | TokQuestionDot => 17,
         _ => return None,
     })
+}
+
+pub fn int_value(text: &str) -> Option<i64> {
+    text.parse().ok()
+}
+
+pub fn float_value(text: &str) -> Option<f64> {
+    text.parse().ok()
+}
+
+pub fn string_value(text: &str) -> String {
+    text[1..text.len() - 1]
+        .replace("\\\\", "\\")
+        .replace("\\r", "\r")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
 }
