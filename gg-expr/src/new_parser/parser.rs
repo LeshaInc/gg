@@ -159,6 +159,7 @@ impl Parser<'_> {
             Some(TokLBrace) => self.expr_map(),
             Some(TokFn) => self.expr_fn(),
             Some(TokLet) => self.expr_let_in(),
+            Some(TokIf) => self.expr_if_else(),
             Some(TokNull) => self.expr_null(),
             Some(TokTrue | TokFalse) => self.expr_bool(),
             Some(TokInt) => self.expr_int(),
@@ -242,6 +243,17 @@ impl Parser<'_> {
         });
 
         self.expect(TokIn);
+        self.expr();
+        self.finish_node();
+    }
+
+    fn expr_if_else(&mut self) {
+        self.start_node(ExprIfElse);
+        self.expect(TokIf);
+        self.expr();
+        self.expect(TokThen);
+        self.expr();
+        self.expect(TokElse);
         self.expr();
         self.finish_node();
     }
