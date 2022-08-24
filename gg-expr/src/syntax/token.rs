@@ -1,6 +1,7 @@
 use logos::Logos;
 
-use super::{Span, Spanned};
+use super::Spanned;
+use crate::new_parser::{TextRange, TextSize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Logos)]
 #[logos(subpattern decimal = r"[0-9](?:_*[0-9])*")]
@@ -181,7 +182,10 @@ pub fn tokenize(input: &str) -> Vec<Spanned<Token>> {
     while let Some(token) = lexer.next() {
         let span = lexer.span();
         tokens.push(Spanned {
-            span: Span::new(span.start as u32, span.end as u32),
+            range: TextRange::new(
+                TextSize::from(span.start as u32),
+                TextSize::from(span.end as u32),
+            ),
             item: token,
         });
     }

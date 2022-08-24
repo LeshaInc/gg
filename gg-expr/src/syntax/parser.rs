@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::*;
 use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
+use crate::new_parser::{TextRange, TextSize};
 use crate::Source;
 
 pub struct Parser {
@@ -31,13 +32,13 @@ impl Parser {
             *token
         } else {
             let len = self.source.text.len() as u32;
-            let span = if len > 0 {
-                Span::new(len - 1, len)
+            let range = if len > 0 {
+                TextRange::new(TextSize::from(len - 1), TextSize::from(len))
             } else {
-                Span::new(0, 0)
+                TextRange::default()
             };
 
-            Spanned::new(span, Token::Eof)
+            Spanned::new(range, Token::Eof)
         }
     }
 
@@ -47,7 +48,7 @@ impl Parser {
         token
     }
 
-    fn error(&mut self, span: Span, message: String) {
+    fn error(&mut self, range: TextRange, message: String) {
         if !self.diagnostics.is_empty() {
             return;
         }
@@ -59,21 +60,21 @@ impl Parser {
                 source: self.source.clone(),
                 labels: vec![Label {
                     severity: Severity::Error,
-                    span,
+                    range,
                     message,
                 }],
             })],
         });
     }
 
-    fn unexpected_token(&mut self, expected: &str) -> Span {
+    fn unexpected_token(&mut self, expected: &str) -> TextRange {
         let token = self.next();
-        let span = token.span;
+        let range = token.range;
         let message = format!("expected {} near {}", expected, token.item.explain());
 
-        self.error(span, message);
+        self.error(range, message);
 
-        span
+        range
     }
 
     fn expect_token(&mut self, tokens: &[Token]) -> Spanned<Token> {
@@ -130,14 +131,14 @@ impl Parser {
                 self.next();
 
                 let rhs = self.expr_bp(r_bp);
-                let span = Span::new(lhs.span.start, rhs.span.end);
+                let range = TextRange::new(lhs.range.start(), rhs.range.end());
                 let expr = Expr::BinOp(BinOpExpr {
                     lhs: Box::new(lhs),
                     op,
                     rhs: Box::new(rhs),
                 });
 
-                lhs = Spanned::new(span, expr);
+                lhs = Spanned::new(range, expr);
                 continue;
             }
 
@@ -155,13 +156,13 @@ impl Parser {
             self.next();
 
             let rhs = self.expr_bp(r_bp);
-            let span = Span::new(token.span.start, rhs.span.end);
+            let range = TextRange::new(token.range.start(), rhs.range.end());
             let expr = Expr::UnOp(UnOpExpr {
                 op,
                 expr: Box::new(rhs),
             });
 
-            return Spanned::new(span, expr);
+            return Spanned::new(range, expr);
         }
 
         match token.item {
@@ -176,25 +177,25 @@ impl Parser {
             Token::If => self.expr_if_else(),
             Token::Let => self.expr_let_in(),
             _ => {
-                let span = self.unexpected_token("expression");
-                Spanned::new(span, Expr::Error)
+                let range = self.unexpected_token("expression");
+                Spanned::new(range, Expr::Error)
             }
         }
     }
 
     fn expr_paren(&mut self) -> Spanned<Expr> {
-        let start = self.next().span.start;
+        let start = self.next().range.start();
         let expr = self.expr();
-        let end = self.expect_token(&[Token::RParen]).span.end;
+        let end = self.expect_token(&[Token::RParen]).range.end();
 
-        let span = Span::new(start, end);
+        let range = TextRange::new(start, end);
         let expr = Expr::Paren(Box::new(expr));
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_int(&mut self) -> Spanned<Expr> {
-        let span = self.next().span;
-        let slice = span.slice(&self.source.text);
+        let range = self.next().range;
+        let slice = &self.source.text[range];
 
         let expr = if let Some(stripped) = slice.strip_prefix("0x") {
             i64::from_str_radix(stripped, 16)
@@ -204,36 +205,37 @@ impl Parser {
             slice.parse().map(Expr::Int).unwrap_or(Expr::Error)
         };
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_float(&mut self) -> Spanned<Expr> {
-        let span = self.next().span;
-        let slice = span.slice(&self.source.text);
+        let range = self.next().range;
+        let slice = &self.source.text[range];
         let expr = slice.parse().map(Expr::Float).unwrap_or(Expr::Error);
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_string(&mut self) -> Spanned<Expr> {
-        let span = self.next().span;
-        let slice = span.slice(&self.source.text);
+        let range = self.next().range;
+        let slice = &self.source.text[range];
         let str = slice[1..slice.len() - 1]
             .replace("\\\\", "\\")
             .replace("\\r", "\r")
             .replace("\\n", "\n")
             .replace("\\t", "\t");
         let expr = Expr::String(Arc::new(str));
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_var(&mut self) -> Spanned<Expr> {
-        let span = self.next().span;
-        let expr = Expr::Var(span.slice(&self.source.text).into());
-        Spanned::new(span, expr)
+        let range = self.next().range;
+        let slice = &self.source.text[range];
+        let expr = Expr::Var(slice.into());
+        Spanned::new(range, expr)
     }
 
     fn expr_list(&mut self) -> Spanned<Expr> {
-        let start = self.next().span.start;
+        let start = self.next().range.start();
 
         let mut exprs = Vec::new();
 
@@ -247,15 +249,15 @@ impl Parser {
             }
         }
 
-        let end = self.expect_token(&[Token::RBracket]).span.end;
-        let span = Span::new(start, end);
+        let end = self.expect_token(&[Token::RBracket]).range.end();
+        let range = TextRange::new(start, end);
         let expr = Expr::List(ListExpr { exprs });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_map(&mut self) -> Spanned<Expr> {
-        let start = self.next().span.start;
+        let start = self.next().range.start();
 
         let mut pairs = Vec::new();
 
@@ -271,12 +273,12 @@ impl Parser {
                 Token::String => MapKey::Expr(self.expr_string()),
                 Token::Ident => {
                     self.next();
-                    let text = token.span.slice(&self.source.text).to_string();
-                    MapKey::Ident(Spanned::new(token.span, text.into()))
+                    let text = self.source.text[token.range].to_string();
+                    MapKey::Ident(Spanned::new(token.range, text))
                 }
                 _ => {
                     self.expect_token(&[Token::LBracket, Token::Ident, Token::String]);
-                    MapKey::Expr(Spanned::new(token.span, Expr::Error))
+                    MapKey::Expr(Spanned::new(token.range, Expr::Error))
                 }
             };
 
@@ -292,16 +294,16 @@ impl Parser {
             }
         }
 
-        let end = self.expect_token(&[Token::RBrace]).span.end;
-        let span = Span::new(start, end);
+        let end = self.expect_token(&[Token::RBrace]).range.end();
+        let range = TextRange::new(start, end);
         let expr = Expr::Map(MapExpr { pairs });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_fn(&mut self) -> Spanned<Expr> {
         let mut args = Vec::new();
-        let start = self.next().span.start;
+        let start = self.next().range.start();
 
         self.expect_token(&[Token::LParen]);
 
@@ -312,7 +314,7 @@ impl Parser {
                 Token::RParen => break,
                 Token::Ident => {
                     self.next();
-                    args.push(token.span.slice(&self.source.text).into());
+                    args.push(self.source.text[token.range].into());
                 }
                 _ => {
                     self.unexpected_token("function argument");
@@ -331,13 +333,13 @@ impl Parser {
         self.expect_token(&[Token::Colon]);
 
         let inner = self.expr();
-        let span = Span::new(start, inner.span.end);
+        let range = TextRange::new(start, inner.range.end());
         let expr = Expr::Func(FuncExpr {
             args,
             expr: Box::new(inner),
         });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_call(&mut self, func: Spanned<Expr>) -> Spanned<Expr> {
@@ -355,15 +357,15 @@ impl Parser {
             }
         }
 
-        let end = self.expect_token(&[Token::RParen]).span.end;
+        let end = self.expect_token(&[Token::RParen]).range.end();
 
-        let span = Span::new(func.span.start, end);
+        let range = TextRange::new(func.range.start(), end);
         let expr = Expr::Call(CallExpr {
             func: Box::new(func),
             args,
         });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_index(&mut self, lhs: Spanned<Expr>) -> Spanned<Expr> {
@@ -377,30 +379,30 @@ impl Parser {
 
         let rhs = if short {
             let token = self.expect_token(&[Token::Ident]);
-            let str = token.span.slice(&self.source.text).to_string();
-            Spanned::new(token.span, Expr::String(Arc::new(str)))
+            let str = self.source.text[token.range].to_string();
+            Spanned::new(token.range, Expr::String(Arc::new(str)))
         } else {
             self.expr()
         };
 
         let end = if short {
-            rhs.span.end
+            rhs.range.end()
         } else {
-            self.expect_token(&[Token::RBracket]).span.end
+            self.expect_token(&[Token::RBracket]).range.end()
         };
 
-        let span = Span::new(lhs.span.start, end);
+        let range = TextRange::new(lhs.range.start(), end);
         let expr = Expr::BinOp(BinOpExpr {
             lhs: Box::new(lhs),
             op,
             rhs: Box::new(rhs),
         });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_if_else(&mut self) -> Spanned<Expr> {
-        let start = self.next().span.start;
+        let start = self.next().range.start();
 
         let cond = self.expr();
         self.expect_token(&[Token::Then]);
@@ -408,24 +410,24 @@ impl Parser {
         self.expect_token(&[Token::Else]);
         let if_false = self.expr();
 
-        let span = Span::new(start, if_false.span.end);
+        let range = TextRange::new(start, if_false.range.end());
         let expr = Expr::IfElse(IfElseExpr {
             cond: Box::new(cond),
             if_true: Box::new(if_true),
             if_false: Box::new(if_false),
         });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 
     fn expr_let_in(&mut self) -> Spanned<Expr> {
-        let start = self.next().span.start;
+        let start = self.next().range.start();
 
         let mut vars = Vec::new();
 
         loop {
-            let span = self.expect_token(&[Token::Ident]).span;
-            let var = span.slice(&self.source.text).to_owned();
+            let range = self.expect_token(&[Token::Ident]).range;
+            let var = self.source.text[range].to_string();
             self.expect_token(&[Token::Assign]);
             let expr = self.expr();
             vars.push((var, Box::new(expr)));
@@ -440,13 +442,13 @@ impl Parser {
         self.expect_token(&[Token::In]);
         let inner = self.expr();
 
-        let span = Span::new(start, inner.span.end);
+        let range = TextRange::new(start, inner.range.end());
         let expr = Expr::LetIn(LetInExpr {
             vars,
             expr: Box::new(inner),
         });
 
-        Spanned::new(span, expr)
+        Spanned::new(range, expr)
     }
 }
 

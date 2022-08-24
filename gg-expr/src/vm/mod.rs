@@ -3,7 +3,8 @@ mod ops;
 use std::fmt::Write;
 
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::syntax::{BinOp, Span, UnOp};
+use crate::new_parser::TextRange;
+use crate::syntax::{BinOp, UnOp};
 use crate::{DebugInfo, Error, Func, Value};
 
 #[repr(C)]
@@ -54,9 +55,9 @@ impl Vm {
         func.debug_info.as_deref()
     }
 
-    fn get_current_spans(&self) -> &[Span] {
+    fn get_current_ranges(&self) -> &[TextRange] {
         match self.get_current_debug_info() {
-            Some(info) => &info.instruction_spans[self.ip - 1],
+            Some(info) => &info.instruction_ranges[self.ip - 1],
             None => &[],
         }
     }
@@ -203,11 +204,11 @@ impl Vm {
             None => return Error::new(diagnostic),
         };
 
-        let spans = self.get_current_spans();
+        let ranges = self.get_current_ranges();
 
         let source = SourceComponent::new(debug_info.source.clone()).with_label(
             Severity::Error,
-            spans[1],
+            ranges[1],
             format!("`{:?}`", val.ty()),
         );
 
@@ -253,11 +254,11 @@ impl Vm {
             None => return Error::new(diagnostic),
         };
 
-        let spans = self.get_current_spans();
+        let ranges = self.get_current_ranges();
 
         let source = SourceComponent::new(debug_info.source.clone())
-            .with_label(Severity::Error, spans[1], format!("`{:?}`", lhs.ty()))
-            .with_label(Severity::Error, spans[2], format!("`{:?}`", rhs.ty()));
+            .with_label(Severity::Error, ranges[1], format!("`{:?}`", lhs.ty()))
+            .with_label(Severity::Error, ranges[2], format!("`{:?}`", rhs.ty()));
 
         Error::new(diagnostic.with_source(source))
     }
@@ -284,11 +285,11 @@ impl Vm {
             None => return Error::new(diagnostic),
         };
 
-        let spans = self.get_current_spans();
+        let ranges = self.get_current_ranges();
 
         let source = SourceComponent::new(debug_info.source.clone())
-            .with_label(Severity::Error, spans[1], format!("length: {}", lhs.len()))
-            .with_label(Severity::Error, spans[2], format!("index: {}", rhs));
+            .with_label(Severity::Error, ranges[1], format!("length: {}", lhs.len()))
+            .with_label(Severity::Error, ranges[2], format!("index: {}", rhs));
 
         Error::new(diagnostic.with_source(source))
     }
@@ -315,12 +316,12 @@ impl Vm {
             None => return Error::new(diagnostic),
         };
 
-        let spans = self.get_current_spans();
+        let ranges = self.get_current_ranges();
 
         diagnostic = diagnostic.with_source(
             SourceComponent::new(debug_info.source.clone())
-                .with_label(Severity::Error, spans[1], lhs_label)
-                .with_label(Severity::Error, spans[2], rhs_label),
+                .with_label(Severity::Error, ranges[1], lhs_label)
+                .with_label(Severity::Error, ranges[2], rhs_label),
         );
 
         if let Ok(str) = rhs.as_string() {

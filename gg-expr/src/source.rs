@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::syntax::Span;
+use crate::new_parser::{TextRange, TextSize};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct Source {
@@ -16,12 +16,15 @@ impl Source {
             lines: text
                 .lines()
                 .enumerate()
-                .map(|(i, line)| {
+                .map(|(i, line)| -> Line {
                     let start = (line.as_ptr() as usize) - (text.as_ptr() as usize);
                     let end = start + line.len();
                     Line {
                         number: (i as u32) + 1,
-                        span: Span::new(start as u32, end as u32),
+                        range: TextRange::new(
+                            TextSize::from(start as u32),
+                            TextSize::from(end as u32),
+                        ),
                     }
                 })
                 .collect(),
@@ -29,21 +32,25 @@ impl Source {
         }
     }
 
-    pub fn lines_in_span(&self, span: Span, extra: usize) -> &[Line] {
+    pub fn lines_in_range(&self, range: TextRange, extra: usize) -> &[Line] {
         let mut it = self.lines.iter();
-        let start = it.position(|v| v.span.intersects(span)).unwrap_or(0);
+        let start = it
+            .position(|v| v.range.intersect(range).is_some())
+            .unwrap_or(0);
 
         let mut it = self.lines.iter();
-        let end = it.rposition(|v| v.span.intersects(span)).unwrap_or(0);
+        let end = it
+            .rposition(|v| v.range.intersect(range).is_some())
+            .unwrap_or(0);
 
         &self.lines[start.saturating_sub(extra)..=(end + extra).min(self.lines.len() - 1)]
     }
 
-    pub fn span_to_line_col(&self, span: Span) -> LineColSpan {
-        let lines = self.lines_in_span(span, 0);
+    pub fn range_to_line_col(&self, range: TextRange) -> LineColRange {
+        let lines = self.lines_in_range(range, 0);
 
         let start_line = lines[0];
-        let start_prefix = Span::new(lines[0].span.start, span.start).slice(&self.text);
+        let start_prefix = &self.text[TextRange::new(lines[0].range.start(), range.start())];
         let start_col = start_prefix.chars().count() + 1;
         let start = LineColPos {
             line: start_line.number,
@@ -51,21 +58,22 @@ impl Source {
         };
 
         let end_line = lines[lines.len() - 1];
-        let end_prefix = Span::new(lines[lines.len() - 1].span.start, span.end).slice(&self.text);
+        let end_prefix =
+            &self.text[TextRange::new(lines[lines.len() - 1].range.start(), range.end())];
         let end_col = end_prefix.chars().count();
         let end = LineColPos {
             line: end_line.number,
             col: end_col as u32,
         };
 
-        LineColSpan { start, end }
+        LineColRange { start, end }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Line {
     pub number: u32,
-    pub span: Span,
+    pub range: TextRange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,12 +83,12 @@ pub struct LineColPos {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LineColSpan {
+pub struct LineColRange {
     pub start: LineColPos,
     pub end: LineColPos,
 }
 
-impl Display for LineColSpan {
+impl Display for LineColRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

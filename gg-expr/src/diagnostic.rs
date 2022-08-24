@@ -4,7 +4,7 @@ use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 use yansi::{Color, Paint};
 
-use crate::syntax::Span;
+use crate::new_parser::TextRange;
 use crate::{Line, Source};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -117,12 +117,12 @@ impl SourceComponent {
     pub fn with_label(
         mut self,
         severity: Severity,
-        span: Span,
+        range: TextRange,
         message: impl Into<String>,
     ) -> SourceComponent {
         self.labels.push(Label {
             severity,
-            span,
+            range,
             message: message.into(),
         });
 
@@ -133,15 +133,15 @@ impl SourceComponent {
 #[derive(Clone, Debug)]
 pub struct Label {
     pub severity: Severity,
-    pub span: Span,
+    pub range: TextRange,
     pub message: String,
 }
 
 impl Display for SourceComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let max_span = max_span(self.labels.iter().map(|l| l.span));
+        let max_range = max_range(self.labels.iter().map(|l| l.range));
 
-        let lines = self.source.lines_in_span(max_span, 3);
+        let lines = self.source.lines_in_range(max_range, 3);
         if lines.is_empty() {
             return Ok(());
         }
@@ -179,12 +179,12 @@ impl HlGrid {
         let lines = lines
             .iter()
             .map(|line| {
-                let text = line.span.slice(&source.text).to_string();
+                let text = source.text[line.range].to_string();
                 HlLine {
                     number: line.number,
                     text_width: text.width(),
                     text,
-                    span: line.span,
+                    range: line.range,
                     cells: Vec::new(),
                     labels: Vec::new(),
                 }
@@ -201,12 +201,15 @@ impl HlGrid {
 
     fn add_label(&mut self, label: &Label) {
         let mut it = self.lines.iter_mut().enumerate();
-        if let Some((start_i, start_line)) = it.find(|(_, line)| line.span.intersects(label.span)) {
+        if let Some((start_i, start_line)) =
+            it.find(|(_, line)| line.range.intersect(label.range).is_some())
+        {
             start_line.add_label(label);
             let start_y = start_line.height() - 1;
 
             let mut it = self.lines.iter_mut().enumerate();
-            if let Some((end_i, end_line)) = it.rfind(|(_, line)| line.span.intersects(label.span))
+            if let Some((end_i, end_line)) =
+                it.rfind(|(_, line)| line.range.intersect(label.range).is_some())
             {
                 if start_i == end_i {
                     return;
@@ -362,7 +365,7 @@ struct HlLine {
     number: u32,
     text: String,
     text_width: usize,
-    span: Span,
+    range: TextRange,
     cells: Vec<Vec<(char, Color)>>,
     labels: Vec<(usize, usize, Color, String)>,
 }
@@ -398,13 +401,14 @@ impl HlLine {
     fn add_label(&mut self, label: &Label) {
         self.extend_down(1);
 
-        let span = label.span;
+        let range = label.range;
         let color = label.severity.color();
 
-        let start = span.start.saturating_sub(self.span.start) as usize;
+        let start = usize::from(range.start()).saturating_sub(usize::from(self.range.start()));
 
-        let extend_right = span.end > self.span.end + 1;
-        let end = (span.end.min(self.span.end) - self.span.start) as usize;
+        let extend_right = usize::from(range.end()) > usize::from(self.range.end()) + 1;
+        let end = usize::from(range.end()).min(usize::from(self.range.end()))
+            - usize::from(self.range.start());
 
         let pos = self.text[..start].width();
         let len = self.text[start..end].width().max(1);
@@ -491,10 +495,8 @@ impl HlLine {
     }
 }
 
-fn max_span(spans: impl Iterator<Item = Span>) -> Span {
-    spans
-        .reduce(|a, b| Span::new(a.start.min(b.start), a.end.max(b.end)))
-        .unwrap_or_else(|| Span::new(0, 0))
+fn max_range(ranges: impl Iterator<Item = TextRange>) -> TextRange {
+    ranges.reduce(TextRange::cover).unwrap_or_default()
 }
 
 fn decimal_width(v: u32) -> usize {

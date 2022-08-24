@@ -3,8 +3,9 @@ use std::fmt::Write;
 use std::sync::Arc;
 
 use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
+use crate::new_parser::TextRange;
 use crate::syntax::{
-    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, MapKey, Span, Spanned, UnOpExpr,
+    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, MapKey, Spanned, UnOpExpr,
 };
 use crate::{DebugInfo, Func, Instruction, Source, Thunk, Value};
 
@@ -74,7 +75,7 @@ impl<'expr> Compiler<'expr> {
         self.instructions.push(Instruction::Panic);
     }
 
-    fn add_simple_error(&mut self, span: Span, message: &str, label: &str) {
+    fn add_simple_error(&mut self, range: TextRange, message: &str, label: &str) {
         self.add_error(Diagnostic {
             severity: Severity::Error,
             message: message.into(),
@@ -82,7 +83,7 @@ impl<'expr> Compiler<'expr> {
                 source: self.debug_info.source.clone(),
                 labels: vec![Label {
                     severity: Severity::Error,
-                    span,
+                    range,
                     message: label.into(),
                 }],
             })],
@@ -91,7 +92,7 @@ impl<'expr> Compiler<'expr> {
 
     fn try_from_usize<U: Default + TryFrom<usize>>(
         &mut self,
-        span: Span,
+        range: TextRange,
         message: &str,
         value: usize,
     ) -> U {
@@ -104,86 +105,86 @@ impl<'expr> Compiler<'expr> {
                     std::any::type_name::<U>()
                 );
 
-                self.add_simple_error(span, message, &label);
+                self.add_simple_error(range, message, &label);
                 U::default()
             }
         }
     }
 
-    fn add_instr(&mut self, spans: Vec<Span>, instr: Instruction) -> usize {
+    fn add_instr(&mut self, ranges: Vec<TextRange>, instr: Instruction) -> usize {
         let idx = self.instructions.len();
         self.instructions.push(instr);
-        self.debug_info.instruction_spans.push(spans);
+        self.debug_info.instruction_ranges.push(ranges);
         idx
     }
 
-    fn compile_const(&mut self, span: Span, value: Value) {
-        let idx = self.try_from_usize(span, "too many constants", self.consts.len());
+    fn compile_const(&mut self, range: TextRange, value: Value) {
+        let idx = self.try_from_usize(range, "too many constants", self.consts.len());
         self.consts.push(value);
-        self.add_instr(vec![span], Instruction::PushConst(idx));
+        self.add_instr(vec![range], Instruction::PushConst(idx));
     }
 
     fn compile_root(&mut self, expr: &'expr Spanned<Expr>) {
-        self.debug_info.span = expr.span;
+        self.debug_info.range = expr.range;
         self.compile(expr);
     }
 
     fn compile(&mut self, expr: &'expr Spanned<Expr>) {
-        let span = expr.span;
+        let range = expr.range;
         match &expr.item {
-            Expr::Int(int) => self.compile_int(span, *int),
-            Expr::Float(float) => self.compile_float(span, *float),
-            Expr::String(string) => self.compile_string(span, string),
-            Expr::Var(name) => self.compile_var(span, name),
-            Expr::BinOp(bin_op) => self.compile_bin_op(span, bin_op),
-            Expr::UnOp(un_op) => self.compile_un_op(span, un_op),
+            Expr::Int(int) => self.compile_int(range, *int),
+            Expr::Float(float) => self.compile_float(range, *float),
+            Expr::String(string) => self.compile_string(range, string),
+            Expr::Var(name) => self.compile_var(range, name),
+            Expr::BinOp(bin_op) => self.compile_bin_op(range, bin_op),
+            Expr::UnOp(un_op) => self.compile_un_op(range, un_op),
             Expr::Paren(expr) => self.compile(expr),
-            Expr::List(list) => self.compile_list(span, &list.exprs),
-            Expr::Map(map) => self.compile_map(span, &map.pairs),
-            Expr::Func(func) => self.compile_func(span, func),
-            Expr::Call(call) => self.compile_call(span, call),
-            Expr::IfElse(if_else) => self.compile_if_else(span, if_else),
-            Expr::LetIn(let_in) => self.compile_let_in(span, let_in),
+            Expr::List(list) => self.compile_list(range, &list.exprs),
+            Expr::Map(map) => self.compile_map(range, &map.pairs),
+            Expr::Func(func) => self.compile_func(range, func),
+            Expr::Call(call) => self.compile_call(range, call),
+            Expr::IfElse(if_else) => self.compile_if_else(range, if_else),
+            Expr::LetIn(let_in) => self.compile_let_in(range, let_in),
             Expr::Error => {}
         }
 
         if self.stack_len == u32::MAX {
-            self.add_simple_error(span, "stack overflow", "reached `2**32-1` stack entries");
+            self.add_simple_error(range, "stack overflow", "reached `2**32-1` stack entries");
         } else {
             self.stack_len += 1;
         }
     }
 
-    fn compile_int(&mut self, span: Span, int: i64) {
-        self.compile_const(span, int.into());
+    fn compile_int(&mut self, range: TextRange, int: i64) {
+        self.compile_const(range, int.into());
     }
 
-    fn compile_float(&mut self, span: Span, float: f64) {
-        self.compile_const(span, float.into());
+    fn compile_float(&mut self, range: TextRange, float: f64) {
+        self.compile_const(range, float.into());
     }
 
-    fn compile_string(&mut self, span: Span, string: &str) {
-        self.compile_const(span, string.into());
+    fn compile_string(&mut self, range: TextRange, string: &str) {
+        self.compile_const(range, string.into());
     }
 
-    fn compile_list(&mut self, span: Span, list: &'expr [Spanned<Expr>]) {
+    fn compile_list(&mut self, range: TextRange, list: &'expr [Spanned<Expr>]) {
         for expr in list {
             self.compile(expr);
         }
 
-        let len = self.try_from_usize(span, "list too long", list.len());
-        self.add_instr(vec![span], Instruction::NewList(len));
+        let len = self.try_from_usize(range, "list too long", list.len());
+        self.add_instr(vec![range], Instruction::NewList(len));
 
         self.stack_len -= len;
     }
 
-    fn compile_map(&mut self, span: Span, pairs: &'expr [(MapKey, Spanned<Expr>)]) {
+    fn compile_map(&mut self, range: TextRange, pairs: &'expr [(MapKey, Spanned<Expr>)]) {
         self.parent_scopes.push(self.scope.clone());
 
         for (key, value) in pairs {
             match key {
                 MapKey::Ident(key) => {
-                    self.compile_string(key.span, &key.item);
+                    self.compile_string(key.range, &key.item);
                     self.stack_len += 1;
                 }
                 MapKey::Expr(key) => {
@@ -201,17 +202,17 @@ impl<'expr> Compiler<'expr> {
 
         self.scope = self.parent_scopes.pop().unwrap();
 
-        let len = self.try_from_usize(span, "map too long", pairs.len());
-        self.add_instr(vec![span], Instruction::NewMap(len));
+        let len = self.try_from_usize(range, "map too long", pairs.len());
+        self.add_instr(vec![range], Instruction::NewMap(len));
 
         self.stack_len -= len * 2;
     }
 
-    fn compile_func(&mut self, span: Span, func: &'expr FuncExpr) {
+    fn compile_func(&mut self, range: TextRange, func: &'expr FuncExpr) {
         let mut parent = std::mem::take(self);
         let mut compiler = Compiler::new(parent.debug_info.source.clone(), &func.args);
         compiler.name = parent.inner_name;
-        compiler.debug_info.span = span;
+        compiler.debug_info.range = range;
         compiler.diagnostics = std::mem::take(&mut parent.diagnostics);
         compiler.parent = Some(Box::new(parent));
         compiler.compile(&func.expr);
@@ -219,29 +220,29 @@ impl<'expr> Compiler<'expr> {
         *self = *compiler.parent.unwrap();
         self.diagnostics = compiler.diagnostics;
 
-        self.compile_const(span, func.into());
+        self.compile_const(range, func.into());
 
         let num_captures = compiler.num_captures;
         if num_captures > 0 {
-            self.add_instr(vec![span], Instruction::NewFunc(num_captures));
+            self.add_instr(vec![range], Instruction::NewFunc(num_captures));
         }
     }
 
-    fn compile_call(&mut self, span: Span, call: &'expr CallExpr) {
-        let num_args: u32 = self.try_from_usize(span, "too many arguments", call.args.len());
+    fn compile_call(&mut self, range: TextRange, call: &'expr CallExpr) {
+        let num_args: u32 = self.try_from_usize(range, "too many arguments", call.args.len());
 
         for arg in &call.args {
             self.compile(arg);
         }
 
         self.compile(&call.func);
-        self.add_instr(vec![span, call.func.span], Instruction::Call);
+        self.add_instr(vec![range, call.func.range], Instruction::Call);
 
         self.stack_len -= num_args;
         self.stack_len -= 1;
     }
 
-    fn compile_var(&mut self, span: Span, name: &'expr str) {
+    fn compile_var(&mut self, range: TextRange, name: &'expr str) {
         let mut depth = 0;
         let mut current = &mut *self;
 
@@ -276,7 +277,7 @@ impl<'expr> Compiler<'expr> {
                 current = parent;
                 depth += 1;
             } else {
-                self.no_such_binding(span, name);
+                self.no_such_binding(range, name);
                 break;
             }
         }
@@ -302,7 +303,7 @@ impl<'expr> Compiler<'expr> {
         bindings.into_iter().collect()
     }
 
-    fn no_such_binding(&mut self, span: Span, name: &str) {
+    fn no_such_binding(&mut self, range: TextRange, name: &str) {
         let mut in_scope = self.bindings_in_scope();
         in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, name));
 
@@ -321,7 +322,7 @@ impl<'expr> Compiler<'expr> {
                 .with_source(
                     SourceComponent::new(self.debug_info.source.clone()).with_label(
                         Severity::Error,
-                        span,
+                        range,
                         "no such binding",
                     ),
                 );
@@ -333,25 +334,25 @@ impl<'expr> Compiler<'expr> {
         self.add_error(diagnostic);
     }
 
-    fn compile_bin_op(&mut self, span: Span, bin_op: &'expr BinOpExpr) {
+    fn compile_bin_op(&mut self, range: TextRange, bin_op: &'expr BinOpExpr) {
         self.compile(&bin_op.lhs);
         self.compile(&bin_op.rhs);
-        let spans = vec![span, bin_op.lhs.span, bin_op.rhs.span];
-        self.add_instr(spans, Instruction::BinOp(bin_op.op));
+        let ranges = vec![range, bin_op.lhs.range, bin_op.rhs.range];
+        self.add_instr(ranges, Instruction::BinOp(bin_op.op));
         self.stack_len -= 2;
     }
 
-    fn compile_un_op(&mut self, span: Span, un_op: &'expr UnOpExpr) {
+    fn compile_un_op(&mut self, range: TextRange, un_op: &'expr UnOpExpr) {
         self.compile(&un_op.expr);
-        let spans = vec![span, un_op.expr.span];
-        self.add_instr(spans, Instruction::UnOp(un_op.op));
+        let ranges = vec![range, un_op.expr.range];
+        self.add_instr(ranges, Instruction::UnOp(un_op.op));
         self.stack_len -= 1;
     }
 
-    fn compile_if_else(&mut self, span: Span, if_else: &'expr IfElseExpr) {
+    fn compile_if_else(&mut self, range: TextRange, if_else: &'expr IfElseExpr) {
         self.compile(&if_else.cond);
 
-        let start = self.add_instr(vec![span, if_else.cond.span], Instruction::Nop);
+        let start = self.add_instr(vec![range, if_else.cond.range], Instruction::Nop);
         self.stack_len -= 1;
         self.compile(&if_else.if_false);
         self.stack_len -= 1;
@@ -359,14 +360,14 @@ impl<'expr> Compiler<'expr> {
         self.compile(&if_else.if_true);
         let end = self.instructions.len();
 
-        let offset = self.try_from_usize(span, "if expression too long", mid - start);
+        let offset = self.try_from_usize(range, "if expression too long", mid - start);
         self.instructions[start] = Instruction::JumpIf(offset);
 
-        let offset = self.try_from_usize(span, "if expression too long", end - mid - 1);
+        let offset = self.try_from_usize(range, "if expression too long", end - mid - 1);
         self.instructions[mid] = Instruction::Jump(offset);
     }
 
-    fn compile_let_in(&mut self, span: Span, let_in: &'expr LetInExpr) {
+    fn compile_let_in(&mut self, range: TextRange, let_in: &'expr LetInExpr) {
         self.parent_scopes.push(self.scope.clone());
 
         for (binding, expr) in &let_in.vars {
@@ -379,7 +380,7 @@ impl<'expr> Compiler<'expr> {
 
         self.compile(&let_in.expr);
 
-        let num_vars = self.try_from_usize(span, "too many variables", let_in.vars.len());
+        let num_vars = self.try_from_usize(range, "too many variables", let_in.vars.len());
         self.add_instr(vec![], Instruction::PopSwap(num_vars));
         self.stack_len -= num_vars;
 

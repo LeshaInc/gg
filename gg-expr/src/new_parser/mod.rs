@@ -3,6 +3,8 @@ mod lexer;
 mod parser;
 mod syntax_kind;
 
+pub use rowan::{TextRange, TextSize};
+
 pub use self::ast::*;
 pub use self::lexer::Lexer;
 pub use self::parser::Parser;

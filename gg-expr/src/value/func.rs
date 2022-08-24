@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use indenter::indented;
 
-use crate::syntax::Span;
+use crate::new_parser::TextRange;
 use crate::{Instruction, Source, Value};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
@@ -23,8 +23,8 @@ impl Debug for Func {
         }
 
         if let Some(di) = &self.debug_info {
-            let span = di.source.span_to_line_col(di.span);
-            write!(f, " // in {} at {} ", di.source.name, span)?;
+            let range = di.source.range_to_line_col(di.range);
+            write!(f, " // in {} at {} ", di.source.name, range)?;
         }
 
         writeln!(f)?;
@@ -42,9 +42,9 @@ impl Debug for Func {
 
             write!(f, "{:20}", format!("{:?}", instr))?;
 
-            let (di, spans) = match &self.debug_info {
-                Some(di) => match di.instruction_spans.get(i) {
-                    Some(spans) if !spans.is_empty() => (di, spans),
+            let (di, ranges) = match &self.debug_info {
+                Some(di) => match di.instruction_ranges.get(i) {
+                    Some(ranges) if !ranges.is_empty() => (di, ranges),
                     _ => continue,
                 },
                 _ => continue,
@@ -52,13 +52,13 @@ impl Debug for Func {
 
             write!(f, " // ")?;
 
-            for (i, &span) in spans.iter().enumerate() {
+            for (i, &range) in ranges.iter().enumerate() {
                 if i > 0 {
                     write!(f, ", ")?;
                 }
 
-                let span = di.source.span_to_line_col(span);
-                write!(f, "{}", span)?;
+                let range = di.source.range_to_line_col(range);
+                write!(f, "{}", range)?;
             }
         }
 
@@ -69,18 +69,18 @@ impl Debug for Func {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct DebugInfo {
     pub source: Arc<Source>,
-    pub span: Span,
+    pub range: TextRange,
     pub name: Option<String>,
-    pub instruction_spans: Vec<Vec<Span>>,
+    pub instruction_ranges: Vec<Vec<TextRange>>,
 }
 
 impl DebugInfo {
     pub fn new(source: Arc<Source>) -> DebugInfo {
         DebugInfo {
             source,
-            span: Span::default(),
+            range: TextRange::default(),
             name: None,
-            instruction_spans: Vec::new(),
+            instruction_ranges: Vec::new(),
         }
     }
 }
