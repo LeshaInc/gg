@@ -1,123 +1,132 @@
-use std::sync::Arc;
+#![allow(dead_code)]
 
-use super::*;
-use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
-use crate::new_parser::{TextRange, TextSize};
-use crate::Source;
+use std::iter::Peekable;
 
-pub struct Parser {
-    source: Arc<Source>,
-    tokens: Vec<Spanned<Token>>,
-    pos: usize,
-    diagnostics: Vec<Diagnostic>,
+use rowan::{Checkpoint, GreenNode, GreenNodeBuilder};
+
+use super::Lexer;
+use super::SyntaxKind::{self, *};
+
+pub struct Parser<'s> {
+    lexer: Peekable<Lexer<'s>>,
+    builder: GreenNodeBuilder<'static>,
+    errors: Vec<String>,
 }
 
-impl Parser {
-    pub fn new(source: Arc<Source>) -> Parser {
-        let tokens = tokenize(&source.text);
+impl Parser<'_> {
+    pub fn new(source: &str) -> Parser<'_> {
         Parser {
-            source,
-            tokens,
-            pos: 0,
-            diagnostics: Vec::new(),
+            lexer: Lexer::new(source).peekable(),
+            builder: GreenNodeBuilder::new(),
+            errors: Vec::new(),
         }
     }
 
-    pub fn diagnostics(&mut self) -> impl Iterator<Item = Diagnostic> + '_ {
-        self.diagnostics.drain(..)
+    pub fn finish(self) -> GreenNode {
+        self.builder.finish()
     }
 
-    fn peek(&self) -> Spanned<Token> {
-        if let Some(token) = self.tokens.get(self.pos) {
-            *token
-        } else {
-            let len = self.source.text.len() as u32;
-            let range = if len > 0 {
-                TextRange::new(TextSize::from(len - 1), TextSize::from(len))
+    fn skip_trivia(&mut self) {
+        while let Some(&(text, token)) = self.lexer.peek() {
+            if token.is_trivia() {
+                self.builder.token(token.into(), text);
+                self.lexer.next();
             } else {
-                TextRange::default()
-            };
-
-            Spanned::new(range, Token::Eof)
+                break;
+            }
         }
     }
 
-    fn next(&mut self) -> Spanned<Token> {
-        let token = self.peek();
-        self.pos += 1;
-        token
+    fn peek(&mut self) -> Option<SyntaxKind> {
+        self.skip_trivia();
+        self.lexer.peek().map(|&(_, token)| token)
     }
 
-    fn error(&mut self, range: TextRange, message: String) {
-        if !self.diagnostics.is_empty() {
-            return;
+    fn bump(&mut self) {
+        if let Some((text, token)) = self.lexer.next() {
+            self.builder.token(token.into(), text);
+        }
+    }
+
+    fn checkpoint(&self) -> Checkpoint {
+        self.builder.checkpoint()
+    }
+
+    fn start_node(&mut self, kind: SyntaxKind) {
+        self.builder.start_node(kind.into());
+    }
+
+    fn start_node_at(&mut self, checkpoint: Checkpoint, kind: SyntaxKind) {
+        self.builder.start_node_at(checkpoint, kind.into());
+    }
+
+    fn start_error(&mut self, message: impl Into<String>) {
+        self.errors.push(message.into());
+        self.start_node(Error);
+    }
+
+    fn finish_node(&mut self) {
+        self.builder.finish_node();
+    }
+
+    fn expect_one_of(&mut self, expected: &[SyntaxKind]) {
+        if let Some(token) = self.peek() {
+            if expected.contains(&token) {
+                return self.bump();
+            }
         }
 
-        self.diagnostics.push(Diagnostic {
-            severity: Severity::Error,
-            message: "syntax error".into(),
-            components: vec![Component::Source(SourceComponent {
-                source: self.source.clone(),
-                labels: vec![Label {
-                    severity: Severity::Error,
-                    range,
-                    message,
-                }],
-            })],
-        });
+        self.start_error("unexpected token");
+        self.bump();
+        self.finish_node();
     }
 
-    fn unexpected_token(&mut self, expected: &str) -> TextRange {
-        let token = self.next();
-        let range = token.range;
-        let message = format!("expected {} near {}", expected, token.item.explain());
-
-        self.error(range, message);
-
-        range
+    fn expect(&mut self, expected: SyntaxKind) {
+        self.expect_one_of(&[expected]);
     }
 
-    fn expect_token(&mut self, tokens: &[Token]) -> Spanned<Token> {
-        let token = self.peek();
+    fn comma_separated(&mut self, end: SyntaxKind, mut func: impl FnMut(&mut Self)) {
+        while self.peek() != Some(end) {
+            func(self);
 
-        if tokens.contains(&token.item) {
-            return self.next();
+            if self.peek() == Some(TokComma) {
+                self.bump();
+            } else {
+                break;
+            }
         }
-
-        let init = String::from(if tokens.len() > 1 { "one of " } else { "" });
-        let msg = tokens.iter().fold(init, |mut acc, v| {
-            acc.push_str(v.explain());
-            acc.push_str(", ");
-            acc
-        });
-        let msg = msg.trim_end_matches(", ");
-        self.unexpected_token(msg);
-
-        token
     }
 
-    pub fn expr(&mut self) -> Spanned<Expr> {
+    pub fn root(&mut self) {
+        self.start_node(Root);
+        self.expr();
+        self.skip_trivia();
+        self.finish_node();
+    }
+
+    pub fn expr(&mut self) {
         self.expr_bp(0)
     }
 
-    fn expr_bp(&mut self, min_bp: u8) -> Spanned<Expr> {
-        let mut lhs = self.expr_lhs();
+    fn expr_bp(&mut self, min_bp: u8) {
+        let root = self.checkpoint();
 
-        loop {
-            let token = self.peek().item;
+        self.expr_lhs();
 
+        while let Some(token) = self.peek() {
             if let Some(l_bp) = postfix_bp(token) {
                 if l_bp < min_bp {
                     break;
                 }
 
-                lhs = match token {
-                    Token::LParen => self.expr_call(lhs),
-                    Token::LBracket | Token::QuestionLBracket | Token::Dot | Token::QuestionDot => {
-                        self.expr_index(lhs)
+                match token {
+                    TokLParen => self.expr_call(root),
+                    TokLBracket | TokQuestionLBracket | TokDot | TokQuestionDot => {
+                        self.expr_index(root)
                     }
-                    _ => continue,
-                };
+                    _ => unreachable!(),
+                }
+
                 continue;
             }
 
@@ -126,359 +135,314 @@ impl Parser {
                     break;
                 }
 
-                let op = BinOp::from_token(token).unwrap();
-
-                self.next();
-
-                let rhs = self.expr_bp(r_bp);
-                let range = TextRange::new(lhs.range.start(), rhs.range.end());
-                let expr = Expr::BinOp(BinOpExpr {
-                    lhs: Box::new(lhs),
-                    op,
-                    rhs: Box::new(rhs),
-                });
-
-                lhs = Spanned::new(range, expr);
+                self.start_node_at(root, ExprBinary);
+                self.bump();
+                self.expr_bp(r_bp);
+                self.finish_node();
                 continue;
             }
 
             break;
         }
-
-        lhs
     }
 
-    fn expr_lhs(&mut self) -> Spanned<Expr> {
-        let token = self.peek();
-
-        if let Some(r_bp) = prefix_bp(token.item) {
-            let op = UnOp::from_token(token.item).unwrap();
-            self.next();
-
-            let rhs = self.expr_bp(r_bp);
-            let range = TextRange::new(token.range.start(), rhs.range.end());
-            let expr = Expr::UnOp(UnOpExpr {
-                op,
-                expr: Box::new(rhs),
-            });
-
-            return Spanned::new(range, expr);
+    fn expr_lhs(&mut self) {
+        if let Some(r_bp) = self.peek().and_then(prefix_bp) {
+            self.start_node(ExprUnary);
+            self.bump();
+            self.expr_bp(r_bp);
+            self.finish_node();
+            return;
         }
 
-        match token.item {
-            Token::LParen => self.expr_paren(),
-            Token::Int => self.expr_int(),
-            Token::Float => self.expr_float(),
-            Token::String => self.expr_string(),
-            Token::Ident => self.expr_var(),
-            Token::LBracket => self.expr_list(),
-            Token::LBrace => self.expr_map(),
-            Token::Fn => self.expr_fn(),
-            Token::If => self.expr_if_else(),
-            Token::Let => self.expr_let_in(),
-            _ => {
-                let range = self.unexpected_token("expression");
-                Spanned::new(range, Expr::Error)
+        match self.peek() {
+            Some(TokLParen) => self.expr_grouped(),
+            Some(TokLBracket) => self.expr_list(),
+            Some(TokLBrace) => self.expr_map(),
+            Some(TokFn) => self.expr_fn(),
+            Some(TokLet) => self.expr_let_in(),
+            Some(TokIf) => self.expr_if_else(),
+            Some(TokNull) => self.expr_null(),
+            Some(TokTrue | TokFalse) => self.expr_bool(),
+            Some(TokInt) => self.expr_int(),
+            Some(TokFloat) => self.expr_float(),
+            Some(TokString) => self.expr_string(),
+            Some(TokIdent) => self.expr_binding(),
+            // v => todo!("{:?}", v),
+            _ => {}
+        }
+    }
+
+    fn expr_grouped(&mut self) {
+        self.start_node(ExprGrouped);
+        self.expect(TokLParen);
+        self.expr();
+        self.expect(TokRParen);
+        self.finish_node();
+    }
+
+    fn expr_list(&mut self) {
+        self.start_node(ExprList);
+        self.expect(TokLBracket);
+        self.comma_separated(TokRBracket, |s| s.expr());
+        self.expect(TokRBracket);
+        self.finish_node();
+    }
+
+    fn expr_map(&mut self) {
+        self.start_node(ExprMap);
+        self.expect(TokLBrace);
+
+        self.comma_separated(TokRBrace, |s| {
+            s.start_node(MapPair);
+
+            match s.peek() {
+                Some(TokIdent) => s.bump(),
+                Some(TokString) => s.expr_string(),
+                Some(TokLBracket) => {
+                    s.bump();
+                    s.expr();
+                    s.expect(TokRBracket);
+                }
+                _ => todo!(),
             }
-        }
+
+            s.expect(TokAssign);
+            s.expr();
+
+            s.finish_node();
+        });
+
+        self.expect(TokRBrace);
+        self.finish_node();
     }
 
-    fn expr_paren(&mut self) -> Spanned<Expr> {
-        let start = self.next().range.start();
-        let expr = self.expr();
-        let end = self.expect_token(&[Token::RParen]).range.end();
+    fn expr_fn(&mut self) {
+        self.start_node(ExprFn);
+        self.expect(TokFn);
 
-        let range = TextRange::new(start, end);
-        let expr = Expr::Paren(Box::new(expr));
-        Spanned::new(range, expr)
+        self.expect(TokLParen);
+        self.comma_separated(TokRParen, |s| s.expect(TokIdent));
+        self.expect(TokRParen);
+
+        self.expect(TokColon);
+        self.expr();
+        self.finish_node();
     }
 
-    fn expr_int(&mut self) -> Spanned<Expr> {
-        let range = self.next().range;
-        let slice = &self.source.text[range];
+    fn expr_let_in(&mut self) {
+        self.start_node(ExprLetIn);
+        self.expect(TokLet);
 
-        let expr = if let Some(stripped) = slice.strip_prefix("0x") {
-            i64::from_str_radix(stripped, 16)
-                .map(Expr::Int)
-                .unwrap_or(Expr::Error)
+        self.comma_separated(TokIn, |s| {
+            s.start_node(LetBinding);
+            s.expect(TokIdent);
+            s.expect(TokAssign);
+            s.expr();
+            s.finish_node();
+        });
+
+        self.expect(TokIn);
+        self.expr();
+        self.finish_node();
+    }
+
+    fn expr_if_else(&mut self) {
+        self.start_node(ExprIfElse);
+        self.expect(TokIf);
+        self.expr();
+        self.expect(TokThen);
+        self.expr();
+        self.expect(TokElse);
+        self.expr();
+        self.finish_node();
+    }
+
+    fn expr_call(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprCall);
+        self.expect(TokLParen);
+        self.comma_separated(TokRParen, |s| s.expr());
+        self.expect(TokRParen);
+        self.finish_node();
+    }
+
+    fn expr_index(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprIndex);
+
+        let is_shorthand = match self.peek() {
+            Some(TokLBracket | TokQuestionLBracket) => false,
+            Some(TokDot | TokQuestionDot) => true,
+            _ => todo!(),
+        };
+
+        self.bump();
+
+        if is_shorthand {
+            self.expect(TokIdent);
         } else {
-            slice.parse().map(Expr::Int).unwrap_or(Expr::Error)
-        };
-
-        Spanned::new(range, expr)
-    }
-
-    fn expr_float(&mut self) -> Spanned<Expr> {
-        let range = self.next().range;
-        let slice = &self.source.text[range];
-        let expr = slice.parse().map(Expr::Float).unwrap_or(Expr::Error);
-        Spanned::new(range, expr)
-    }
-
-    fn expr_string(&mut self) -> Spanned<Expr> {
-        let range = self.next().range;
-        let slice = &self.source.text[range];
-        let str = slice[1..slice.len() - 1]
-            .replace("\\\\", "\\")
-            .replace("\\r", "\r")
-            .replace("\\n", "\n")
-            .replace("\\t", "\t");
-        let expr = Expr::String(Arc::new(str));
-        Spanned::new(range, expr)
-    }
-
-    fn expr_var(&mut self) -> Spanned<Expr> {
-        let range = self.next().range;
-        let slice = &self.source.text[range];
-        let expr = Expr::Var(slice.into());
-        Spanned::new(range, expr)
-    }
-
-    fn expr_list(&mut self) -> Spanned<Expr> {
-        let start = self.next().range.start();
-
-        let mut exprs = Vec::new();
-
-        while self.peek().item != Token::RBracket {
-            exprs.push(self.expr());
-
-            if self.peek().item == Token::Comma {
-                self.next();
-            } else {
-                break;
-            }
+            self.expr();
+            self.expect(TokRBracket);
         }
 
-        let end = self.expect_token(&[Token::RBracket]).range.end();
-        let range = TextRange::new(start, end);
-        let expr = Expr::List(ListExpr { exprs });
-
-        Spanned::new(range, expr)
+        self.finish_node();
     }
 
-    fn expr_map(&mut self) -> Spanned<Expr> {
-        let start = self.next().range.start();
+    fn expr_null(&mut self) {
+        self.start_node(ExprNull);
+        self.expect(TokNull);
+        self.finish_node();
+    }
 
-        let mut pairs = Vec::new();
+    fn expr_bool(&mut self) {
+        self.start_node(ExprBool);
+        self.expect_one_of(&[TokTrue, TokFalse]);
+        self.finish_node();
+    }
 
-        while self.peek().item != Token::RBrace {
-            let token = self.peek();
-            let key = match token.item {
-                Token::LBracket => {
-                    self.next();
-                    let key = self.expr();
-                    self.expect_token(&[Token::RBracket]);
-                    MapKey::Expr(key)
-                }
-                Token::String => MapKey::Expr(self.expr_string()),
-                Token::Ident => {
-                    self.next();
-                    let text = self.source.text[token.range].to_string();
-                    MapKey::Ident(Spanned::new(token.range, text))
-                }
-                _ => {
-                    self.expect_token(&[Token::LBracket, Token::Ident, Token::String]);
-                    MapKey::Expr(Spanned::new(token.range, Expr::Error))
-                }
-            };
+    fn expr_int(&mut self) {
+        self.start_node(ExprInt);
+        self.expect(TokInt);
+        self.finish_node();
+    }
 
-            self.expect_token(&[Token::Assign]);
-            let value = self.expr();
+    fn expr_float(&mut self) {
+        self.start_node(ExprFloat);
+        self.expect(TokFloat);
+        self.finish_node();
+    }
 
-            pairs.push((key, value));
+    fn expr_string(&mut self) {
+        self.start_node(ExprString);
+        self.expect(TokString);
+        self.finish_node();
+    }
 
-            if self.peek().item == Token::Comma {
-                self.next();
-            } else {
-                break;
-            }
+    fn expr_binding(&mut self) {
+        self.start_node(ExprBinding);
+        self.expect(TokIdent);
+        self.finish_node();
+    }
+
+    fn pat(&mut self) {
+        let root = self.checkpoint();
+        self.pat_atom();
+
+        while self.peek() == Some(TokPipe) {
+            self.start_node_at(root, PatOr);
+            self.bump();
+            self.pat_atom();
+            self.finish_node();
+        }
+    }
+
+    fn pat_atom(&mut self) {
+        let root = self.checkpoint();
+
+        match self.peek() {
+            Some(TokLParen) => self.pat_grouped(),
+            Some(TokLBracket) => self.pat_list(),
+            Some(TokRest) => self.pat_rest(),
+            Some(TokInt) => self.pat_int(),
+            Some(TokString) => self.pat_string(),
+            Some(TokIdent) => self.pat_binding(),
+            Some(TokHole) => self.pat_hole(),
+            _ => todo!(),
         }
 
-        let end = self.expect_token(&[Token::RBrace]).range.end();
-        let range = TextRange::new(start, end);
-        let expr = Expr::Map(MapExpr { pairs });
-
-        Spanned::new(range, expr)
-    }
-
-    fn expr_fn(&mut self) -> Spanned<Expr> {
-        let mut args = Vec::new();
-        let start = self.next().range.start();
-
-        self.expect_token(&[Token::LParen]);
-
-        loop {
-            let token = self.peek();
-
-            match token.item {
-                Token::RParen => break,
-                Token::Ident => {
-                    self.next();
-                    args.push(self.source.text[token.range].into());
-                }
-                _ => {
-                    self.unexpected_token("function argument");
-                    args.push("error".into());
-                }
-            }
-
-            if self.peek().item == Token::Comma {
-                self.next();
-            } else {
-                break;
-            }
+        if self.peek() == Some(TokAs) {
+            self.start_node_at(root, PatBinding);
+            self.bump();
+            self.expect(TokIdent);
+            self.finish_node();
         }
-
-        self.expect_token(&[Token::RParen]);
-        self.expect_token(&[Token::Colon]);
-
-        let inner = self.expr();
-        let range = TextRange::new(start, inner.range.end());
-        let expr = Expr::Func(FuncExpr {
-            args,
-            expr: Box::new(inner),
-        });
-
-        Spanned::new(range, expr)
     }
 
-    fn expr_call(&mut self, func: Spanned<Expr>) -> Spanned<Expr> {
-        self.next();
-
-        let mut args = Vec::new();
-
-        while self.peek().item != Token::RParen {
-            args.push(self.expr());
-
-            if self.peek().item == Token::Comma {
-                self.next();
-            } else {
-                break;
-            }
-        }
-
-        let end = self.expect_token(&[Token::RParen]).range.end();
-
-        let range = TextRange::new(func.range.start(), end);
-        let expr = Expr::Call(CallExpr {
-            func: Box::new(func),
-            args,
-        });
-
-        Spanned::new(range, expr)
+    fn pat_grouped(&mut self) {
+        self.start_node(PatGrouped);
+        self.expect(TokLParen);
+        self.pat();
+        self.expect(TokRParen);
+        self.finish_node();
     }
 
-    fn expr_index(&mut self, lhs: Spanned<Expr>) -> Spanned<Expr> {
-        let (op, short) = match self.next().item {
-            Token::LBracket => (BinOp::Index, false),
-            Token::QuestionLBracket => (BinOp::IndexNullable, false),
-            Token::Dot => (BinOp::Index, true),
-            Token::QuestionDot => (BinOp::IndexNullable, true),
-            _ => unreachable!(),
-        };
-
-        let rhs = if short {
-            let token = self.expect_token(&[Token::Ident]);
-            let str = self.source.text[token.range].to_string();
-            Spanned::new(token.range, Expr::String(Arc::new(str)))
-        } else {
-            self.expr()
-        };
-
-        let end = if short {
-            rhs.range.end()
-        } else {
-            self.expect_token(&[Token::RBracket]).range.end()
-        };
-
-        let range = TextRange::new(lhs.range.start(), end);
-        let expr = Expr::BinOp(BinOpExpr {
-            lhs: Box::new(lhs),
-            op,
-            rhs: Box::new(rhs),
-        });
-
-        Spanned::new(range, expr)
+    fn pat_list(&mut self) {
+        self.start_node(PatList);
+        self.expect(TokLBracket);
+        self.comma_separated(TokRBracket, |s| s.pat());
+        self.expect(TokRBracket);
+        self.finish_node();
     }
 
-    fn expr_if_else(&mut self) -> Spanned<Expr> {
-        let start = self.next().range.start();
-
-        let cond = self.expr();
-        self.expect_token(&[Token::Then]);
-        let if_true = self.expr();
-        self.expect_token(&[Token::Else]);
-        let if_false = self.expr();
-
-        let range = TextRange::new(start, if_false.range.end());
-        let expr = Expr::IfElse(IfElseExpr {
-            cond: Box::new(cond),
-            if_true: Box::new(if_true),
-            if_false: Box::new(if_false),
-        });
-
-        Spanned::new(range, expr)
+    fn pat_rest(&mut self) {
+        self.start_node(PatRest);
+        self.expect(TokRest);
+        self.finish_node();
     }
 
-    fn expr_let_in(&mut self) -> Spanned<Expr> {
-        let start = self.next().range.start();
+    fn pat_int(&mut self) {
+        self.start_node(PatInt);
+        self.expect(TokInt);
+        self.finish_node();
+    }
 
-        let mut vars = Vec::new();
+    fn pat_string(&mut self) {
+        self.start_node(PatString);
+        self.expect(TokString);
+        self.finish_node();
+    }
 
-        loop {
-            let range = self.expect_token(&[Token::Ident]).range;
-            let var = self.source.text[range].to_string();
-            self.expect_token(&[Token::Assign]);
-            let expr = self.expr();
-            vars.push((var, Box::new(expr)));
+    fn pat_binding(&mut self) {
+        self.start_node(PatBinding);
+        self.expect(TokIdent);
+        self.finish_node();
+    }
 
-            if self.peek().item == Token::Comma {
-                self.next();
-            } else {
-                break;
-            }
-        }
-
-        self.expect_token(&[Token::In]);
-        let inner = self.expr();
-
-        let range = TextRange::new(start, inner.range.end());
-        let expr = Expr::LetIn(LetInExpr {
-            vars,
-            expr: Box::new(inner),
-        });
-
-        Spanned::new(range, expr)
+    fn pat_hole(&mut self) {
+        self.start_node(PatHole);
+        self.expect(TokHole);
+        self.finish_node();
     }
 }
 
-pub fn prefix_bp(token: Token) -> Option<u8> {
+fn prefix_bp(token: SyntaxKind) -> Option<u8> {
     Some(match token {
-        Token::Sub | Token::Not => 14,
+        TokSub | TokNot => 14,
         _ => return None,
     })
 }
 
-pub fn infix_bp(token: Token) -> Option<(u8, u8)> {
-    use Token::*;
-
+fn infix_bp(token: SyntaxKind) -> Option<(u8, u8)> {
     Some(match token {
-        Or | Coalesce => (1, 2),
-        And => (3, 4),
-        Eq | Neq => (5, 6),
-        Lt | Le | Ge | Gt => (7, 8),
-        Add | Sub => (9, 10),
-        Mul | Div | Rem => (11, 12),
-        Pow => (15, 16),
+        TokOr | TokCoalesce => (1, 2),
+        TokAnd => (3, 4),
+        TokEq | TokNeq => (5, 6),
+        TokLt | TokLe | TokGe | TokGt => (7, 8),
+        TokAdd | TokSub => (9, 10),
+        TokMul | TokDiv | TokRem => (11, 12),
+        TokPow => (15, 16),
         _ => return None,
     })
 }
 
-pub fn postfix_bp(token: Token) -> Option<u8> {
-    use Token::*;
-
+fn postfix_bp(token: SyntaxKind) -> Option<u8> {
     Some(match token {
-        LParen | LBracket | QuestionLBracket | Dot | QuestionDot => 17,
+        TokLParen | TokLBracket | TokQuestionLBracket | TokDot | TokQuestionDot => 17,
         _ => return None,
     })
+}
+
+pub fn int_value(text: &str) -> Option<i64> {
+    text.parse().ok()
+}
+
+pub fn float_value(text: &str) -> Option<f64> {
+    text.parse().ok()
+}
+
+pub fn string_value(text: &str) -> String {
+    text[1..text.len() - 1]
+        .replace("\\\\", "\\")
+        .replace("\\r", "\r")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use indenter::indented;
 
-use crate::new_parser::TextRange;
+use crate::syntax::TextRange;
 use crate::{Instruction, Source, Value};
 
 #[derive(Clone, Eq, PartialEq, Hash)]

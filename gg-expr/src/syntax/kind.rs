@@ -114,11 +114,11 @@ pub enum SyntaxKind {
     ExprGrouped,
     ExprList,
     ExprMap,
-    ExprFn,
     ExprCall,
     ExprIndex,
     ExprIfElse,
     ExprLetIn,
+    ExprFn,
 
     PatGrouped,
     PatOr,
@@ -131,8 +131,6 @@ pub enum SyntaxKind {
 
     MapPair,
     LetBinding,
-    FnArgs,
-    CallArgs,
 
     #[error]
     Error,

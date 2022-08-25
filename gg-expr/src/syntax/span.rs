@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::new_parser::TextRange;
+use super::TextRange;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Spanned<T> {

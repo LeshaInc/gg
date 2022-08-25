@@ -3,19 +3,16 @@ use std::fmt::Write;
 use std::sync::Arc;
 
 use crate::diagnostic::{Component, Diagnostic, Label, Severity, SourceComponent};
-use crate::new_parser::TextRange;
-use crate::syntax::{
-    BinOpExpr, CallExpr, Expr, FuncExpr, IfElseExpr, LetInExpr, MapKey, Spanned, UnOpExpr,
-};
+use crate::syntax::*;
 use crate::{DebugInfo, Func, Instruction, Source, Thunk, Value};
 
 #[derive(Default)]
-pub struct Compiler<'expr> {
-    name: Option<&'expr str>,
-    inner_name: Option<&'expr str>,
-    scope: Scope<'expr>,
-    parent_scopes: Vec<Scope<'expr>>,
-    parent: Option<Box<Compiler<'expr>>>,
+pub struct Compiler {
+    ident: Option<Ident>,
+    inner_ident: Option<Ident>,
+    scope: Scope,
+    parent_scopes: Vec<Scope>,
+    parent: Option<Box<Compiler>>,
     instructions: Vec<Instruction>,
     consts: Vec<Value>,
     debug_info: DebugInfo,
@@ -26,20 +23,8 @@ pub struct Compiler<'expr> {
 }
 
 #[derive(Clone, Default)]
-struct Scope<'expr> {
-    vars: HashMap<&'expr str, VarLocation>,
-}
-
-impl Scope<'_> {
-    fn from_args(args: &[String]) -> Scope {
-        Scope {
-            vars: args
-                .iter()
-                .enumerate()
-                .map(|(i, v)| (&**v, VarLocation::Stack(i as u32)))
-                .collect(),
-        }
-    }
+struct Scope {
+    bindings: HashMap<Ident, VarLocation>,
 }
 
 #[derive(Clone, Copy)]
@@ -48,12 +33,12 @@ enum VarLocation {
     Capture(u32),
 }
 
-impl<'expr> Compiler<'expr> {
-    pub fn new(source: Arc<Source>, args: &[String]) -> Compiler<'_> {
+impl Compiler {
+    pub fn new(source: Arc<Source>) -> Compiler {
         Compiler {
-            name: None,
-            inner_name: None,
-            scope: Scope::from_args(args),
+            ident: None,
+            inner_ident: None,
+            scope: Scope::default(),
             parent_scopes: Vec::new(),
             parent: None,
             instructions: Vec::new(),
@@ -61,8 +46,8 @@ impl<'expr> Compiler<'expr> {
             debug_info: DebugInfo::new(source),
             diagnostics: Vec::new(),
             num_captures: 0,
-            arity: args.len() as u32,
-            stack_len: args.len() as u32,
+            arity: 0,
+            stack_len: 0,
         }
     }
 
@@ -124,28 +109,25 @@ impl<'expr> Compiler<'expr> {
         self.add_instr(vec![range], Instruction::PushConst(idx));
     }
 
-    fn compile_root(&mut self, expr: &'expr Spanned<Expr>) {
-        self.debug_info.range = expr.range;
-        self.compile(expr);
-    }
-
-    fn compile(&mut self, expr: &'expr Spanned<Expr>) {
-        let range = expr.range;
-        match &expr.item {
-            Expr::Int(int) => self.compile_int(range, *int),
-            Expr::Float(float) => self.compile_float(range, *float),
-            Expr::String(string) => self.compile_string(range, string),
-            Expr::Var(name) => self.compile_var(range, name),
-            Expr::BinOp(bin_op) => self.compile_bin_op(range, bin_op),
-            Expr::UnOp(un_op) => self.compile_un_op(range, un_op),
-            Expr::Paren(expr) => self.compile(expr),
-            Expr::List(list) => self.compile_list(range, &list.exprs),
-            Expr::Map(map) => self.compile_map(range, &map.pairs),
-            Expr::Func(func) => self.compile_func(range, func),
-            Expr::Call(call) => self.compile_call(range, call),
-            Expr::IfElse(if_else) => self.compile_if_else(range, if_else),
-            Expr::LetIn(let_in) => self.compile_let_in(range, let_in),
-            Expr::Error => {}
+    fn compile_expr(&mut self, expr: Expr) {
+        let range = expr.range();
+        match expr {
+            Expr::Null(e) => self.compile_expr_null(e),
+            Expr::Bool(e) => self.compile_expr_bool(e),
+            Expr::Int(e) => self.compile_expr_int(e),
+            Expr::Float(e) => self.compile_expr_float(e),
+            Expr::String(e) => self.compile_expr_string(e),
+            Expr::Binding(e) => self.compile_expr_binding(e),
+            Expr::Binary(e) => self.compile_expr_binary(e),
+            Expr::Unary(e) => self.compile_expr_unary(e),
+            Expr::Grouped(e) => self.compile_expr_grouped(e),
+            Expr::List(e) => self.compile_expr_list(e),
+            Expr::Map(e) => self.compile_expr_map(e),
+            Expr::Call(e) => self.compile_expr_call(e),
+            Expr::Index(e) => self.compile_expr_index(e),
+            Expr::IfElse(e) => self.compile_expr_if_else(e),
+            Expr::LetIn(e) => self.compile_expr_let_in(e),
+            Expr::Fn(e) => self.compile_expr_fn(e),
         }
 
         if self.stack_len == u32::MAX {
@@ -155,99 +137,44 @@ impl<'expr> Compiler<'expr> {
         }
     }
 
-    fn compile_int(&mut self, range: TextRange, int: i64) {
-        self.compile_const(range, int.into());
+    fn compile_expr_null(&mut self, expr: ExprNull) {
+        self.compile_const(expr.range(), Value::null());
     }
 
-    fn compile_float(&mut self, range: TextRange, float: f64) {
-        self.compile_const(range, float.into());
+    fn compile_expr_bool(&mut self, expr: ExprBool) {
+        let value = expr.value().unwrap_or_default();
+        self.compile_const(expr.range(), value.into());
     }
 
-    fn compile_string(&mut self, range: TextRange, string: &str) {
-        self.compile_const(range, string.into());
-    }
-
-    fn compile_list(&mut self, range: TextRange, list: &'expr [Spanned<Expr>]) {
-        for expr in list {
-            self.compile(expr);
-        }
-
-        let len = self.try_from_usize(range, "list too long", list.len());
-        self.add_instr(vec![range], Instruction::NewList(len));
-
-        self.stack_len -= len;
-    }
-
-    fn compile_map(&mut self, range: TextRange, pairs: &'expr [(MapKey, Spanned<Expr>)]) {
-        self.parent_scopes.push(self.scope.clone());
-
-        for (key, value) in pairs {
-            match key {
-                MapKey::Ident(key) => {
-                    self.compile_string(key.range, &key.item);
-                    self.stack_len += 1;
-                }
-                MapKey::Expr(key) => {
-                    self.compile(key);
-                }
-            }
-
-            self.compile(value);
-
-            if let MapKey::Ident(key) = key {
-                let loc = VarLocation::Stack(self.stack_len - 1);
-                self.scope.vars.insert(&key.item, loc);
-            }
-        }
-
-        self.scope = self.parent_scopes.pop().unwrap();
-
-        let len = self.try_from_usize(range, "map too long", pairs.len());
-        self.add_instr(vec![range], Instruction::NewMap(len));
-
-        self.stack_len -= len * 2;
-    }
-
-    fn compile_func(&mut self, range: TextRange, func: &'expr FuncExpr) {
-        let mut parent = std::mem::take(self);
-        let mut compiler = Compiler::new(parent.debug_info.source.clone(), &func.args);
-        compiler.name = parent.inner_name;
-        compiler.debug_info.range = range;
-        compiler.diagnostics = std::mem::take(&mut parent.diagnostics);
-        compiler.parent = Some(Box::new(parent));
-        compiler.compile(&func.expr);
-        let func = compiler.finish();
-        *self = *compiler.parent.unwrap();
-        self.diagnostics = compiler.diagnostics;
-
-        self.compile_const(range, func.into());
-
-        let num_captures = compiler.num_captures;
-        if num_captures > 0 {
-            self.add_instr(vec![range], Instruction::NewFunc(num_captures));
+    fn compile_expr_int(&mut self, expr: ExprInt) {
+        if let Some(value) = expr.value() {
+            self.compile_const(expr.range(), value.into());
         }
     }
 
-    fn compile_call(&mut self, range: TextRange, call: &'expr CallExpr) {
-        let num_args: u32 = self.try_from_usize(range, "too many arguments", call.args.len());
-
-        for arg in &call.args {
-            self.compile(arg);
+    fn compile_expr_float(&mut self, expr: ExprFloat) {
+        if let Some(value) = expr.value() {
+            self.compile_const(expr.range(), value.into());
         }
-
-        self.compile(&call.func);
-        self.add_instr(vec![range, call.func.range], Instruction::Call);
-
-        self.stack_len -= num_args;
-        self.stack_len -= 1;
     }
 
-    fn compile_var(&mut self, range: TextRange, name: &'expr str) {
+    fn compile_expr_string(&mut self, expr: ExprString) {
+        if let Some(value) = expr.value() {
+            self.compile_const(expr.range(), value.into());
+        }
+    }
+
+    fn compile_expr_binding(&mut self, expr: ExprBinding) {
         let mut depth = 0;
         let mut current = &mut *self;
 
+        let ident = match expr.ident() {
+            Some(v) => v,
+            None => return,
+        };
+
         loop {
-            if let Some(location) = current.scope.vars.get(name) {
+            if let Some(location) = current.scope.bindings.get(&ident) {
                 match location {
                     VarLocation::Stack(idx) => {
                         let pos = current.stack_len - idx - 1;
@@ -264,31 +191,32 @@ impl<'expr> Compiler<'expr> {
                     let idx = current.num_captures;
                     let location = VarLocation::Capture(idx);
                     current.instructions.push(Instruction::PushCapture(idx));
-                    current.scope.vars.insert(name, location);
+                    current.scope.bindings.insert(ident.clone(), location);
                     current.num_captures += 1;
                     current = current.parent.as_mut().unwrap();
                 }
 
                 break;
-            } else if current.name == Some(name) {
+            } else if current.ident.as_ref() == Some(&ident) {
                 self.add_instr(vec![], Instruction::PushFunc(depth));
                 break;
             } else if let Some(parent) = &mut current.parent {
                 current = parent;
                 depth += 1;
             } else {
-                self.no_such_binding(range, name);
+                self.no_such_binding(expr.range(), ident);
                 break;
             }
         }
     }
 
-    fn bindings_in_scope(&self) -> Vec<&'expr str> {
+    fn bindings_in_scope(&self) -> Vec<Ident> {
         let mut bindings = HashSet::new();
         let mut current = self;
         loop {
-            for binding in current.scope.vars.keys().copied().chain(current.name) {
-                if !bindings.contains(binding) {
+            let fn_ident = current.ident.clone();
+            for binding in current.scope.bindings.keys().cloned().chain(fn_ident) {
+                if !bindings.contains(&binding) {
                     bindings.insert(binding);
                 }
             }
@@ -303,29 +231,25 @@ impl<'expr> Compiler<'expr> {
         bindings.into_iter().collect()
     }
 
-    fn no_such_binding(&mut self, range: TextRange, name: &str) {
+    fn no_such_binding(&mut self, range: TextRange, ident: Ident) {
         let mut in_scope = self.bindings_in_scope();
-        in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, name));
+        in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v.name(), ident.name()));
 
         let mut help = String::from("perhaps you meant ");
 
-        for (i, var) in in_scope.iter().take(3).enumerate() {
+        for (i, ident) in in_scope.iter().take(3).enumerate() {
             if i > 0 {
                 help.push_str(", ");
             }
 
-            let _ = write!(&mut help, "`{}`", var);
+            let _ = write!(&mut help, "`{}`", ident.name());
         }
 
-        let mut diagnostic =
-            Diagnostic::new(Severity::Error, format!("cannot find binding `{}`", name))
-                .with_source(
-                    SourceComponent::new(self.debug_info.source.clone()).with_label(
-                        Severity::Error,
-                        range,
-                        "no such binding",
-                    ),
-                );
+        let message = format!("cannot find binding `{}`", ident.name());
+        let source = self.debug_info.source.clone();
+        let source =
+            SourceComponent::new(source).with_label(Severity::Error, range, "no such binding");
+        let mut diagnostic = Diagnostic::new(Severity::Error, message).with_source(source);
 
         if !in_scope.is_empty() {
             diagnostic = diagnostic.with_help(help);
@@ -334,57 +258,242 @@ impl<'expr> Compiler<'expr> {
         self.add_error(diagnostic);
     }
 
-    fn compile_bin_op(&mut self, range: TextRange, bin_op: &'expr BinOpExpr) {
-        self.compile(&bin_op.lhs);
-        self.compile(&bin_op.rhs);
-        let ranges = vec![range, bin_op.lhs.range, bin_op.rhs.range];
-        self.add_instr(ranges, Instruction::BinOp(bin_op.op));
+    fn compile_expr_binary(&mut self, expr: ExprBinary) {
+        let lhs = match expr.lhs() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let lhs_range = lhs.range();
+        self.compile_expr(lhs);
+
+        let rhs = match expr.rhs() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let rhs_range = rhs.range();
+        self.compile_expr(rhs);
+
+        let ranges = vec![expr.range(), lhs_range, rhs_range];
+        let op = expr.op().unwrap_or(BinOp::Add);
+
+        self.add_instr(ranges, Instruction::BinOp(op));
         self.stack_len -= 2;
     }
 
-    fn compile_un_op(&mut self, range: TextRange, un_op: &'expr UnOpExpr) {
-        self.compile(&un_op.expr);
-        let ranges = vec![range, un_op.expr.range];
-        self.add_instr(ranges, Instruction::UnOp(un_op.op));
+    fn compile_expr_unary(&mut self, expr: ExprUnary) {
+        let inner = match expr.expr() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let inner_range = inner.range();
+        let ranges = vec![expr.range(), inner_range];
+        let op = expr.op().unwrap_or(UnOp::Neg);
+
+        self.compile_expr(inner);
+        self.add_instr(ranges, Instruction::UnOp(op));
         self.stack_len -= 1;
     }
 
-    fn compile_if_else(&mut self, range: TextRange, if_else: &'expr IfElseExpr) {
-        self.compile(&if_else.cond);
+    fn compile_expr_grouped(&mut self, expr: ExprGrouped) {
+        if let Some(expr) = expr.expr() {
+            self.compile_expr(expr);
+        }
+    }
 
-        let start = self.add_instr(vec![range, if_else.cond.range], Instruction::Nop);
+    fn compile_expr_list(&mut self, expr: ExprList) {
+        let mut len = 0;
+        for expr in expr.exprs() {
+            len += 1;
+            self.compile_expr(expr);
+        }
+
+        self.add_instr(vec![expr.range()], Instruction::NewList(len));
+        self.stack_len -= len;
+    }
+
+    fn compile_expr_map(&mut self, expr: ExprMap) {
+        self.parent_scopes.push(self.scope.clone());
+
+        let mut len = 0;
+        for pair in expr.pairs() {
+            if let Some(ident) = pair.key_ident() {
+                self.compile_const(ident.range(), ident.name().into());
+                self.stack_len += 1;
+            }
+
+            if let Some(expr) = pair.key_expr() {
+                self.compile_expr(expr);
+            }
+
+            if let Some(expr) = pair.value() {
+                self.compile_expr(expr);
+            }
+
+            if let Some(ident) = pair.key_ident() {
+                let loc = VarLocation::Stack(self.stack_len - 1);
+                self.scope.bindings.insert(ident, loc);
+            }
+
+            len += 1;
+        }
+
+        self.scope = self.parent_scopes.pop().unwrap();
+        self.add_instr(vec![expr.range()], Instruction::NewMap(len));
+        self.stack_len -= len * 2;
+    }
+
+    fn compile_expr_call(&mut self, expr: ExprCall) {
+        let mut num_args = 0;
+        for arg in expr.args() {
+            num_args += 1;
+            self.compile_expr(arg);
+        }
+
+        let func = match expr.func() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let func_range = func.range();
+
+        self.compile_expr(func);
+        self.add_instr(vec![expr.range(), func_range], Instruction::Call);
+
+        self.stack_len -= num_args;
         self.stack_len -= 1;
-        self.compile(&if_else.if_false);
+    }
+
+    fn compile_expr_index(&mut self, expr: ExprIndex) {
+        let lhs = match expr.lhs() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let lhs_range = lhs.range();
+        self.compile_expr(lhs);
+
+        let rhs_range = if let Some(ident) = expr.rhs_ident() {
+            let range = ident.range();
+            self.compile_const(range, ident.name().into());
+            range
+        } else if let Some(expr) = expr.rhs_expr() {
+            let range = expr.range();
+            self.compile_expr(expr);
+            range
+        } else {
+            return;
+        };
+
+        let op = expr.op().unwrap_or(BinOp::Index);
+
+        let ranges = vec![expr.range(), lhs_range, rhs_range];
+        self.add_instr(ranges, Instruction::BinOp(op));
+        self.stack_len -= 2;
+    }
+
+    fn compile_expr_if_else(&mut self, expr: ExprIfElse) {
+        let cond = match expr.cond() {
+            Some(v) => v,
+            None => return,
+        };
+
+        let cond_range = cond.range();
+        self.compile_expr(cond);
+
+        let start = self.add_instr(vec![expr.range(), cond_range], Instruction::Nop);
         self.stack_len -= 1;
+
+        if let Some(expr) = expr.if_false() {
+            self.compile_expr(expr);
+            self.stack_len -= 1;
+        }
+
         let mid = self.add_instr(vec![], Instruction::Nop);
-        self.compile(&if_else.if_true);
+
+        if let Some(expr) = expr.if_true() {
+            self.compile_expr(expr);
+        }
+
         let end = self.instructions.len();
 
-        let offset = self.try_from_usize(range, "if expression too long", mid - start);
+        let offset = self.try_from_usize(expr.range(), "if expression too long", mid - start);
         self.instructions[start] = Instruction::JumpIf(offset);
 
-        let offset = self.try_from_usize(range, "if expression too long", end - mid - 1);
+        let offset = self.try_from_usize(expr.range(), "if expression too long", end - mid - 1);
         self.instructions[mid] = Instruction::Jump(offset);
     }
 
-    fn compile_let_in(&mut self, range: TextRange, let_in: &'expr LetInExpr) {
+    fn compile_expr_let_in(&mut self, expr: ExprLetIn) {
         self.parent_scopes.push(self.scope.clone());
 
-        for (binding, expr) in &let_in.vars {
+        let mut num_bindings = 0;
+        for binding in expr.bindings() {
+            num_bindings += 1;
+
             let idx = self.stack_len;
-            self.inner_name = Some(binding);
-            self.compile(expr);
-            self.inner_name = None;
-            self.scope.vars.insert(binding, VarLocation::Stack(idx));
+            if let Some(ident) = binding.ident() {
+                self.inner_ident = Some(ident);
+            }
+
+            if let Some(expr) = binding.expr() {
+                self.compile_expr(expr);
+            }
+
+            if let Some(ident) = binding.ident() {
+                self.inner_ident = None;
+                self.scope.bindings.insert(ident, VarLocation::Stack(idx));
+            }
         }
 
-        self.compile(&let_in.expr);
+        if let Some(expr) = expr.expr() {
+            self.compile_expr(expr);
+        }
 
-        let num_vars = self.try_from_usize(range, "too many variables", let_in.vars.len());
-        self.add_instr(vec![], Instruction::PopSwap(num_vars));
-        self.stack_len -= num_vars;
+        self.add_instr(vec![], Instruction::PopSwap(num_bindings));
+        self.stack_len -= num_bindings;
 
         self.scope = self.parent_scopes.pop().unwrap();
+    }
+
+    fn compile_expr_fn(&mut self, expr: ExprFn) {
+        let range = expr.range();
+
+        let mut parent = std::mem::take(self);
+        let mut compiler = Compiler::new(parent.debug_info.source.clone());
+
+        compiler.ident = parent.inner_ident.clone();
+        compiler.debug_info.range = expr.range();
+        compiler.diagnostics = std::mem::take(&mut parent.diagnostics);
+        compiler.parent = Some(Box::new(parent));
+
+        let mut num_args = 0;
+        for ident in expr.args() {
+            let location = VarLocation::Stack(num_args);
+            compiler.scope.bindings.insert(ident, location);
+
+            num_args += 1;
+        }
+
+        compiler.arity = num_args;
+        compiler.stack_len = num_args;
+
+        if let Some(expr) = expr.expr() {
+            compiler.compile_expr(expr);
+        }
+
+        let func = compiler.finish();
+        *self = *compiler.parent.unwrap();
+        self.diagnostics = compiler.diagnostics;
+
+        self.compile_const(expr.range(), func.into());
+
+        let num_captures = compiler.num_captures;
+        if num_captures > 0 {
+            self.add_instr(vec![range], Instruction::NewFunc(num_captures));
+        }
     }
 
     fn finish(&mut self) -> Func {
@@ -394,7 +503,7 @@ impl<'expr> Compiler<'expr> {
 
         self.add_instr(vec![], Instruction::Ret);
 
-        self.debug_info.name = self.name.map(String::from);
+        self.debug_info.name = self.ident.as_ref().map(|v| v.name().into());
 
         Func {
             instructions: self.instructions.iter().copied().collect(),
@@ -405,18 +514,20 @@ impl<'expr> Compiler<'expr> {
     }
 }
 
-pub fn compile(source: Arc<Source>, expr: &Spanned<Expr>) -> (Value, Vec<Diagnostic>) {
-    match &expr.item {
-        Expr::Func(func) => {
-            let mut compiler = Compiler::new(source, &func.args);
-            compiler.compile_root(&func.expr);
+pub fn compile(source: Arc<Source>, expr: Expr) -> (Value, Vec<Diagnostic>) {
+    match expr {
+        Expr::Fn(expr) => {
+            let mut compiler = Compiler::new(source);
+            compiler.debug_info.range = expr.range();
+            compiler.compile_expr_fn(expr);
             let func = compiler.finish();
             (func.into(), compiler.diagnostics().collect())
         }
         _ => {
-            let mut compiler = Compiler::new(source, &[]);
+            let mut compiler = Compiler::new(source);
+            compiler.debug_info.range = expr.range();
             compiler.debug_info.name = Some("<thunk>".into());
-            compiler.compile_root(expr);
+            compiler.compile_expr(expr);
             let func = compiler.finish();
             (
                 Thunk::new(func.into()).into(),

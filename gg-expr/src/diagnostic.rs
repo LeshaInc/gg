@@ -4,7 +4,7 @@ use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 use yansi::{Color, Paint};
 
-use crate::new_parser::TextRange;
+use crate::syntax::TextRange;
 use crate::{Line, Source};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

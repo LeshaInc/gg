@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::new_parser::{TextRange, TextSize};
+use crate::syntax::{TextRange, TextSize};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct Source {

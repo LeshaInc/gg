@@ -1,280 +1,362 @@
-use std::fmt::{self, Display};
-use std::sync::Arc;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
-use super::{Spanned, Token};
+use super::{parser, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange};
+use crate::syntax::{BinOp, UnOp};
 
-#[derive(Clone, Debug)]
-pub enum Expr {
-    Int(i64),
-    Float(f64),
-    String(Arc<String>),
-    Var(String),
-    BinOp(BinOpExpr),
-    UnOp(UnOpExpr),
-    Paren(Box<Spanned<Expr>>),
-    List(ListExpr),
-    Map(MapExpr),
-    Func(FuncExpr),
-    Call(CallExpr),
-    IfElse(IfElseExpr),
-    LetIn(LetInExpr),
-    Error,
-}
-
-impl Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Expr::Int(v) => v.fmt(f),
-            Expr::Float(v) => v.fmt(f),
-            Expr::String(v) => write!(f, "{:?}", v),
-            Expr::Var(v) => v.fmt(f),
-            Expr::BinOp(v) => v.fmt(f),
-            Expr::UnOp(v) => v.fmt(f),
-            Expr::Paren(v) => write!(f, "({})", v),
-            Expr::List(v) => v.fmt(f),
-            Expr::Map(v) => v.fmt(f),
-            Expr::Func(v) => v.fmt(f),
-            Expr::Call(v) => v.fmt(f),
-            Expr::IfElse(v) => v.fmt(f),
-            Expr::LetIn(v) => v.fmt(f),
-            Expr::Error => write!(f, "error"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct BinOpExpr {
-    pub lhs: Box<Spanned<Expr>>,
-    pub op: BinOp,
-    pub rhs: Box<Spanned<Expr>>,
-}
-
-impl Display for BinOpExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.op {
-            BinOp::Index => write!(f, "{}[{}]", self.lhs, self.rhs),
-            BinOp::IndexNullable => write!(f, "{}?[{}]", self.lhs, self.rhs),
-            _ => write!(f, "{} {} {}", self.lhs, self.op, self.rhs),
-        }
-    }
-}
-
-macro_rules! define_op {
-    (pub enum $ty:ident { $($name:ident($token:ident, $repr:expr),)* }) => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-        pub enum $ty {
-             $($name,)*
+macro_rules! define_terms {
+    ($( $name:ident, )+) => {
+        $(
+        #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+        pub struct $name {
+            syntax: SyntaxNode,
         }
 
-        impl $ty {
-            pub const VALUES: [$ty ; define_op!(@len $($name,)*)] = [
-                $($ty ::$name,)*
-            ];
+        impl $name {
+            pub fn cast(syntax: SyntaxNode) -> Option<Self>
+            where
+                Self: Sized,
+            {
+                if syntax.kind() == SyntaxKind::$name {
+                    Some(Self { syntax })
+                } else {
+                    None
+                }
+            }
 
-            #[allow(unreachable_patterns)]
-            pub fn from_token(token: Token) -> Option<$ty > {
-                match token {
-                    $(Token::$token => Some($ty ::$name),)*
+            pub fn syntax(&self) -> &SyntaxNode {
+                &self.syntax
+            }
+
+            pub fn range(&self) -> TextRange {
+                self.syntax.text_range()
+            }
+
+            pub fn tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+                self.syntax.children_with_tokens().flat_map(|v| match v {
+                    SyntaxElement::Token(token) => Some(token),
                     _ => None,
-                }
-            }
-
-            pub fn into_token(self) -> Token {
-                match self {
-                    $($ty::$name => Token::$token,)*
-                }
-            }
-        }
-
-        impl Display for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(match self {
-                    $($ty::$name => $repr,)*
                 })
             }
-        }
-    };
 
-    (@len) => {
-        0
-    };
-
-    (@len $first:ident, $($rest:ident,)*) => {
-        1 + define_op!(@len $($rest,)*)
-    }
-}
-
-define_op! {
-    pub enum BinOp {
-        Or(Or, "||"),
-        Coalesce(Coalesce, "??"),
-        And(And, "&&"),
-        Lt(Lt, "<"),
-        Le(Le, "<="),
-        Eq(Eq, "=="),
-        Neq(Neq, "!="),
-        Ge(Ge, ">="),
-        Gt(Gt, ">"),
-        Add(Add, "+"),
-        Sub(Sub, "-"),
-        Mul(Mul, "*"),
-        Div(Div, "/"),
-        Rem(Rem, "%"),
-        Pow(Pow, "**"),
-        Index(LBracket, "[]"),
-        IndexNullable(QuestionLBracket, "?[]"),
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct UnOpExpr {
-    pub op: UnOp,
-    pub expr: Box<Spanned<Expr>>,
-}
-
-impl Display for UnOpExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.op, self.expr)
-    }
-}
-
-define_op! {
-    pub enum UnOp {
-        Neg(Sub, "-"),
-        Not(Not, "!"),
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ListExpr {
-    pub exprs: Vec<Spanned<Expr>>,
-}
-
-impl Display for ListExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-
-        for (i, v) in self.exprs.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-
-            v.fmt(f)?;
-        }
-
-        write!(f, "]")
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct MapExpr {
-    pub pairs: Vec<(MapKey, Spanned<Expr>)>,
-}
-
-#[derive(Clone, Debug)]
-pub enum MapKey {
-    Ident(Spanned<String>),
-    Expr(Spanned<Expr>),
-}
-
-impl Display for MapExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
-
-        for (i, (k, v)) in self.pairs.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-
-            match k {
-                MapKey::Ident(k) => write!(f, "{} = {}", k, v)?,
-                MapKey::Expr(k) => write!(f, "[{}] = {}", k, v)?,
+            pub fn nontrivial_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+                self.tokens().filter(|v| !v.kind().is_trivia())
             }
         }
 
-        write!(f, "}}")
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.syntax.fmt(f)
+            }
+        }
+        )+
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FuncExpr {
-    pub args: Vec<String>,
-    pub expr: Box<Spanned<Expr>>,
-}
-
-impl Display for FuncExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "fn(")?;
-
-        for (i, arg) in self.args.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-
-            write!(f, "{}", arg)?;
+macro_rules! define_enum {
+    ($name:ident { $( $varname:ident($varnode:ident), )+ }) => {
+        #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+        pub enum $name {
+            $( $varname($varnode), )+
         }
 
-        write!(f, "): {}", self.expr)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CallExpr {
-    pub func: Box<Spanned<Expr>>,
-    pub args: Vec<Spanned<Expr>>,
-}
-
-impl Display for CallExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(", self.func)?;
-
-        for (i, arg) in self.args.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
+        impl $name {
+            pub fn cast(syntax: SyntaxNode) -> Option<Self>
+            where
+                Self: Sized,
+            {
+                match syntax.kind() {
+                    $( SyntaxKind::$varnode => Some($name::$varname($varnode::cast(syntax).unwrap())), )+
+                    _ => None
+                }
             }
 
-            write!(f, "{}", arg)?;
-        }
-
-        write!(f, ")")
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IfElseExpr {
-    pub cond: Box<Spanned<Expr>>,
-    pub if_true: Box<Spanned<Expr>>,
-    pub if_false: Box<Spanned<Expr>>,
-}
-
-impl Display for IfElseExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "if {} then {} else {}",
-            self.cond, self.if_true, self.if_false
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct LetInExpr {
-    pub vars: Vec<(String, Box<Spanned<Expr>>)>,
-    pub expr: Box<Spanned<Expr>>,
-}
-
-impl Display for LetInExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "let ")?;
-
-        for (i, (var, expr)) in self.vars.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
+            pub fn syntax(&self) -> &SyntaxNode {
+                match self {
+                    $( $name::$varname(v) => v.syntax(), )+
+                }
             }
 
-            write!(f, "{} = {}", var, expr)?;
+            pub fn range(&self) -> TextRange {
+                self.syntax().text_range()
+            }
         }
 
-        write!(f, " in {}", self.expr)
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.syntax().fmt(f)
+            }
+        }
+    }
+}
+
+macro_rules! define_single_children {
+    ($( $parent:ident: $func:ident -> $child:ident, )+) => {
+        $(
+        impl $parent {
+            pub fn $func(&self) -> Option<$child> {
+                self.syntax.children().find_map($child::cast)
+            }
+        }
+        )+
+    }
+}
+
+macro_rules! define_multi_children {
+    ($( $parent:ident: $func:ident -> $child:ident, )+) => {
+        $(
+        impl $parent {
+            pub fn $func(&self) -> impl Iterator<Item = $child> + '_ {
+                self.syntax.children().filter_map($child::cast)
+            }
+        }
+        )+
+    }
+}
+
+define_terms![
+    ExprNull,
+    ExprBool,
+    ExprInt,
+    ExprFloat,
+    ExprString,
+    ExprBinding,
+    ExprBinary,
+    ExprUnary,
+    ExprGrouped,
+    ExprList,
+    ExprMap,
+    ExprCall,
+    ExprIndex,
+    ExprIfElse,
+    ExprLetIn,
+    ExprFn,
+    PatGrouped,
+    PatOr,
+    PatList,
+    PatInt,
+    PatString,
+    PatRest,
+    PatHole,
+    PatBinding,
+    MapPair,
+    LetBinding,
+];
+
+define_enum!(Expr {
+    Null(ExprNull),
+    Bool(ExprBool),
+    Int(ExprInt),
+    Float(ExprFloat),
+    String(ExprString),
+    Binding(ExprBinding),
+    Binary(ExprBinary),
+    Unary(ExprUnary),
+    Grouped(ExprGrouped),
+    List(ExprList),
+    Map(ExprMap),
+    Call(ExprCall),
+    Index(ExprIndex),
+    IfElse(ExprIfElse),
+    LetIn(ExprLetIn),
+    Fn(ExprFn),
+});
+
+define_enum!(Pat {
+    Grouped(PatGrouped),
+    Or(PatOr),
+    List(PatList),
+    Int(PatInt),
+    String(PatString),
+    Rest(PatRest),
+    Hole(PatHole),
+    Binding(PatBinding),
+});
+
+define_single_children! {
+    ExprUnary: expr -> Expr,
+    ExprGrouped: expr -> Expr,
+    ExprLetIn: expr -> Expr,
+    ExprFn: expr -> Expr,
+    PatGrouped: pat  -> Pat,
+    PatBinding: pat -> Pat,
+    LetBinding: expr -> Expr,
+}
+
+define_multi_children! {
+    ExprList: exprs -> Expr,
+    ExprMap: pairs -> MapPair,
+    ExprLetIn: bindings -> LetBinding,
+    PatOr: pats -> Pat,
+    PatList: pats -> Pat,
+}
+
+impl ExprBool {
+    pub fn value(&self) -> Option<bool> {
+        let token = self.nontrivial_tokens().next()?;
+        Some(token.kind() == SyntaxKind::TokTrue)
+    }
+}
+
+impl ExprInt {
+    pub fn value(&self) -> Option<i64> {
+        let token = self.nontrivial_tokens().next()?;
+        parser::int_value(token.text())
+    }
+}
+
+impl ExprFloat {
+    pub fn value(&self) -> Option<f64> {
+        let token = self.nontrivial_tokens().next()?;
+        parser::float_value(token.text())
+    }
+}
+
+impl ExprString {
+    pub fn value(&self) -> Option<String> {
+        let token = self.nontrivial_tokens().next()?;
+        Some(parser::string_value(token.text()))
+    }
+}
+
+impl ExprBinding {
+    pub fn ident(&self) -> Option<Ident> {
+        let token = self.nontrivial_tokens().next()?;
+        Ident::cast(token)
+    }
+}
+
+impl ExprBinary {
+    pub fn op(&self) -> Option<BinOp> {
+        let token = self.nontrivial_tokens().next()?;
+        BinOp::from_token(token.kind())
+    }
+
+    pub fn lhs(&self) -> Option<Expr> {
+        self.syntax.first_child().and_then(Expr::cast)
+    }
+
+    pub fn rhs(&self) -> Option<Expr> {
+        self.syntax.last_child().and_then(Expr::cast)
+    }
+}
+
+impl ExprUnary {
+    pub fn op(&self) -> Option<UnOp> {
+        let token = self.nontrivial_tokens().next()?;
+        UnOp::from_token(token.kind())
+    }
+}
+
+impl ExprIndex {
+    pub fn op(&self) -> Option<BinOp> {
+        let token = self.nontrivial_tokens().next().map(|v| v.kind())?;
+        BinOp::from_token(token)
+    }
+
+    pub fn lhs(&self) -> Option<Expr> {
+        self.syntax.first_child().and_then(Expr::cast)
+    }
+
+    pub fn rhs_expr(&self) -> Option<Expr> {
+        self.syntax.last_child().and_then(Expr::cast)
+    }
+
+    pub fn rhs_ident(&self) -> Option<Ident> {
+        let token = self.nontrivial_tokens().last()?;
+        Ident::cast(token)
+    }
+}
+
+impl ExprCall {
+    pub fn func(&self) -> Option<Expr> {
+        self.syntax.first_child().and_then(Expr::cast)
+    }
+
+    pub fn args(&self) -> impl Iterator<Item = Expr> {
+        self.syntax.children().skip(1).flat_map(Expr::cast)
+    }
+}
+
+impl ExprIfElse {
+    pub fn cond(&self) -> Option<Expr> {
+        self.syntax.first_child().and_then(Expr::cast)
+    }
+
+    pub fn if_true(&self) -> Option<Expr> {
+        self.syntax.children().nth(1).and_then(Expr::cast)
+    }
+
+    pub fn if_false(&self) -> Option<Expr> {
+        self.syntax.last_child().and_then(Expr::cast)
+    }
+}
+
+impl MapPair {
+    pub fn key_expr(&self) -> Option<Expr> {
+        self.syntax.first_child().and_then(Expr::cast)
+    }
+
+    pub fn key_ident(&self) -> Option<Ident> {
+        let token = self.nontrivial_tokens().next()?;
+        Ident::cast(token)
+    }
+
+    pub fn value(&self) -> Option<Expr> {
+        self.syntax.last_child().and_then(Expr::cast)
+    }
+}
+
+impl LetBinding {
+    pub fn ident(&self) -> Option<Ident> {
+        let token = self.nontrivial_tokens().next()?;
+        Ident::cast(token)
+    }
+}
+
+impl ExprFn {
+    pub fn args(&self) -> impl Iterator<Item = Ident> {
+        self.nontrivial_tokens().flat_map(Ident::cast)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Ident {
+    syntax: SyntaxToken,
+}
+
+impl Ident {
+    pub fn cast(syntax: SyntaxToken) -> Option<Ident> {
+        if syntax.kind() == SyntaxKind::TokIdent {
+            Some(Ident { syntax })
+        } else {
+            None
+        }
+    }
+
+    pub fn syntax(&self) -> &SyntaxToken {
+        &self.syntax
+    }
+
+    pub fn range(&self) -> TextRange {
+        self.syntax.text_range()
+    }
+
+    pub fn name(&self) -> &str {
+        self.syntax.text()
+    }
+}
+
+impl PartialEq for Ident {
+    fn eq(&self, rhs: &Ident) -> bool {
+        self.name() == rhs.name()
+    }
+}
+
+impl Eq for Ident {}
+
+impl Hash for Ident {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name().hash(state)
     }
 }

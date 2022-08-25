@@ -3,8 +3,7 @@ mod ops;
 use std::fmt::Write;
 
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::new_parser::TextRange;
-use crate::syntax::{BinOp, UnOp};
+use crate::syntax::{BinOp, TextRange, UnOp};
 use crate::{DebugInfo, Error, Func, Value};
 
 #[repr(C)]
