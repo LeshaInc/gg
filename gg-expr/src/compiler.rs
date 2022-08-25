@@ -24,11 +24,11 @@ pub struct Compiler {
 
 #[derive(Clone, Default)]
 struct Scope {
-    bindings: HashMap<Ident, VarLocation>,
+    bindings: HashMap<Ident, Location>,
 }
 
 #[derive(Clone, Copy)]
-enum VarLocation {
+enum Location {
     Stack(u32),
     Capture(u32),
 }
@@ -176,11 +176,11 @@ impl Compiler {
         loop {
             if let Some(location) = current.scope.bindings.get(&ident) {
                 match location {
-                    VarLocation::Stack(idx) => {
+                    Location::Stack(idx) => {
                         let pos = current.stack_len - idx - 1;
                         current.add_instr(vec![], Instruction::PushCopy(pos));
                     }
-                    VarLocation::Capture(idx) => {
+                    Location::Capture(idx) => {
                         current.add_instr(vec![], Instruction::PushCapture(*idx));
                     }
                 }
@@ -189,7 +189,7 @@ impl Compiler {
 
                 for _ in 0..depth {
                     let idx = current.num_captures;
-                    let location = VarLocation::Capture(idx);
+                    let location = Location::Capture(idx);
                     current.instructions.push(Instruction::PushCapture(idx));
                     current.scope.bindings.insert(ident.clone(), location);
                     current.num_captures += 1;
@@ -328,13 +328,13 @@ impl Compiler {
                 self.compile_expr(expr);
             }
 
-            if let Some(expr) = pair.value() {
-                self.compile_expr(expr);
+            if let Some(ident) = pair.key_ident() {
+                let loc = Location::Stack(self.stack_len - 1);
+                self.scope.bindings.insert(ident, loc);
             }
 
-            if let Some(ident) = pair.key_ident() {
-                let loc = VarLocation::Stack(self.stack_len - 1);
-                self.scope.bindings.insert(ident, loc);
+            if let Some(expr) = pair.value() {
+                self.compile_expr(expr);
             }
 
             len += 1;
@@ -378,6 +378,7 @@ impl Compiler {
         let rhs_range = if let Some(ident) = expr.rhs_ident() {
             let range = ident.range();
             self.compile_const(range, ident.name().into());
+            self.stack_len += 1;
             range
         } else if let Some(expr) = expr.rhs_expr() {
             let range = expr.range();
@@ -444,7 +445,7 @@ impl Compiler {
 
             if let Some(ident) = binding.ident() {
                 self.inner_ident = None;
-                self.scope.bindings.insert(ident, VarLocation::Stack(idx));
+                self.scope.bindings.insert(ident, Location::Stack(idx));
             }
         }
 
@@ -471,7 +472,7 @@ impl Compiler {
 
         let mut num_args = 0;
         for ident in expr.args() {
-            let location = VarLocation::Stack(num_args);
+            let location = Location::Stack(num_args);
             compiler.scope.bindings.insert(ident, location);
 
             num_args += 1;

@@ -294,6 +294,10 @@ impl ExprIfElse {
 
 impl MapPair {
     pub fn key_expr(&self) -> Option<Expr> {
+        if self.key_ident().is_some() {
+            return None;
+        }
+
         self.syntax.first_child().and_then(Expr::cast)
     }
 

@@ -11,6 +11,8 @@ fn main() {
     let expr = gg_expr::syntax::parse(&input);
     let source = Arc::new(Source::new("unknown.expr".into(), input));
 
+    println!("{:#?}", expr);
+
     let (value, diagnostics) = compile(source, expr);
 
     for diagnostic in diagnostics {

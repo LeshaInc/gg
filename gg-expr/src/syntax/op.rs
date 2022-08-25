@@ -1,9 +1,9 @@
 use std::fmt::{self, Display};
 
-use super::SyntaxKind;
+use super::SyntaxKind::{self, *};
 
 macro_rules! define_op {
-    (pub enum $ty:ident { $($name:ident($token:ident, $repr:expr),)* }) => {
+    (pub enum $ty:ident { $($name:ident($token:pat, $repr:expr),)* }) => {
         #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
         pub enum $ty {
              $($name,)*
@@ -16,14 +16,8 @@ macro_rules! define_op {
 
             pub fn from_token(token: SyntaxKind) -> Option<$ty > {
                 match token {
-                    $(SyntaxKind::$token => Some($ty ::$name),)*
+                    $($token => Some($ty ::$name),)*
                     _ => None,
-                }
-            }
-
-            pub fn into_token(self) -> SyntaxKind{
-                match self {
-                    $($ty::$name => SyntaxKind::$token,)*
                 }
             }
         }
@@ -63,8 +57,8 @@ define_op! {
         Div(TokDiv, "/"),
         Rem(TokRem, "%"),
         Pow(TokPow, "**"),
-        Index(TokLBracket, "[]"),
-        IndexNullable(TokQuestionLBracket, "?[]"),
+        Index(TokDot | TokLBracket, "[]"),
+        IndexNullable(TokQuestionDot | TokQuestionLBracket, "?[]"),
     }
 }
 
