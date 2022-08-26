@@ -133,13 +133,68 @@ pub enum SyntaxKind {
     LetBinding,
 
     #[error]
+    TokError,
     Error,
     Eof,
 }
 
 impl SyntaxKind {
-    pub fn is_trivia(&self) -> bool {
+    pub fn is_trivia(self) -> bool {
         matches!(self, SyntaxKind::TokWhitespace | SyntaxKind::TokComment)
+    }
+
+    pub fn explain(self) -> &'static str {
+        use SyntaxKind::*;
+
+        match self {
+            TokAdd => "`+`",
+            TokSub => "`-`",
+            TokMul => "`*`",
+            TokDiv => "`/`",
+            TokPow => "`**`",
+            TokRem => "`%`",
+            TokAnd => "`&&`",
+            TokOr => "`||`",
+            TokPipe => "`|`",
+            TokCoalesce => "`??`",
+            TokNot => "`!`",
+            TokAssign => "`=`",
+            TokLt => "`<`",
+            TokLe => "`<=`",
+            TokEq => "`==`",
+            TokNeq => "`!=`",
+            TokGe => "`>=`",
+            TokGt => "`>`",
+            TokLParen => "`(`",
+            TokRParen => "`)`",
+            TokLBrace => "`{`",
+            TokRBrace => "`}`",
+            TokLBracket => "`[`",
+            TokRBracket => "`]`",
+            TokQuestionLBracket => "`?[`",
+            TokDot => "`.`",
+            TokQuestionDot => "`?.`",
+            TokComma => "`,`",
+            TokColon => "`:`",
+            TokRest => "`...`",
+            TokHole => "`_`",
+            TokNull => "`null`",
+            TokTrue => "`true`",
+            TokFalse => "`false`",
+            TokLet => "`let`",
+            TokIn => "`in`",
+            TokAs => "`as`",
+            TokIf => "`if`",
+            TokThen => "`then`",
+            TokElse => "`else`",
+            TokFn => "`fn`",
+            TokInt => "int",
+            TokFloat => "float",
+            TokString => "string",
+            TokIdent => "identifier",
+            TokError => "unrecognized character",
+            _ => "?",
+        }
     }
 }
 

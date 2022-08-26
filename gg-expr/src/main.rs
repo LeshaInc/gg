@@ -1,23 +1,22 @@
 use std::io::Read;
-use std::sync::Arc;
 use std::time::Instant;
 
-use gg_expr::{compile, Source};
+use gg_expr::compile_text;
 
 fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
 
-    let expr = gg_expr::syntax::parse(&input);
-    let source = Arc::new(Source::new("unknown.expr".into(), input));
-
-    println!("{:#?}", expr);
-
-    let (value, diagnostics) = compile(source, expr);
+    let (value, diagnostics) = compile_text(&input);
 
     for diagnostic in diagnostics {
         println!("{}", diagnostic);
     }
+
+    let value = match value {
+        Some(v) => v,
+        None => return,
+    };
 
     println!();
     println!("{:?}", value);

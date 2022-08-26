@@ -15,8 +15,19 @@ pub use self::value::{DebugInfo, Func, Thunk, Type, Value};
 pub use self::vm::{Instruction, Vm};
 use crate::diagnostic::Diagnostic;
 
-pub fn compile_text(text: &str) -> (Value, Vec<Diagnostic>) {
+pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {
     let source = Arc::new(Source::new("unknown.expr".into(), text.into()));
-    let expr = syntax::parse(text);
-    compile(source, expr)
+    let res = syntax::parse(text);
+
+    println!("{:#?}", res.node);
+
+    let mut diagnostics = res.errors;
+
+    let value = res.expr.map(|e| {
+        let (v, mut d) = compile(source, e);
+        diagnostics.append(&mut d);
+        v
+    });
+
+    (value, diagnostics)
 }

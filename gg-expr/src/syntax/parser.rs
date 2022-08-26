@@ -1,15 +1,21 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::iter::Peekable;
+use std::sync::Arc;
 
-use rowan::{Checkpoint, GreenNode, GreenNodeBuilder};
+use rowan::{Checkpoint, GreenNodeBuilder, TextRange, TextSize, WalkEvent};
 
-use super::Lexer;
 use super::SyntaxKind::{self, *};
+use super::{Expr, Lexer, SyntaxNode};
+use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
+use crate::Source;
 
 pub struct Parser<'s> {
     lexer: Peekable<Lexer<'s>>,
     builder: GreenNodeBuilder<'static>,
+    recovery_set: HashMap<SyntaxKind, u32>,
+    source: Arc<Source>,
     errors: Vec<String>,
 }
 
@@ -18,12 +24,54 @@ impl Parser<'_> {
         Parser {
             lexer: Lexer::new(source).peekable(),
             builder: GreenNodeBuilder::new(),
+            recovery_set: HashMap::default(),
+            source: Arc::new(Source::new("unknown.expr".into(), source.into())),
             errors: Vec::new(),
         }
     }
 
-    pub fn finish(self) -> GreenNode {
-        self.builder.finish()
+    pub fn finish(self) -> ParseResult {
+        let node = SyntaxNode::new_root(self.builder.finish());
+
+        let error_ranges = node.preorder().flat_map(|event| {
+            if let WalkEvent::Enter(node) = event {
+                if node.kind() == SyntaxKind::Error {
+                    return Some(node.text_range());
+                }
+            }
+
+            None
+        });
+
+        let errors = self
+            .errors
+            .into_iter()
+            .zip(error_ranges)
+            .map(|(error, mut range)| {
+                let one = TextSize::from(1);
+
+                if range.is_empty() {
+                    range = TextRange::at(range.start(), one);
+                }
+                if range.start() == node.text_range().end() {
+                    range = range - one;
+                }
+
+                Diagnostic::new(Severity::Error, "syntax error").with_source(
+                    SourceComponent::new(self.source.clone()).with_label(
+                        Severity::Error,
+                        range,
+                        error,
+                    ),
+                )
+            })
+            .collect();
+
+        ParseResult {
+            expr: node.first_child().and_then(Expr::cast),
+            node,
+            errors,
+        }
     }
 
     fn skip_trivia(&mut self) {
@@ -69,6 +117,45 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn push_recovery(&mut self, tokens: &[SyntaxKind]) {
+        for &token in tokens {
+            *self.recovery_set.entry(token).or_default() += 1;
+        }
+    }
+
+    fn pop_recovery(&mut self) {
+        self.recovery_set.retain(|_, v| {
+            *v -= 1;
+            *v > 0
+        });
+    }
+
+    fn error_recover(&mut self) {
+        while let Some(token) = self.peek() {
+            if self.recovery_set.contains_key(&token) {
+                break;
+            } else {
+                self.bump();
+            }
+        }
+    }
+
+    fn error_unexpected_token(&mut self, expected: &str) {
+        let found = self
+            .peek()
+            .map(SyntaxKind::explain)
+            .unwrap_or("end of file");
+
+        let mut message = format!("expected {}", expected);
+
+        message.push_str(", found ");
+        message.push_str(found);
+
+        self.start_error(message);
+        self.error_recover();
+        self.finish_node();
+    }
+
     fn expect_one_of(&mut self, expected: &[SyntaxKind]) {
         if let Some(token) = self.peek() {
             if expected.contains(&token) {
@@ -76,9 +163,21 @@ impl Parser<'_> {
             }
         }
 
-        self.start_error("unexpected token");
-        self.bump();
-        self.finish_node();
+        let mut message = String::new();
+
+        if expected.len() > 1 {
+            message.push_str("one of ");
+        }
+
+        for (i, token) in expected.iter().enumerate() {
+            if i > 0 {
+                message.push_str(", ");
+            }
+
+            message.push_str(token.explain())
+        }
+
+        self.error_unexpected_token(&message);
     }
 
     fn expect(&mut self, expected: SyntaxKind) {
@@ -86,6 +185,8 @@ impl Parser<'_> {
     }
 
     fn comma_separated(&mut self, end: SyntaxKind, mut func: impl FnMut(&mut Self)) {
+        self.push_recovery(&[TokComma, end]);
+
         while self.peek() != Some(end) {
             func(self);
 
@@ -95,12 +196,23 @@ impl Parser<'_> {
                 break;
             }
         }
+
+        self.pop_recovery();
     }
 
     pub fn root(&mut self) {
         self.start_node(Root);
+
         self.expr();
-        self.skip_trivia();
+
+        if self.peek().is_some() {
+            self.start_error("trailing characters");
+            while self.peek().is_some() {
+                self.bump();
+            }
+            self.finish_node();
+        }
+
         self.finish_node();
     }
 
@@ -111,7 +223,7 @@ impl Parser<'_> {
     fn expr_bp(&mut self, min_bp: u8) {
         let root = self.checkpoint();
 
-        self.expr_lhs();
+        self.expr_lhs(root);
 
         while let Some(token) = self.peek() {
             if let Some(l_bp) = postfix_bp(token) {
@@ -146,7 +258,7 @@ impl Parser<'_> {
         }
     }
 
-    fn expr_lhs(&mut self) {
+    fn expr_lhs(&mut self, root: Checkpoint) {
         if let Some(r_bp) = self.peek().and_then(prefix_bp) {
             self.start_node(ExprUnary);
             self.bump();
@@ -156,57 +268,62 @@ impl Parser<'_> {
         }
 
         match self.peek() {
-            Some(TokLParen) => self.expr_grouped(),
-            Some(TokLBracket) => self.expr_list(),
-            Some(TokLBrace) => self.expr_map(),
-            Some(TokFn) => self.expr_fn(),
-            Some(TokLet) => self.expr_let_in(),
-            Some(TokIf) => self.expr_if_else(),
-            Some(TokNull) => self.expr_null(),
-            Some(TokTrue | TokFalse) => self.expr_bool(),
-            Some(TokInt) => self.expr_int(),
-            Some(TokFloat) => self.expr_float(),
-            Some(TokString) => self.expr_string(),
-            Some(TokIdent) => self.expr_binding(),
-            // v => todo!("{:?}", v),
-            _ => {}
+            Some(TokLParen) => self.expr_grouped(root),
+            Some(TokLBracket) => self.expr_list(root),
+            Some(TokLBrace) => self.expr_map(root),
+            Some(TokFn) => self.expr_fn(root),
+            Some(TokLet) => self.expr_let_in(root),
+            Some(TokIf) => self.expr_if_else(root),
+            Some(TokNull) => self.expr_null(root),
+            Some(TokTrue | TokFalse) => self.expr_bool(root),
+            Some(TokInt) => self.expr_int(root),
+            Some(TokFloat) => self.expr_float(root),
+            Some(TokString) => self.expr_string(root),
+            Some(TokIdent) => self.expr_binding(root),
+            _ => self.error_unexpected_token("expression"),
         }
     }
 
-    fn expr_grouped(&mut self) {
-        self.start_node(ExprGrouped);
+    fn expr_grouped(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprGrouped);
         self.expect(TokLParen);
+        self.push_recovery(&[TokRParen]);
         self.expr();
+        self.pop_recovery();
         self.expect(TokRParen);
         self.finish_node();
     }
 
-    fn expr_list(&mut self) {
-        self.start_node(ExprList);
+    fn expr_list(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprList);
         self.expect(TokLBracket);
         self.comma_separated(TokRBracket, |s| s.expr());
         self.expect(TokRBracket);
         self.finish_node();
     }
 
-    fn expr_map(&mut self) {
-        self.start_node(ExprMap);
+    fn expr_map(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprMap);
         self.expect(TokLBrace);
 
         self.comma_separated(TokRBrace, |s| {
             s.start_node(MapPair);
+            s.push_recovery(&[TokAssign]);
 
             match s.peek() {
                 Some(TokIdent) => s.bump(),
-                Some(TokString) => s.expr_string(),
+                Some(TokString) => s.expr_string(s.checkpoint()),
                 Some(TokLBracket) => {
                     s.bump();
+                    s.push_recovery(&[TokRBracket]);
                     s.expr();
+                    s.pop_recovery();
                     s.expect(TokRBracket);
                 }
-                _ => todo!(),
+                _ => s.error_unexpected_token("map key"),
             }
 
+            s.pop_recovery();
             s.expect(TokAssign);
             s.expr();
 
@@ -217,21 +334,23 @@ impl Parser<'_> {
         self.finish_node();
     }
 
-    fn expr_fn(&mut self) {
-        self.start_node(ExprFn);
+    fn expr_fn(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprFn);
         self.expect(TokFn);
+        self.push_recovery(&[TokColon]);
 
         self.expect(TokLParen);
         self.comma_separated(TokRParen, |s| s.expect(TokIdent));
         self.expect(TokRParen);
 
+        self.pop_recovery();
         self.expect(TokColon);
         self.expr();
         self.finish_node();
     }
 
-    fn expr_let_in(&mut self) {
-        self.start_node(ExprLetIn);
+    fn expr_let_in(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprLetIn);
         self.expect(TokLet);
 
         self.comma_separated(TokIn, |s| {
@@ -247,12 +366,16 @@ impl Parser<'_> {
         self.finish_node();
     }
 
-    fn expr_if_else(&mut self) {
-        self.start_node(ExprIfElse);
+    fn expr_if_else(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprIfElse);
         self.expect(TokIf);
+        self.push_recovery(&[TokThen]);
         self.expr();
+        self.pop_recovery();
         self.expect(TokThen);
+        self.push_recovery(&[TokElse]);
         self.expr();
+        self.pop_recovery();
         self.expect(TokElse);
         self.expr();
         self.finish_node();
@@ -272,7 +395,10 @@ impl Parser<'_> {
         let is_shorthand = match self.peek() {
             Some(TokLBracket | TokQuestionLBracket) => false,
             Some(TokDot | TokQuestionDot) => true,
-            _ => todo!(),
+            _ => {
+                self.error_unexpected_token("indexing operator");
+                false
+            }
         };
 
         self.bump();
@@ -280,45 +406,47 @@ impl Parser<'_> {
         if is_shorthand {
             self.expect(TokIdent);
         } else {
+            self.push_recovery(&[TokRBracket]);
             self.expr();
+            self.pop_recovery();
             self.expect(TokRBracket);
         }
 
         self.finish_node();
     }
 
-    fn expr_null(&mut self) {
-        self.start_node(ExprNull);
+    fn expr_null(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprNull);
         self.expect(TokNull);
         self.finish_node();
     }
 
-    fn expr_bool(&mut self) {
-        self.start_node(ExprBool);
+    fn expr_bool(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprBool);
         self.expect_one_of(&[TokTrue, TokFalse]);
         self.finish_node();
     }
 
-    fn expr_int(&mut self) {
-        self.start_node(ExprInt);
+    fn expr_int(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprInt);
         self.expect(TokInt);
         self.finish_node();
     }
 
-    fn expr_float(&mut self) {
-        self.start_node(ExprFloat);
+    fn expr_float(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprFloat);
         self.expect(TokFloat);
         self.finish_node();
     }
 
-    fn expr_string(&mut self) {
-        self.start_node(ExprString);
+    fn expr_string(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprString);
         self.expect(TokString);
         self.finish_node();
     }
 
-    fn expr_binding(&mut self) {
-        self.start_node(ExprBinding);
+    fn expr_binding(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprBinding);
         self.expect(TokIdent);
         self.finish_node();
     }
@@ -346,7 +474,7 @@ impl Parser<'_> {
             Some(TokString) => self.pat_string(),
             Some(TokIdent) => self.pat_binding(),
             Some(TokHole) => self.pat_hole(),
-            _ => todo!(),
+            _ => self.error_unexpected_token("pattern"),
         }
 
         if self.peek() == Some(TokAs) {
@@ -402,6 +530,12 @@ impl Parser<'_> {
         self.expect(TokHole);
         self.finish_node();
     }
+}
+
+pub struct ParseResult {
+    pub node: SyntaxNode,
+    pub expr: Option<Expr>,
+    pub errors: Vec<Diagnostic>,
 }
 
 fn prefix_bp(token: SyntaxKind) -> Option<u8> {

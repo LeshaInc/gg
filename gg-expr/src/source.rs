@@ -33,15 +33,17 @@ impl Source {
     }
 
     pub fn lines_in_range(&self, range: TextRange, extra: usize) -> &[Line] {
+        let last_line = self.lines.len().saturating_sub(1);
+
         let mut it = self.lines.iter();
         let start = it
             .position(|v| v.range.intersect(range).is_some())
-            .unwrap_or(0);
+            .unwrap_or(last_line);
 
         let mut it = self.lines.iter();
         let end = it
             .rposition(|v| v.range.intersect(range).is_some())
-            .unwrap_or(0);
+            .unwrap_or(last_line);
 
         &self.lines[start.saturating_sub(extra)..=(end + extra).min(self.lines.len() - 1)]
     }
