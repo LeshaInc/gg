@@ -1,8 +1,62 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use rowan::NodeOrToken;
+
 use super::{parser, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange};
 use crate::syntax::{BinOp, UnOp};
+
+type WalkEvent = rowan::WalkEvent<NodeOrToken<SyntaxNode, SyntaxToken>>;
+
+fn rev_preorder(node: &SyntaxNode) -> impl Iterator<Item = WalkEvent> {
+    let root: NodeOrToken<SyntaxNode, SyntaxToken> = NodeOrToken::Node(node.clone());
+    std::iter::successors(Some(WalkEvent::Enter(root.clone())), move |pos| {
+        let next = match pos {
+            WalkEvent::Enter(el) => match el {
+                NodeOrToken::Node(node) => match node.last_child_or_token() {
+                    Some(child) => WalkEvent::Enter(child),
+                    None => WalkEvent::Leave(node.clone().into()),
+                },
+                NodeOrToken::Token(token) => WalkEvent::Leave(token.clone().into()),
+            },
+            WalkEvent::Leave(el) => {
+                if el == &root {
+                    return None;
+                }
+
+                match el.prev_sibling_or_token() {
+                    Some(sibling) => WalkEvent::Enter(sibling),
+                    None => WalkEvent::Leave(el.parent().unwrap().into()),
+                }
+            }
+        };
+        Some(next)
+    })
+}
+
+fn first_non_trivial_token_range(it: impl Iterator<Item = WalkEvent>) -> Option<TextRange> {
+    it.flat_map(|el| {
+        if let WalkEvent::Enter(NodeOrToken::Token(tok)) = el {
+            if !tok.kind().is_trivia() {
+                return Some(tok.text_range());
+            }
+        }
+
+        None
+    })
+    .next()
+}
+
+fn non_trivial_text_range(root: &SyntaxNode) -> TextRange {
+    let start = first_non_trivial_token_range(root.preorder_with_tokens());
+    let end = first_non_trivial_token_range(rev_preorder(&root));
+
+    if let (Some(start), Some(end)) = (start, end) {
+        start.cover(end)
+    } else {
+        root.text_range()
+    }
+}
 
 macro_rules! define_terms {
     ($( $name:ident, )+) => {
@@ -29,7 +83,7 @@ macro_rules! define_terms {
             }
 
             pub fn range(&self) -> TextRange {
-                self.syntax.text_range()
+                non_trivial_text_range(&self.syntax)
             }
 
             pub fn tokens(&self) -> impl Iterator<Item = SyntaxToken> {

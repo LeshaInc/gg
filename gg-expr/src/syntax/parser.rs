@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::sync::Arc;
 
-use rowan::{Checkpoint, GreenNodeBuilder, TextRange, TextSize, WalkEvent};
+use rowan::{Checkpoint, GreenNodeBuilder, TextRange, TextSize};
 
 use super::SyntaxKind::{self, *};
 use super::{Expr, Lexer, SyntaxNode};
@@ -33,14 +33,12 @@ impl Parser<'_> {
     pub fn finish(self) -> ParseResult {
         let node = SyntaxNode::new_root(self.builder.finish());
 
-        let error_ranges = node.preorder().flat_map(|event| {
-            if let WalkEvent::Enter(node) = event {
-                if node.kind() == SyntaxKind::Error {
-                    return Some(node.text_range());
-                }
+        let error_ranges = node.descendants().flat_map(|node| {
+            if node.kind() == SyntaxKind::Error {
+                Some(node.text_range())
+            } else {
+                None
             }
-
-            None
         });
 
         let errors = self
@@ -53,7 +51,7 @@ impl Parser<'_> {
                 if range.is_empty() {
                     range = TextRange::at(range.start(), one);
                 }
-                if range.start() == node.text_range().end() {
+                if range.start() == node.text_range().end() && u32::from(range.start()) > 0 {
                     range = range - one;
                 }
 
