@@ -10,6 +10,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let source = "let fib = fn(x): if x < 2 then x else fib(x - 2) + fib(x - 1) in fib";
     let (func, diags) = compile_text(source);
     assert!(diags.is_empty());
+    let func = func.unwrap();
     c.bench_function("fib 25", |b| b.iter(|| fib(&mut vm, &func, 25)));
 }
 
