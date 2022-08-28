@@ -422,7 +422,7 @@ impl Compiler {
         let end = self.instructions.len();
 
         let offset = self.try_from_usize(expr.range(), "if expression too long", mid - start);
-        self.instructions[start] = Instruction::JumpIf(offset);
+        self.instructions[start] = Instruction::JumpIfTrue(offset);
 
         let offset = self.try_from_usize(expr.range(), "if expression too long", end - mid - 1);
         self.instructions[mid] = Instruction::Jump(offset);
@@ -460,8 +460,38 @@ impl Compiler {
         self.scope = self.parent_scopes.pop().unwrap();
     }
 
-    fn compile_expr_match(&mut self, _: ExprMatch) {
-        todo!()
+    fn compile_expr_match(&mut self, expr: ExprMatch) {
+        if let Some(expr) = expr.expr() {
+            self.compile_expr(expr);
+        }
+
+        let mut holes = Vec::new();
+
+        for case in expr.cases() {
+            if let Some(pat) = case.pat() {
+                self.compile_pat(pat);
+            }
+
+            let jump_ip = self.add_instr(vec![], Instruction::Nop);
+            let start_ip = self.instructions.len();
+
+            if let Some(expr) = case.expr() {
+                self.compile_expr(expr);
+                holes.push(self.add_instr(vec![], Instruction::Nop));
+            }
+
+            let end_ip = self.instructions.len();
+            let offset = (end_ip - start_ip) as i32;
+            self.instructions[jump_ip] = Instruction::JumpIfFalse(offset);
+        }
+
+        self.add_instr(vec![], Instruction::Panic);
+        let end_ip = self.instructions.len();
+
+        for hole in holes {
+            let offset = (end_ip - hole - 1) as i32;
+            self.instructions[hole] = Instruction::Jump(offset);
+        }
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn) {
@@ -500,6 +530,63 @@ impl Compiler {
         if num_captures > 0 {
             self.add_instr(vec![range], Instruction::NewFunc(num_captures));
         }
+    }
+
+    fn compile_pat(&mut self, pat: Pat) {
+        match pat {
+            Pat::Grouped(pat) => self.compile_pat_grouped(pat),
+            Pat::Or(pat) => self.compile_pat_or(pat),
+            Pat::List(pat) => self.compile_pat_list(pat),
+            Pat::Int(pat) => self.compile_pat_int(pat),
+            Pat::String(pat) => self.compile_pat_string(pat),
+            Pat::Rest(pat) => self.compile_pat_rest(pat),
+            Pat::Hole(pat) => self.compile_pat_hole(pat),
+            Pat::Binding(pat) => self.compile_pat_binding(pat),
+        }
+    }
+
+    fn compile_pat_grouped(&mut self, pat: PatGrouped) {
+        if let Some(pat) = pat.pat() {
+            self.compile_pat(pat);
+        }
+    }
+
+    fn compile_pat_or(&mut self, _pat: PatOr) {
+        todo!()
+    }
+
+    fn compile_pat_list(&mut self, _pat: PatList) {
+        todo!()
+    }
+
+    fn compile_pat_int(&mut self, pat: PatInt) {
+        let range = pat.range();
+
+        self.add_instr(vec![range], Instruction::PushCopy(0));
+
+        let value = match pat.value() {
+            Some(v) => v,
+            None => return,
+        };
+
+        self.compile_const(range, value.into());
+        self.add_instr(vec![range], Instruction::BinOp(BinOp::Eq));
+    }
+
+    fn compile_pat_string(&mut self, _pat: PatString) {
+        todo!()
+    }
+
+    fn compile_pat_rest(&mut self, _pat: PatRest) {
+        todo!()
+    }
+
+    fn compile_pat_hole(&mut self, pat: PatHole) {
+        self.compile_const(pat.range(), true.into());
+    }
+
+    fn compile_pat_binding(&mut self, _pat: PatBinding) {
+        todo!()
     }
 
     fn finish(&mut self) -> Func {

@@ -19,7 +19,8 @@ pub enum Instruction {
     Call,
     Ret,
     Jump(i32),
-    JumpIf(i32),
+    JumpIfTrue(i32),
+    JumpIfFalse(i32),
     UnOp(UnOp),
     BinOp(BinOp),
     NewList(u32),
@@ -108,7 +109,8 @@ impl Vm {
             Instruction::Call => self.instr_call(),
             Instruction::Ret => self.instr_ret(),
             Instruction::Jump(v) => self.instr_jump(v),
-            Instruction::JumpIf(v) => self.instr_jump_if(v),
+            Instruction::JumpIfTrue(v) => self.instr_jump_if_true(v),
+            Instruction::JumpIfFalse(v) => self.instr_jump_if_false(v),
             Instruction::UnOp(v) => self.instr_un_op(v)?,
             Instruction::BinOp(v) => self.instr_bin_op(v)?,
             Instruction::NewList(v) => self.instr_new_list(v),
@@ -166,12 +168,20 @@ impl Vm {
         self.ip = (self.ip as isize + (offset as isize)) as usize;
     }
 
-    fn instr_jump_if(&mut self, offset: i32) {
+    fn instr_jump_if(&mut self, offset: i32, cond: bool) {
         if let Some(value) = self.stack.pop() {
-            if value.is_truthy() {
+            if value.is_truthy() == cond {
                 self.ip = (self.ip as isize + (offset as isize)) as usize;
             }
         }
+    }
+
+    fn instr_jump_if_true(&mut self, offset: i32) {
+        self.instr_jump_if(offset, true);
+    }
+
+    fn instr_jump_if_false(&mut self, offset: i32) {
+        self.instr_jump_if(offset, false);
     }
 
     fn instr_un_op(&mut self, op: UnOp) -> Result<(), Error> {

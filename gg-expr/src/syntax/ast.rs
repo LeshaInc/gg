@@ -385,6 +385,13 @@ impl ExprFn {
     }
 }
 
+impl PatInt {
+    pub fn value(&self) -> Option<i64> {
+        let token = self.nontrivial_tokens().next()?;
+        parser::int_value(token.text())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Ident {
     syntax: SyntaxToken,
