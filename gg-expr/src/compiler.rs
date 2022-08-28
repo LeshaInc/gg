@@ -14,7 +14,7 @@ pub struct Compiler {
     parent_scopes: Vec<Scope>,
     parent: Option<Box<Compiler>>,
     instructions: Vec<Instruction>,
-    consts: Vec<Value>,
+    consts: HashMap<Value, u32>,
     debug_info: DebugInfo,
     diagnostics: Vec<Diagnostic>,
     num_captures: u32,
@@ -42,7 +42,7 @@ impl Compiler {
             parent_scopes: Vec::new(),
             parent: None,
             instructions: Vec::new(),
-            consts: Vec::new(),
+            consts: HashMap::new(),
             debug_info: DebugInfo::new(source),
             diagnostics: Vec::new(),
             num_captures: 0,
@@ -104,8 +104,15 @@ impl Compiler {
     }
 
     fn compile_const(&mut self, range: TextRange, value: impl Into<Value>) {
-        let idx = self.try_from_usize(range, "too many constants", self.consts.len());
-        self.consts.push(value.into());
+        let value = value.into();
+
+        if let Some(&idx) = self.consts.get(&value) {
+            self.add_instr(vec![range], Instruction::PushConst(idx));
+            return;
+        }
+
+        let idx = self.consts.len() as u32;
+        self.consts.insert(value, idx);
         self.add_instr(vec![range], Instruction::PushConst(idx));
     }
 
@@ -598,9 +605,13 @@ impl Compiler {
 
         self.debug_info.name = self.ident.as_ref().map(|v| v.name().into());
 
+        let mut consts = self.consts.drain().collect::<Vec<_>>();
+        consts.sort_by_key(|&(_, idx)| idx);
+        let consts = consts.into_iter().map(|(val, _)| val).collect();
+
         Func {
             instructions: self.instructions.iter().copied().collect(),
-            consts: self.consts.iter().cloned().collect(),
+            consts,
             captures: Vec::new(),
             debug_info: Some(Arc::new(std::mem::take(&mut self.debug_info))),
         }
