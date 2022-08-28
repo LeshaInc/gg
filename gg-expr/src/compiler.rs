@@ -75,27 +75,6 @@ impl Compiler {
         });
     }
 
-    fn try_from_usize<U: Default + TryFrom<usize>>(
-        &mut self,
-        range: TextRange,
-        message: &str,
-        value: usize,
-    ) -> U {
-        match value.try_into() {
-            Ok(v) => v,
-            Err(_) => {
-                let label = format!(
-                    "`{}` does not fit into `{}`",
-                    value,
-                    std::any::type_name::<U>()
-                );
-
-                self.add_simple_error(range, message, &label);
-                U::default()
-            }
-        }
-    }
-
     fn add_instr(&mut self, ranges: Vec<TextRange>, instr: Instruction) -> usize {
         let idx = self.instructions.len();
         self.instructions.push(instr);
@@ -428,10 +407,10 @@ impl Compiler {
 
         let end = self.instructions.len();
 
-        let offset = self.try_from_usize(expr.range(), "if expression too long", mid - start);
+        let offset = (mid - start) as i32;
         self.instructions[start] = Instruction::JumpIfTrue(offset);
 
-        let offset = self.try_from_usize(expr.range(), "if expression too long", end - mid - 1);
+        let offset = (end - mid - 1) as i32;
         self.instructions[mid] = Instruction::Jump(offset);
     }
 
