@@ -184,6 +184,7 @@ define_terms![
     ExprIndex,
     ExprIfElse,
     ExprLetIn,
+    ExprMatch,
     ExprFn,
     PatGrouped,
     PatOr,
@@ -195,6 +196,7 @@ define_terms![
     PatBinding,
     MapPair,
     LetBinding,
+    MatchCase,
 ];
 
 define_enum!(Expr {
@@ -213,6 +215,7 @@ define_enum!(Expr {
     Index(ExprIndex),
     IfElse(ExprIfElse),
     LetIn(ExprLetIn),
+    Match(ExprMatch),
     Fn(ExprFn),
 });
 
@@ -231,16 +234,20 @@ define_single_children! {
     ExprUnary: expr -> Expr,
     ExprGrouped: expr -> Expr,
     ExprLetIn: expr -> Expr,
+    ExprMatch: expr -> Expr,
     ExprFn: expr -> Expr,
     PatGrouped: pat  -> Pat,
     PatBinding: pat -> Pat,
     LetBinding: expr -> Expr,
+    MatchCase: pat -> Pat,
+    MatchCase: expr -> Expr,
 }
 
 define_multi_children! {
     ExprList: exprs -> Expr,
     ExprMap: pairs -> MapPair,
     ExprLetIn: bindings -> LetBinding,
+    ExprMatch: cases -> MatchCase,
     PatOr: pats -> Pat,
     PatList: pats -> Pat,
 }

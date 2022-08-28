@@ -71,6 +71,8 @@ pub enum SyntaxKind {
     TokRest,
     #[token("_")]
     TokHole,
+    #[token("->")]
+    TokArrow,
     #[token("null")]
     TokNull,
     #[token("true")]
@@ -91,6 +93,10 @@ pub enum SyntaxKind {
     TokElse,
     #[token("fn")]
     TokFn,
+    #[token("match")]
+    TokMatch,
+    #[token("of")]
+    TokOf,
     #[regex(r"(?&decimal)", priority = 2)]
     #[regex(r"0x[0-9a-fA-F](?:_*[0-9a-fA-F])*")]
     TokInt,
@@ -118,6 +124,7 @@ pub enum SyntaxKind {
     ExprIndex,
     ExprIfElse,
     ExprLetIn,
+    ExprMatch,
     ExprFn,
 
     PatGrouped,
@@ -131,6 +138,7 @@ pub enum SyntaxKind {
 
     MapPair,
     LetBinding,
+    MatchCase,
 
     #[error]
     TokError,
@@ -178,6 +186,7 @@ impl SyntaxKind {
             TokColon => "`:`",
             TokRest => "`...`",
             TokHole => "`_`",
+            TokArrow => "`->`",
             TokNull => "`null`",
             TokTrue => "`true`",
             TokFalse => "`false`",
@@ -188,6 +197,8 @@ impl SyntaxKind {
             TokThen => "`then`",
             TokElse => "`else`",
             TokFn => "`fn`",
+            TokMatch => "`match`",
+            TokOf => "`of`",
             TokInt => "int",
             TokFloat => "float",
             TokString => "string",

@@ -272,6 +272,7 @@ impl Parser<'_> {
             Some(TokFn) => self.expr_fn(root),
             Some(TokLet) => self.expr_let_in(root),
             Some(TokIf) => self.expr_if_else(root),
+            Some(TokMatch) => self.expr_match(root),
             Some(TokNull) => self.expr_null(root),
             Some(TokTrue | TokFalse) => self.expr_bool(root),
             Some(TokInt) => self.expr_int(root),
@@ -376,6 +377,35 @@ impl Parser<'_> {
         self.pop_recovery();
         self.expect(TokElse);
         self.expr();
+        self.finish_node();
+    }
+
+    fn expr_match(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprMatch);
+        self.expect(TokMatch);
+        self.push_recovery(&[TokOf]);
+        self.expr();
+        self.pop_recovery();
+        self.expect(TokOf);
+
+        loop {
+            self.start_node(MatchCase);
+            self.push_recovery(&[TokArrow]);
+            self.pat();
+            self.pop_recovery();
+            self.expect(TokArrow);
+            self.expr();
+            self.finish_node();
+
+            match self.peek() {
+                Some(TokComma) => {
+                    self.bump();
+                    continue;
+                }
+                _ => break,
+            }
+        }
+
         self.finish_node();
     }
 
@@ -486,7 +516,9 @@ impl Parser<'_> {
     fn pat_grouped(&mut self) {
         self.start_node(PatGrouped);
         self.expect(TokLParen);
+        self.push_recovery(&[TokRParen]);
         self.pat();
+        self.pop_recovery();
         self.expect(TokRParen);
         self.finish_node();
     }
@@ -494,7 +526,9 @@ impl Parser<'_> {
     fn pat_list(&mut self) {
         self.start_node(PatList);
         self.expect(TokLBracket);
+        self.push_recovery(&[TokRBracket]);
         self.comma_separated(TokRBracket, |s| s.pat());
+        self.pop_recovery();
         self.expect(TokRBracket);
         self.finish_node();
     }
