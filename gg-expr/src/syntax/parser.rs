@@ -52,7 +52,7 @@ impl Parser<'_> {
                     range = TextRange::at(range.start(), one);
                 }
                 if range.start() == node.text_range().end() && u32::from(range.start()) > 0 {
-                    range = range - one;
+                    range -= one;
                 }
 
                 Diagnostic::new(Severity::Error, "syntax error").with_source(

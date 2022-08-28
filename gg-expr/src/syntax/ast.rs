@@ -49,7 +49,7 @@ fn first_non_trivial_token_range(it: impl Iterator<Item = WalkEvent>) -> Option<
 
 fn non_trivial_text_range(root: &SyntaxNode) -> TextRange {
     let start = first_non_trivial_token_range(root.preorder_with_tokens());
-    let end = first_non_trivial_token_range(rev_preorder(&root));
+    let end = first_non_trivial_token_range(rev_preorder(root));
 
     if let (Some(start), Some(end)) = (start, end) {
         start.cover(end)

@@ -103,9 +103,9 @@ impl Compiler {
         idx
     }
 
-    fn compile_const(&mut self, range: TextRange, value: Value) {
+    fn compile_const(&mut self, range: TextRange, value: impl Into<Value>) {
         let idx = self.try_from_usize(range, "too many constants", self.consts.len());
-        self.consts.push(value);
+        self.consts.push(value.into());
         self.add_instr(vec![range], Instruction::PushConst(idx));
     }
 
@@ -144,24 +144,24 @@ impl Compiler {
 
     fn compile_expr_bool(&mut self, expr: ExprBool) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(expr.range(), value.into());
+        self.compile_const(expr.range(), value);
     }
 
     fn compile_expr_int(&mut self, expr: ExprInt) {
         if let Some(value) = expr.value() {
-            self.compile_const(expr.range(), value.into());
+            self.compile_const(expr.range(), value);
         }
     }
 
     fn compile_expr_float(&mut self, expr: ExprFloat) {
         if let Some(value) = expr.value() {
-            self.compile_const(expr.range(), value.into());
+            self.compile_const(expr.range(), value);
         }
     }
 
     fn compile_expr_string(&mut self, expr: ExprString) {
         if let Some(value) = expr.value() {
-            self.compile_const(expr.range(), value.into());
+            self.compile_const(expr.range(), value);
         }
     }
 
@@ -321,7 +321,7 @@ impl Compiler {
         let mut len = 0;
         for pair in expr.pairs() {
             if let Some(ident) = pair.key_ident() {
-                self.compile_const(ident.range(), ident.name().into());
+                self.compile_const(ident.range(), ident.name());
                 self.stack_len += 1;
             }
 
@@ -378,7 +378,7 @@ impl Compiler {
 
         let rhs_range = if let Some(ident) = expr.rhs_ident() {
             let range = ident.range();
-            self.compile_const(range, ident.name().into());
+            self.compile_const(range, ident.name());
             self.stack_len += 1;
             range
         } else if let Some(expr) = expr.rhs_expr() {
@@ -524,7 +524,7 @@ impl Compiler {
         *self = *compiler.parent.unwrap();
         self.diagnostics = compiler.diagnostics;
 
-        self.compile_const(expr.range(), func.into());
+        self.compile_const(expr.range(), func);
 
         let num_captures = compiler.num_captures;
         if num_captures > 0 {
@@ -569,7 +569,7 @@ impl Compiler {
             None => return,
         };
 
-        self.compile_const(range, value.into());
+        self.compile_const(range, value);
         self.add_instr(vec![range], Instruction::BinOp(BinOp::Eq));
     }
 
@@ -582,7 +582,7 @@ impl Compiler {
     }
 
     fn compile_pat_hole(&mut self, pat: PatHole) {
-        self.compile_const(pat.range(), true.into());
+        self.compile_const(pat.range(), true);
     }
 
     fn compile_pat_binding(&mut self, _pat: PatBinding) {
