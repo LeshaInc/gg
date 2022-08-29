@@ -98,6 +98,7 @@ impl Vm {
     }
 
     fn dispatch(&mut self, func: &Func, instr: Instruction) -> Result<(), Error> {
+        println!("{:?}", instr);
         match instr {
             Instruction::Nop => self.instr_nop(),
             Instruction::Panic => self.instr_panic(),

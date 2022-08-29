@@ -392,6 +392,13 @@ impl PatInt {
     }
 }
 
+impl PatBinding {
+    pub fn ident(&self) -> Option<Ident> {
+        let token = self.nontrivial_tokens().last()?;
+        Ident::cast(token)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Ident {
     syntax: SyntaxToken,

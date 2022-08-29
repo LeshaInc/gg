@@ -454,8 +454,10 @@ impl Compiler {
         let mut holes = Vec::new();
 
         for case in expr.cases() {
+            self.parent_scopes.push(self.scope.clone());
+
             if let Some(pat) = case.pat() {
-                self.compile_pat(pat);
+                self.compile_pat(pat.clone());
             }
 
             let jump_ip = self.add_instr(vec![], Instruction::Nop);
@@ -463,12 +465,16 @@ impl Compiler {
 
             if let Some(expr) = case.expr() {
                 self.compile_expr(expr);
-                holes.push(self.add_instr(vec![], Instruction::Nop));
+                self.stack_len -= 1;
             }
+
+            holes.push(self.add_instr(vec![], Instruction::Nop));
 
             let end_ip = self.instructions.len();
             let offset = (end_ip - start_ip) as i32;
             self.instructions[jump_ip] = Instruction::JumpIfFalse(offset);
+
+            self.scope = self.parent_scopes.pop().unwrap();
         }
 
         self.add_instr(vec![], Instruction::Panic);
@@ -478,6 +484,9 @@ impl Compiler {
             let offset = (end_ip - hole - 1) as i32;
             self.instructions[hole] = Instruction::Jump(offset);
         }
+
+        self.add_instr(vec![], Instruction::PopSwap(1));
+        self.stack_len -= 1;
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn) {
@@ -537,8 +546,19 @@ impl Compiler {
         }
     }
 
-    fn compile_pat_or(&mut self, _pat: PatOr) {
-        todo!()
+    fn compile_pat_or(&mut self, pat: PatOr) {
+        let mut holes = Vec::new();
+
+        for pat in pat.pats() {
+            self.compile_pat(pat);
+            holes.push(self.add_instr(vec![], Instruction::Nop));
+        }
+
+        let end_ip = self.instructions.len();
+        for hole in holes {
+            let offset = (end_ip - hole) as i32;
+            self.instructions[hole] = Instruction::JumpIfTrue(offset);
+        }
     }
 
     fn compile_pat_list(&mut self, _pat: PatList) {
@@ -571,8 +591,15 @@ impl Compiler {
         self.compile_const(pat.range(), true);
     }
 
-    fn compile_pat_binding(&mut self, _pat: PatBinding) {
-        todo!()
+    fn compile_pat_binding(&mut self, pat: PatBinding) {
+        if let Some(ident) = pat.ident() {
+            let idx = self.stack_len - 1;
+            self.scope.bindings.insert(ident, Location::Stack(idx));
+        }
+
+        if let Some(pat) = pat.pat() {
+            self.compile_pat(pat);
+        }
     }
 
     fn finish(&mut self) -> Func {
