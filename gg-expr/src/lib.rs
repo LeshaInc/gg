@@ -1,6 +1,7 @@
 mod compiler;
 pub mod diagnostic;
 mod error;
+pub mod new_compiler;
 mod source;
 pub mod syntax;
 mod value;
