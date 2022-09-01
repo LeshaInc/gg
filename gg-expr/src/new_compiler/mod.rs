@@ -3,24 +3,37 @@ pub mod instr;
 pub mod reg;
 pub mod scope;
 
+use std::collections::HashSet;
+use std::fmt::Write;
+use std::sync::Arc;
+
 use self::consts::Consts;
 use self::instr::{Instr, Instrs};
 use self::reg::{RegAlloc, RegId};
 use self::scope::{ScopeStack, VarLocation};
+use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::*;
-use crate::Value;
+use crate::{Source, Value};
 
-#[derive(Default)]
 pub struct Compiler {
     regs: RegAlloc,
     instrs: Instrs,
     consts: Consts,
     scopes: ScopeStack,
+    diagnostics: Vec<Diagnostic>,
+    source: Arc<Source>,
 }
 
 impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler::default()
+    pub fn new(source: Arc<Source>) -> Compiler {
+        Compiler {
+            regs: Default::default(),
+            instrs: Default::default(),
+            consts: Default::default(),
+            scopes: Default::default(),
+            diagnostics: Default::default(),
+            source,
+        }
     }
 
     fn push_scope(&mut self) {
@@ -33,6 +46,10 @@ impl Compiler {
                 self.regs.free(reg)
             }
         }
+    }
+
+    fn add_error(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
     }
 
     pub fn compile_expr(&mut self, expr: Expr, dst: RegId) {
@@ -92,7 +109,10 @@ impl Compiler {
             None => return,
         };
 
-        let loc = self.scopes.get(&ident).unwrap(); // TODO
+        let loc = match self.scopes.get(&ident) {
+            Some(v) => v,
+            None => return self.no_such_binding(ident),
+        };
 
         match loc {
             VarLocation::Reg(src) => {
@@ -100,6 +120,46 @@ impl Compiler {
             }
             VarLocation::Capture(_) => todo!(),
         }
+    }
+
+    fn bindings_in_scope(&self) -> Vec<Ident> {
+        let mut bindings = HashSet::new();
+
+        for ident in self.scopes.names() {
+            if !bindings.contains(&ident) {
+                bindings.insert(ident);
+            }
+        }
+
+        bindings.into_iter().collect()
+    }
+
+    fn no_such_binding(&mut self, ident: Ident) {
+        let range = ident.range();
+        let mut in_scope = self.bindings_in_scope();
+        in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v.name(), ident.name()));
+
+        let mut help = String::from("perhaps you meant ");
+
+        for (i, ident) in in_scope.iter().take(3).enumerate() {
+            if i > 0 {
+                help.push_str(", ");
+            }
+
+            let _ = write!(&mut help, "`{}`", ident.name());
+        }
+
+        let message = format!("cannot find binding `{}`", ident.name());
+        let source = self.source.clone();
+        let source =
+            SourceComponent::new(source).with_label(Severity::Error, range, "no such binding");
+        let mut diagnostic = Diagnostic::new(Severity::Error, message).with_source(source);
+
+        if !in_scope.is_empty() {
+            diagnostic = diagnostic.with_help(help);
+        }
+
+        self.add_error(diagnostic);
     }
 
     fn compile_expr_binary(&mut self, expr: ExprBinary, dst: RegId) {
@@ -248,10 +308,14 @@ impl Compiler {
     }
 }
 
-pub fn compile(expr: Expr) {
-    let mut compiler = Compiler::new();
+pub fn compile(source: Arc<Source>, expr: Expr) {
+    let mut compiler = Compiler::new(source);
     let reg = compiler.regs.alloc();
     compiler.compile_expr(expr, reg);
+
+    for diag in &compiler.diagnostics {
+        eprintln!("{}", diag);
+    }
 
     for (c, id) in &compiler.consts.0 {
         eprintln!("{:?}: {:?}", id.0, c);

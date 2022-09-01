@@ -72,4 +72,8 @@ impl ScopeStack {
     pub fn set(&mut self, ident: Ident, loc: impl Into<VarLocation>) -> Option<VarLocation> {
         self.scope_mut().vars.insert(ident, loc.into())
     }
+
+    pub fn names(&self) -> impl Iterator<Item = Ident> + '_ {
+        self.scope().vars.keys().cloned()
+    }
 }

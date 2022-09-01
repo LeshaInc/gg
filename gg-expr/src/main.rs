@@ -1,7 +1,8 @@
 use std::io::Read;
+use std::sync::Arc;
 use std::time::Instant;
 
-use gg_expr::{compile_text, new_compiler, syntax};
+use gg_expr::{compile_text, new_compiler, syntax, Source};
 
 fn main() {
     let mut input = String::new();
@@ -17,7 +18,8 @@ fn main() {
         None => return,
     };
 
-    new_compiler::compile(expr);
+    let source = Arc::new(Source::new("unknown.expr".into(), input.into()));
+    new_compiler::compile(source, expr);
 }
 
 #[allow(dead_code)]
