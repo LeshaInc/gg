@@ -45,6 +45,7 @@ pub struct InstrOffset(pub i32);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Instr {
     Nop,
+    Panic,
     Copy {
         src: RegId,
         dst: RegId,
