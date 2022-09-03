@@ -113,7 +113,7 @@ impl Compiler {
             Expr::Index(e) => self.compile_expr_index(e),
             Expr::IfElse(e) => self.compile_expr_if_else(e),
             Expr::LetIn(e) => self.compile_expr_let_in(e),
-            Expr::Match(e) => self.compile_expr_match(e),
+            Expr::When(e) => self.compile_expr_when(e),
             Expr::Fn(e) => self.compile_expr_fn(e),
         }
 
@@ -446,7 +446,7 @@ impl Compiler {
         self.scope = self.parent_scopes.pop().unwrap();
     }
 
-    fn compile_expr_match(&mut self, expr: ExprMatch) {
+    fn compile_expr_when(&mut self, expr: ExprWhen) {
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr);
         }

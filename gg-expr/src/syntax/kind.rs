@@ -93,10 +93,10 @@ pub enum SyntaxKind {
     TokElse,
     #[token("fn")]
     TokFn,
-    #[token("match")]
-    TokMatch,
-    #[token("of")]
-    TokOf,
+    #[token("when")]
+    TokWhen,
+    #[token("is")]
+    TokIs,
     #[regex(r"(?&decimal)", priority = 2)]
     #[regex(r"0x[0-9a-fA-F](?:_*[0-9a-fA-F])*")]
     TokInt,
@@ -124,7 +124,7 @@ pub enum SyntaxKind {
     ExprIndex,
     ExprIfElse,
     ExprLetIn,
-    ExprMatch,
+    ExprWhen,
     ExprFn,
 
     PatGrouped,
@@ -138,7 +138,7 @@ pub enum SyntaxKind {
 
     MapPair,
     LetBinding,
-    MatchCase,
+    WhenCase,
 
     #[error]
     TokError,
@@ -197,8 +197,8 @@ impl SyntaxKind {
             TokThen => "`then`",
             TokElse => "`else`",
             TokFn => "`fn`",
-            TokMatch => "`match`",
-            TokOf => "`of`",
+            TokWhen => "`when`",
+            TokIs => "`is`",
             TokInt => "int",
             TokFloat => "float",
             TokString => "string",

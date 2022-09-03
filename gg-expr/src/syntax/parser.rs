@@ -272,7 +272,7 @@ impl Parser<'_> {
             Some(TokFn) => self.expr_fn(root),
             Some(TokLet) => self.expr_let_in(root),
             Some(TokIf) => self.expr_if_else(root),
-            Some(TokMatch) => self.expr_match(root),
+            Some(TokWhen) => self.expr_when(root),
             Some(TokNull) => self.expr_null(root),
             Some(TokTrue | TokFalse) => self.expr_bool(root),
             Some(TokInt) => self.expr_int(root),
@@ -380,16 +380,16 @@ impl Parser<'_> {
         self.finish_node();
     }
 
-    fn expr_match(&mut self, root: Checkpoint) {
-        self.start_node_at(root, ExprMatch);
-        self.expect(TokMatch);
-        self.push_recovery(&[TokOf]);
+    fn expr_when(&mut self, root: Checkpoint) {
+        self.start_node_at(root, ExprWhen);
+        self.expect(TokWhen);
+        self.push_recovery(&[TokIs]);
         self.expr();
         self.pop_recovery();
-        self.expect(TokOf);
+        self.expect(TokIs);
 
         loop {
-            self.start_node(MatchCase);
+            self.start_node(WhenCase);
             self.push_recovery(&[TokArrow]);
             self.pat();
             self.pop_recovery();

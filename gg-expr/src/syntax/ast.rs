@@ -184,7 +184,7 @@ define_terms![
     ExprIndex,
     ExprIfElse,
     ExprLetIn,
-    ExprMatch,
+    ExprWhen,
     ExprFn,
     PatGrouped,
     PatOr,
@@ -196,7 +196,7 @@ define_terms![
     PatBinding,
     MapPair,
     LetBinding,
-    MatchCase,
+    WhenCase,
 ];
 
 define_enum!(Expr {
@@ -215,7 +215,7 @@ define_enum!(Expr {
     Index(ExprIndex),
     IfElse(ExprIfElse),
     LetIn(ExprLetIn),
-    Match(ExprMatch),
+    When(ExprWhen),
     Fn(ExprFn),
 });
 
@@ -234,20 +234,20 @@ define_single_children! {
     ExprUnary: expr -> Expr,
     ExprGrouped: expr -> Expr,
     ExprLetIn: expr -> Expr,
-    ExprMatch: expr -> Expr,
+    ExprWhen: expr -> Expr,
     ExprFn: expr -> Expr,
     PatGrouped: pat  -> Pat,
     PatBinding: pat -> Pat,
     LetBinding: expr -> Expr,
-    MatchCase: pat -> Pat,
-    MatchCase: expr -> Expr,
+    WhenCase: pat -> Pat,
+    WhenCase: expr -> Expr,
 }
 
 define_multi_children! {
     ExprList: exprs -> Expr,
     ExprMap: pairs -> MapPair,
     ExprLetIn: bindings -> LetBinding,
-    ExprMatch: cases -> MatchCase,
+    ExprWhen: cases -> WhenCase,
     PatOr: pats -> Pat,
     PatList: pats -> Pat,
 }
@@ -389,6 +389,13 @@ impl PatInt {
     pub fn value(&self) -> Option<i64> {
         let token = self.nontrivial_tokens().next()?;
         parser::int_value(token.text())
+    }
+}
+
+impl PatString {
+    pub fn value(&self) -> Option<String> {
+        let token = self.nontrivial_tokens().next()?;
+        Some(parser::string_value(token.text()))
     }
 }
 

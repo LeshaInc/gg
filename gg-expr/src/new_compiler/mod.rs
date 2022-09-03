@@ -52,6 +52,12 @@ impl Compiler {
         self.diagnostics.push(diagnostic);
     }
 
+    fn add_simple_error(&mut self, range: TextRange, message: &str, label: &str) {
+        self.add_error(Diagnostic::new(Severity::Error, message).with_source(
+            SourceComponent::new(self.source.clone()).with_label(Severity::Error, range, label),
+        ))
+    }
+
     pub fn compile_expr(&mut self, expr: Expr, dst: RegId) {
         match expr {
             Expr::Null(expr) => self.compile_expr_null(expr, dst),
@@ -69,7 +75,7 @@ impl Compiler {
             Expr::Index(expr) => self.compile_expr_index(expr, dst),
             Expr::IfElse(expr) => self.compile_expr_if_else(expr, dst),
             Expr::LetIn(expr) => self.compile_expr_let_in(expr, dst),
-            Expr::Match(expr) => self.compile_expr_match(expr, dst),
+            Expr::When(expr) => self.compile_expr_when(expr, dst),
             Expr::Fn(expr) => self.compile_expr_fn(expr, dst),
         }
     }
@@ -299,7 +305,7 @@ impl Compiler {
         self.pop_scope();
     }
 
-    fn compile_expr_match(&mut self, expr: ExprMatch, dst: RegId) {
+    fn compile_expr_when(&mut self, expr: ExprWhen, dst: RegId) {
         let value = self.regs.alloc();
         let cond = self.regs.alloc();
 
@@ -346,55 +352,77 @@ impl Compiler {
         todo!()
     }
 
-    fn compile_pat(&mut self, pat: Pat, value: RegId, cond: RegId) {
+    fn compile_pat(&mut self, pat: Pat, value: RegId, dst: RegId) {
         match pat {
-            Pat::Grouped(pat) => self.compile_pat_grouped(pat, value, cond),
-            Pat::Or(pat) => self.compile_pat_or(pat, value, cond),
-            Pat::List(pat) => self.compile_pat_list(pat, value, cond),
-            Pat::Int(pat) => self.compile_pat_int(pat, value, cond),
-            Pat::String(pat) => self.compile_pat_string(pat, value, cond),
-            Pat::Rest(pat) => self.compile_pat_rest(pat, value, cond),
-            Pat::Hole(pat) => self.compile_pat_hole(pat, value, cond),
-            Pat::Binding(pat) => self.compile_pat_binding(pat, value, cond),
+            Pat::Grouped(pat) => self.compile_pat_grouped(pat, value, dst),
+            Pat::Or(pat) => self.compile_pat_or(pat, value, dst),
+            Pat::List(pat) => self.compile_pat_list(pat, value, dst),
+            Pat::Int(pat) => self.compile_pat_int(pat, value, dst),
+            Pat::String(pat) => self.compile_pat_string(pat, value, dst),
+            Pat::Rest(pat) => self.compile_pat_rest(pat, value, dst),
+            Pat::Hole(pat) => self.compile_pat_hole(pat, value, dst),
+            Pat::Binding(pat) => self.compile_pat_binding(pat, value, dst),
         }
     }
 
-    fn compile_pat_grouped(&mut self, _pat: PatGrouped, _value: RegId, _cond: RegId) {
+    fn compile_pat_grouped(&mut self, _pat: PatGrouped, _value: RegId, _dst: RegId) {
         todo!()
     }
 
-    fn compile_pat_or(&mut self, _pat: PatOr, _value: RegId, _cond: RegId) {
+    fn compile_pat_or(&mut self, _pat: PatOr, _value: RegId, _dst: RegId) {
         todo!()
     }
 
-    fn compile_pat_list(&mut self, _pat: PatList, _value: RegId, _cond: RegId) {
+    fn compile_pat_list(&mut self, _pat: PatList, _value: RegId, _dst: RegId) {
         todo!()
     }
 
-    fn compile_pat_int(&mut self, pat: PatInt, lhs: RegId, dst: RegId) {
+    fn compile_pat_const_eq(&mut self, pat: impl Into<Value>, value: RegId, dst: RegId) {
+        let rhs = self.regs.alloc();
+        self.compile_const(pat, rhs);
+        self.instrs.add(Instr::BinOp {
+            op: BinOp::Add,
+            lhs: value,
+            rhs,
+            dst,
+        });
+        self.regs.free(rhs);
+    }
+
+    fn compile_pat_int(&mut self, pat: PatInt, value: RegId, dst: RegId) {
         if let Some(literal) = pat.value() {
-            let rhs = self.regs.alloc();
-            self.compile_const(literal, rhs);
-            let op = BinOp::Eq;
-            self.instrs.add(Instr::BinOp { op, lhs, rhs, dst });
-            self.regs.free(rhs);
+            self.compile_pat_const_eq(literal, value, dst);
         }
     }
 
-    fn compile_pat_string(&mut self, _pat: PatString, _value: RegId, _cond: RegId) {
-        todo!()
+    fn compile_pat_string(&mut self, pat: PatString, value: RegId, dst: RegId) {
+        if let Some(literal) = pat.value() {
+            self.compile_pat_const_eq(literal, value, dst);
+        }
     }
 
-    fn compile_pat_rest(&mut self, _pat: PatRest, _value: RegId, _cond: RegId) {
-        todo!()
+    fn compile_pat_rest(&mut self, pat: PatRest, _value: RegId, _dst: RegId) {
+        self.add_simple_error(
+            pat.range(),
+            "invalid pattern",
+            "`...` invalid in this position",
+        );
     }
 
-    fn compile_pat_hole(&mut self, _pat: PatHole, _value: RegId, _cond: RegId) {
-        todo!()
+    fn compile_pat_hole(&mut self, _pat: PatHole, _value: RegId, dst: RegId) {
+        self.compile_const(true, dst)
     }
 
-    fn compile_pat_binding(&mut self, _pat: PatBinding, _value: RegId, _cond: RegId) {
-        todo!()
+    fn compile_pat_binding(&mut self, pat: PatBinding, value: RegId, dst: RegId) {
+        if let Some(pat) = pat.pat() {
+            self.compile_pat(pat, value, dst);
+        } else {
+            self.compile_const(true, dst)
+        }
+
+        if let Some(ident) = pat.ident() {
+            self.scopes.set(ident, dst);
+        }
     }
 }
 
