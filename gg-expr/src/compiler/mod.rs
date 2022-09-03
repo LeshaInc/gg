@@ -1,19 +1,16 @@
-pub mod consts;
-pub mod instr;
-pub mod reg;
-pub mod scope;
+mod reg_alloc;
+mod scope;
 
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use self::consts::Consts;
-use self::instr::{Instr, Instrs};
-use self::reg::{RegAlloc, RegId};
+use self::reg_alloc::RegAlloc;
 use self::scope::{ScopeStack, VarLocation};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::*;
-use crate::{Source, Value};
+use crate::vm::*;
+use crate::{Func, Source, Value};
 
 pub struct Compiler {
     regs: RegAlloc,
@@ -189,7 +186,6 @@ impl Compiler {
             rhs_tmp = Some(rhs);
         }
 
-        let mut rhs = *dst;
         if let Some(expr) = expr.rhs() {
             self.compile_expr(expr, &mut rhs);
         }
@@ -448,9 +444,23 @@ impl Compiler {
             self.scopes.set(ident, dst);
         }
     }
+
+    fn finish(self) -> CompileResult {
+        let func = Func {
+            instrs: self.instrs.compile(),
+            consts: self.consts.compile(),
+            captures: Vec::new(),
+            debug_info: None,
+        };
+
+        CompileResult {
+            value: func.into(),
+            diagnostics: self.diagnostics,
+        }
+    }
 }
 
-pub fn compile(source: Arc<Source>, expr: Expr) {
+pub fn compile(source: Arc<Source>, expr: Expr) -> CompileResult {
     let mut compiler = Compiler::new(source);
     let reg = compiler.regs.alloc();
     compiler.compile_expr_dst(expr, reg);
@@ -466,4 +476,12 @@ pub fn compile(source: Arc<Source>, expr: Expr) {
     for instr in &compiler.instrs.0 {
         eprintln!("{:?}", instr);
     }
+
+    compiler.finish()
+}
+
+#[derive(Debug, Clone)]
+pub struct CompileResult {
+    pub value: Value,
+    pub diagnostics: Vec<Diagnostic>,
 }

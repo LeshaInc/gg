@@ -68,7 +68,7 @@ impl Parser<'_> {
         ParseResult {
             expr: node.first_child().and_then(Expr::cast),
             node,
-            errors,
+            diagnostics: errors,
         }
     }
 
@@ -564,10 +564,11 @@ impl Parser<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ParseResult {
     pub node: SyntaxNode,
     pub expr: Option<Expr>,
-    pub errors: Vec<Diagnostic>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 fn prefix_bp(token: SyntaxKind) -> Option<u8> {

@@ -4,12 +4,13 @@ use std::sync::Arc;
 use indenter::indented;
 
 use crate::syntax::TextRange;
-use crate::{Instruction, Source, Value};
+use crate::vm::{CompiledConsts, CompiledInstrs};
+use crate::{Source, Value};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Func {
-    pub instructions: Arc<[Instruction]>,
-    pub consts: Arc<[Value]>,
+    pub instrs: CompiledInstrs,
+    pub consts: CompiledConsts,
     pub captures: Vec<Value>,
     pub debug_info: Option<Arc<DebugInfo>>,
 }
@@ -31,11 +32,11 @@ impl Debug for Func {
 
         let mut f = indented(f);
 
-        for (i, val) in self.consts.iter().enumerate() {
+        for (i, val) in self.consts.0.iter().enumerate() {
             writeln!(f, "{}: {:?}", i, val)?;
         }
 
-        for (i, instr) in self.instructions.iter().enumerate() {
+        for (i, instr) in self.instrs.0.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
             }

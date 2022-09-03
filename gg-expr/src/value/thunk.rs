@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
 
-use crate::{Error, Value, Vm};
+use crate::{Error, Value};
 
 #[derive(Clone)]
 pub struct Thunk {
@@ -21,10 +21,11 @@ impl Thunk {
     }
 
     pub fn force_eval(&self) -> Result<&Value, Error> {
-        self.value.get_or_try_init(|| {
-            let mut vm = Vm::new();
-            vm.eval(&self.func, &[])
-        })
+        // self.value.get_or_try_init(|| {
+        //     let mut vm = Vm::new();
+        //     vm.eval(&self.func, &[])
+        // })
+        todo!()
     }
 }
 

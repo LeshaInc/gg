@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use super::reg::RegId;
 use crate::syntax::Ident;
+use crate::vm::RegId;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
 pub struct CaptureId(pub u16);

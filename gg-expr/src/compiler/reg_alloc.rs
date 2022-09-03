@@ -1,37 +1,4 @@
-use std::ops::Range;
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RegId(pub u16);
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RegSeq {
-    pub base: RegId,
-    pub len: u16,
-}
-
-impl IntoIterator for RegSeq {
-    type Item = RegId;
-    type IntoIter = RegSeqIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        RegSeqIter {
-            range: self.base.0..(self.base.0 + self.len),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RegSeqIter {
-    range: Range<u16>,
-}
-
-impl Iterator for RegSeqIter {
-    type Item = RegId;
-
-    fn next(&mut self) -> Option<RegId> {
-        self.range.next().map(RegId)
-    }
-}
+use crate::vm::{RegId, RegSeq};
 
 #[derive(Clone, Debug, Default)]
 pub struct RegAlloc {
@@ -40,10 +7,6 @@ pub struct RegAlloc {
 }
 
 impl RegAlloc {
-    pub fn new() -> RegAlloc {
-        Default::default()
-    }
-
     pub fn alloc(&mut self) -> RegId {
         if let Some(reg) = self.free.pop() {
             reg
