@@ -9,13 +9,12 @@ use rowan::{Checkpoint, GreenNodeBuilder, TextRange, TextSize};
 use super::SyntaxKind::{self, *};
 use super::{Expr, Lexer, SyntaxNode};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::Source;
+use crate::{Source, SourceText};
 
 pub struct Parser<'s> {
     lexer: Peekable<Lexer<'s>>,
     builder: GreenNodeBuilder<'static>,
     recovery_set: HashMap<SyntaxKind, u32>,
-    source: Arc<Source>,
     errors: Vec<String>,
 }
 
@@ -25,13 +24,16 @@ impl Parser<'_> {
             lexer: Lexer::new(source).peekable(),
             builder: GreenNodeBuilder::new(),
             recovery_set: HashMap::default(),
-            source: Arc::new(Source::new("unknown.expr".into(), source.into())),
             errors: Vec::new(),
         }
     }
 
     pub fn finish(self) -> ParseResult {
-        let node = SyntaxNode::new_root(self.builder.finish());
+        let green = self.builder.finish();
+        let node = SyntaxNode::new_root(green.clone());
+
+        let text = SourceText::new(green);
+        let source = Arc::new(Source::new("unknown.expr".into(), text));
 
         let error_ranges = node.descendants().flat_map(|node| {
             if node.kind() == SyntaxKind::Error {
@@ -56,11 +58,7 @@ impl Parser<'_> {
                 }
 
                 Diagnostic::new(Severity::Error, "syntax error").with_source(
-                    SourceComponent::new(self.source.clone()).with_label(
-                        Severity::Error,
-                        range,
-                        error,
-                    ),
+                    SourceComponent::new(source.clone()).with_label(Severity::Error, range, error),
                 )
             })
             .collect();
@@ -68,6 +66,7 @@ impl Parser<'_> {
         ParseResult {
             expr: node.first_child().and_then(Expr::cast),
             node,
+            source,
             diagnostics: errors,
         }
     }
@@ -568,6 +567,7 @@ impl Parser<'_> {
 pub struct ParseResult {
     pub node: SyntaxNode,
     pub expr: Option<Expr>,
+    pub source: Arc<Source>,
     pub diagnostics: Vec<Diagnostic>,
 }
 

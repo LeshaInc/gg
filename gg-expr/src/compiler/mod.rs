@@ -464,19 +464,6 @@ pub fn compile(source: Arc<Source>, expr: Expr) -> CompileResult {
     let mut compiler = Compiler::new(source);
     let reg = compiler.regs.alloc();
     compiler.compile_expr_dst(expr, reg);
-
-    for diag in &compiler.diagnostics {
-        eprintln!("{}", diag);
-    }
-
-    for (c, id) in &compiler.consts.0 {
-        eprintln!("{:?}: {:?}", id.0, c);
-    }
-
-    for instr in &compiler.instrs.0 {
-        eprintln!("{:?}", instr);
-    }
-
     compiler.finish()
 }
 

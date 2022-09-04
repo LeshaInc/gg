@@ -24,7 +24,7 @@ impl Debug for Func {
         }
 
         if let Some(di) = &self.debug_info {
-            let range = di.source.range_to_line_col(di.range);
+            let range = di.source.text.range_to_line_col(di.range);
             write!(f, " // in {} at {} ", di.source.name, range)?;
         }
 
@@ -58,7 +58,7 @@ impl Debug for Func {
                     write!(f, ", ")?;
                 }
 
-                let range = di.source.range_to_line_col(range);
+                let range = di.source.text.range_to_line_col(range);
                 write!(f, "{}", range)?;
             }
         }
@@ -67,7 +67,7 @@ impl Debug for Func {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DebugInfo {
     pub source: Arc<Source>,
     pub range: TextRange,

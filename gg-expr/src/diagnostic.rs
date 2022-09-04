@@ -1,11 +1,12 @@
 use std::fmt::{self, Display};
+use std::ops::Range;
 use std::sync::Arc;
 
 use unicode_width::UnicodeWidthStr;
 use yansi::{Color, Paint};
 
 use crate::syntax::TextRange;
-use crate::{Line, Source};
+use crate::Source;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Severity {
@@ -141,7 +142,7 @@ impl Display for SourceComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let max_range = max_range(self.labels.iter().map(|l| l.range));
 
-        let lines = self.source.lines_in_range(max_range, 3);
+        let lines = self.source.text.lines_in_range(max_range, 3);
         if lines.is_empty() {
             return Ok(());
         }
@@ -175,16 +176,16 @@ struct Connector {
 }
 
 impl HlGrid {
-    fn new(source: &Source, lines: &[Line]) -> HlGrid {
+    fn new(source: &Source, lines: Range<u32>) -> HlGrid {
         let lines = lines
-            .iter()
-            .map(|line| {
-                let text = source.text[line.range].to_string();
+            .map(|idx| {
+                let text = source.text.line_text(idx);
+                let range = source.text.line_range(idx);
                 HlLine {
-                    number: line.number,
+                    number: idx + 1,
                     text_width: text.width(),
                     text,
-                    range: line.range,
+                    range,
                     cells: Vec::new(),
                     labels: Vec::new(),
                 }
