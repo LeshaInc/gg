@@ -26,6 +26,10 @@ impl Consts {
         idx
     }
 
+    pub fn len(&self) -> u16 {
+        self.0.len() as u16
+    }
+
     pub fn compile(self) -> CompiledConsts {
         let mut pairs = self.0.into_iter().collect::<Vec<_>>();
         pairs.sort_unstable_by_key(|(_, id)| *id);

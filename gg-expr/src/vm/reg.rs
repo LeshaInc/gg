@@ -18,7 +18,7 @@ pub struct RegSeq {
 
 impl Debug for RegSeq {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "r{}:{}", self.base.0, self.base.0 + self.len)
+        write!(f, "r{}:{}", self.base.0, self.base.0 + self.len - 1)
     }
 }
 

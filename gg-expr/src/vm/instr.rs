@@ -1,65 +1,104 @@
 use std::fmt::{self, Debug};
 use std::ops::{Add, Sub};
 
-use super::consts::ConstId;
 use super::reg::{RegId, RegSeq};
 pub use crate::syntax::{BinOp, UnOp};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub enum Instr {
+pub enum Instr<Loc = RegId> {
     Nop,
     Panic,
     Copy {
-        src: RegId,
-        dst: RegId,
-    },
-    LoadConst {
-        id: ConstId,
-        dst: RegId,
+        src: Loc,
+        dst: Loc,
     },
     NewList {
         seq: RegSeq,
-        dst: RegId,
+        dst: Loc,
     },
     NewMap {
         seq: RegSeq,
-        dst: RegId,
+        dst: Loc,
     },
     Jump {
         offset: InstrOffset,
     },
     JumpIfTrue {
-        cond: RegId,
+        cond: Loc,
         offset: InstrOffset,
     },
     JumpIfFalse {
-        cond: RegId,
+        cond: Loc,
         offset: InstrOffset,
     },
     BinOp {
         op: BinOp,
-        lhs: RegId,
-        rhs: RegId,
-        dst: RegId,
+        lhs: Loc,
+        rhs: Loc,
+        dst: Loc,
     },
     UnOp {
         op: UnOp,
-        arg: RegId,
-        dst: RegId,
+        arg: Loc,
+        dst: Loc,
     },
     Call {
         seq: RegSeq,
-        dst: RegId,
+        dst: Loc,
     },
 }
 
-impl Debug for Instr {
+impl<Loc> Instr<Loc> {
+    pub fn map_seq(self, mut f: impl FnMut(RegSeq) -> RegSeq) -> Instr<Loc> {
+        match self {
+            Instr::NewList { seq, dst } => Instr::NewList { seq: f(seq), dst },
+            Instr::NewMap { seq, dst } => Instr::NewMap { seq: f(seq), dst },
+            Instr::Call { seq, dst } => Instr::Call { seq: f(seq), dst },
+            _ => self,
+        }
+    }
+
+    pub fn map_loc<T>(self, mut f: impl FnMut(Loc) -> T) -> Instr<T> {
+        match self {
+            Instr::Nop => Instr::Nop,
+            Instr::Panic => Instr::Panic,
+            Instr::Copy { src, dst } => Instr::Copy {
+                src: f(src),
+                dst: f(dst),
+            },
+            Instr::NewList { seq, dst } => Instr::NewList { seq, dst: f(dst) },
+            Instr::NewMap { seq, dst } => Instr::NewMap { seq, dst: f(dst) },
+            Instr::Jump { offset } => Instr::Jump { offset },
+            Instr::JumpIfTrue { cond, offset } => Instr::JumpIfTrue {
+                cond: f(cond),
+                offset,
+            },
+            Instr::JumpIfFalse { cond, offset } => Instr::JumpIfFalse {
+                cond: f(cond),
+                offset,
+            },
+            Instr::BinOp { op, lhs, rhs, dst } => Instr::BinOp {
+                op,
+                lhs: f(lhs),
+                rhs: f(rhs),
+                dst: f(dst),
+            },
+            Instr::UnOp { op, arg, dst } => Instr::UnOp {
+                op,
+                arg: f(arg),
+                dst: f(dst),
+            },
+            Instr::Call { seq, dst } => Instr::Call { seq, dst: f(dst) },
+        }
+    }
+}
+
+impl<Loc: Debug> Debug for Instr<Loc> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Instr::Nop => write!(f, "Nop"),
             Instr::Panic => write!(f, "Panic"),
             Instr::Copy { src, dst } => write!(f, "Copy\t{:?} -> {:?}", src, dst),
-            Instr::LoadConst { id, dst } => write!(f, "LoadConst\t{:?} -> {:?}", id, dst),
             Instr::NewList { seq, dst } => write!(f, "NewList\t{:?} -> {:?}", seq, dst),
             Instr::NewMap { seq, dst } => write!(f, "NewMap\t{:?} -> {:?}", seq, dst),
             Instr::Jump { offset } => write!(f, "Jump\t{:?}", offset),
@@ -121,25 +160,34 @@ impl Debug for InstrOffset {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Instrs(pub Vec<Instr>);
+pub struct Instrs<Loc>(pub Vec<Instr<Loc>>);
 
-impl Instrs {
+impl<Loc> Instrs<Loc> {
     pub fn next_idx(&self) -> InstrIdx {
         InstrIdx(self.0.len() as u32)
     }
 
-    pub fn add(&mut self, instr: Instr) -> InstrIdx {
+    pub fn add(&mut self, instr: Instr<Loc>) -> InstrIdx {
         let idx = self.next_idx();
         self.0.push(instr);
         idx
     }
 
-    pub fn set(&mut self, idx: InstrIdx, instr: Instr) {
+    pub fn set(&mut self, idx: InstrIdx, instr: Instr<Loc>) {
         self.0[idx.0 as usize] = instr;
     }
 
-    pub fn compile(self) -> CompiledInstrs {
-        CompiledInstrs(self.0.into())
+    pub fn compile(
+        self,
+        mut loc_mapping: impl FnMut(Loc) -> RegId,
+        mut seq_mapping: impl FnMut(RegSeq) -> RegSeq,
+    ) -> CompiledInstrs {
+        CompiledInstrs(
+            self.0
+                .into_iter()
+                .map(|v| v.map_loc(&mut loc_mapping).map_seq(&mut seq_mapping))
+                .collect(),
+        )
     }
 }
 

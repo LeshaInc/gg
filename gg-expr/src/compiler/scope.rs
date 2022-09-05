@@ -1,32 +1,14 @@
 use std::collections::HashMap;
 
+use super::location::Loc;
 use crate::syntax::Ident;
-use crate::vm::RegId;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
 pub struct CaptureId(pub u16);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VarLocation {
-    Reg(RegId),
-    Capture(CaptureId),
-}
-
-impl From<RegId> for VarLocation {
-    fn from(v: RegId) -> VarLocation {
-        VarLocation::Reg(v)
-    }
-}
-
-impl From<CaptureId> for VarLocation {
-    fn from(v: CaptureId) -> VarLocation {
-        VarLocation::Capture(v)
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct Scope {
-    vars: HashMap<Ident, VarLocation>,
+    vars: HashMap<Ident, Loc>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,7 +38,7 @@ impl ScopeStack {
         self.stack.push(scope);
     }
 
-    pub fn pop(&mut self) -> impl Iterator<Item = VarLocation> + '_ {
+    pub fn pop(&mut self) -> impl Iterator<Item = Loc> + '_ {
         let prev = self.stack.pop().unwrap();
         let next = self.scope();
         prev.vars
@@ -65,11 +47,11 @@ impl ScopeStack {
             .map(|(_, loc)| loc)
     }
 
-    pub fn get(&self, ident: &Ident) -> Option<VarLocation> {
+    pub fn get(&self, ident: &Ident) -> Option<Loc> {
         self.scope().vars.get(ident).copied()
     }
 
-    pub fn set(&mut self, ident: Ident, loc: impl Into<VarLocation>) -> Option<VarLocation> {
+    pub fn set(&mut self, ident: Ident, loc: impl Into<Loc>) -> Option<Loc> {
         self.scope_mut().vars.insert(ident, loc.into())
     }
 
