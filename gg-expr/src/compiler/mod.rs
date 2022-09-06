@@ -4,6 +4,7 @@ mod scope;
 
 use std::collections::HashSet;
 use std::fmt::Write;
+use std::iter;
 use std::sync::Arc;
 
 use self::location::Loc;
@@ -373,35 +374,33 @@ impl Compiler {
         self.regs.free(cond_tmp);
     }
 
-    fn compile_expr_fn(&mut self, _expr: ExprFn, _dst: &mut Loc) {
-        todo!()
+    fn compile_args(&mut self, args: impl Iterator<Item = Ident>) {
+        let mut num_args = 0;
+        for (i, arg) in args.enumerate() {
+            let reg = RegId(i as u16);
+            self.scopes.set(arg, Loc::Persistent(reg));
+            num_args += 1;
+        }
+        self.regs.advance(num_args);
     }
 
-    fn finish(self) -> CompileResult {
-        let num_consts = self.consts.len();
+    fn compile_fn(&mut self, args: impl Iterator<Item = Ident>, body: Expr) {
+        self.compile_args(args);
+        let mut dst = Loc::Tmp(self.regs.alloc());
+        self.compile_expr(body, &mut dst);
+        self.instrs.add(Instr::Ret { arg: dst });
+    }
 
-        let loc_mapping = |loc| match loc {
-            Loc::Invalid => RegId(0),
-            Loc::Tmp(reg) | Loc::Persistent(reg) => RegId(reg.0 + num_consts),
-            Loc::Const(id) => RegId(id.0),
-        };
+    fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut Loc) {
+        let mut compiler = Compiler::new(self.source.clone());
 
-        let seq_mapping = |seq: RegSeq| RegSeq {
-            base: RegId(seq.base.0 + num_consts),
-            len: seq.len,
-        };
-
-        let func = Func {
-            instrs: self.instrs.compile(loc_mapping, seq_mapping),
-            consts: self.consts.compile(),
-            captures: Vec::new(),
-            debug_info: None,
-        };
-
-        CompileResult {
-            value: func.into(),
-            diagnostics: self.diagnostics,
+        if let Some(body) = expr.expr() {
+            compiler.compile_fn(expr.args(), body);
         }
+
+        let mut res = compiler.finish();
+        self.diagnostics.append(&mut res.diagnostics);
+        self.compile_const(res.func, dst)
     }
 
     fn compile_pat(&mut self, pat: Pat, src: Loc, dst: &mut Loc) {
@@ -477,17 +476,41 @@ impl Compiler {
             self.scopes.set(ident, *dst);
         }
     }
+
+    fn finish(self) -> CompileResult {
+        let num_consts = self.consts.len();
+
+        let loc_mapping = |loc| match loc {
+            Loc::Invalid => RegId(0),
+            Loc::Tmp(reg) | Loc::Persistent(reg) => RegId(reg.0 + num_consts),
+            Loc::Const(id) => RegId(id.0),
+        };
+
+        let seq_mapping = |seq: RegSeq| RegSeq {
+            base: RegId(seq.base.0 + num_consts),
+            len: seq.len,
+        };
+
+        CompileResult {
+            func: Func {
+                instrs: self.instrs.compile(loc_mapping, seq_mapping),
+                consts: self.consts.compile(),
+                captures: Vec::new(),
+                debug_info: None,
+            },
+            diagnostics: self.diagnostics,
+        }
+    }
 }
 
 pub fn compile(source: Arc<Source>, expr: Expr) -> CompileResult {
     let mut compiler = Compiler::new(source);
-    let reg = compiler.regs.alloc();
-    compiler.compile_expr(expr, &mut Loc::Tmp(reg));
+    compiler.compile_fn(iter::empty(), expr);
     compiler.finish()
 }
 
 #[derive(Debug, Clone)]
 pub struct CompileResult {
-    pub value: Value,
+    pub func: Func,
     pub diagnostics: Vec<Diagnostic>,
 }

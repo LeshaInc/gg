@@ -22,7 +22,7 @@ pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {
     let value = parse_res.expr.map(|e| {
         let mut compile_res = compile(parse_res.source, e);
         diagnostics.append(&mut compile_res.diagnostics);
-        compile_res.value
+        compile_res.func.into()
     });
 
     (value, diagnostics)

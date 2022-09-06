@@ -46,6 +46,9 @@ pub enum Instr<Loc = RegId> {
         seq: RegSeq,
         dst: Loc,
     },
+    Ret {
+        arg: Loc,
+    },
 }
 
 impl<Loc> Instr<Loc> {
@@ -89,6 +92,7 @@ impl<Loc> Instr<Loc> {
                 dst: f(dst),
             },
             Instr::Call { seq, dst } => Instr::Call { seq, dst: f(dst) },
+            Instr::Ret { arg } => Instr::Ret { arg: f(arg) },
         }
     }
 }
@@ -111,6 +115,7 @@ impl<Loc: Debug> Debug for Instr<Loc> {
             }
             Instr::UnOp { op, arg, dst } => write!(f, "UnOp\t{:?}({:?}) -> {:?}", op, arg, dst),
             Instr::Call { seq, dst } => write!(f, "Call\t{:?} -> {:?}", seq, dst),
+            Instr::Ret { arg } => write!(f, "Ret\t{:?}", arg),
         }
     }
 }
