@@ -42,7 +42,7 @@ impl Compiler {
 
     fn pop_scope(&mut self) {
         for loc in self.scopes.pop() {
-            if let Loc::Persistent(reg) = loc {
+            if let Loc::Reg(reg) = loc {
                 self.regs.free(reg)
             }
         }
@@ -187,7 +187,7 @@ impl Compiler {
         let mut rhs = *dst;
         let mut rhs_temp = None;
         if lhs == rhs {
-            rhs = Loc::Tmp(self.regs.alloc());
+            rhs = Loc::Reg(self.regs.alloc());
             rhs_temp = Some(rhs);
         }
 
@@ -195,7 +195,7 @@ impl Compiler {
             self.compile_expr(expr, &mut rhs);
         }
 
-        if let Some(Loc::Tmp(reg)) = rhs_temp {
+        if let Some(Loc::Reg(reg)) = rhs_temp {
             self.regs.free(reg);
         }
 
@@ -228,7 +228,7 @@ impl Compiler {
         let seq = self.regs.alloc_seq(len);
 
         for (expr, dst) in expr.exprs().zip(seq) {
-            self.compile_expr_dst(expr, Loc::Tmp(dst));
+            self.compile_expr_dst(expr, Loc::Reg(dst));
         }
 
         self.instrs.add(Instr::NewList { seq, dst: *dst });
@@ -241,13 +241,13 @@ impl Compiler {
 
         for (pair, dst) in expr.pairs().zip(seq.into_iter().step_by(2)) {
             if let Some(expr) = pair.key_expr() {
-                self.compile_expr_dst(expr, Loc::Tmp(dst));
+                self.compile_expr_dst(expr, Loc::Reg(dst));
             } else if let Some(ident) = pair.key_ident() {
-                self.compile_const_dst(ident.name(), Loc::Tmp(dst));
+                self.compile_const_dst(ident.name(), Loc::Reg(dst));
             }
 
             if let Some(expr) = pair.value() {
-                self.compile_expr_dst(expr, Loc::Tmp(RegId(dst.0 + 1)));
+                self.compile_expr_dst(expr, Loc::Reg(RegId(dst.0 + 1)));
             }
         }
 
@@ -260,11 +260,11 @@ impl Compiler {
         let seq = self.regs.alloc_seq(arity + 1);
 
         if let Some(expr) = expr.func() {
-            self.compile_expr_dst(expr, Loc::Tmp(seq.base));
+            self.compile_expr_dst(expr, Loc::Reg(seq.base));
         }
 
         for (expr, dst) in expr.args().zip(seq.into_iter().skip(1)) {
-            self.compile_expr_dst(expr, Loc::Tmp(dst));
+            self.compile_expr_dst(expr, Loc::Reg(dst));
         }
 
         self.instrs.add(Instr::Call { seq, dst: *dst });
@@ -307,14 +307,19 @@ impl Compiler {
         self.push_scope();
 
         for binding in expr.bindings() {
-            let reg = self.regs.alloc();
+            let tmp_reg = self.regs.alloc();
+            let mut loc = Loc::Reg(tmp_reg);
 
             if let Some(expr) = binding.expr() {
-                self.compile_expr_dst(expr, Loc::Persistent(reg));
+                self.compile_expr(expr, &mut loc);
+            }
+
+            if loc != Loc::Reg(tmp_reg) {
+                self.regs.free(tmp_reg);
             }
 
             if let Some(ident) = binding.ident() {
-                self.scopes.set(ident, Loc::Persistent(reg));
+                self.scopes.set(ident, loc);
             }
         }
 
@@ -327,9 +332,9 @@ impl Compiler {
 
     fn compile_expr_when(&mut self, expr: ExprWhen, dst: &mut Loc) {
         let src_tmp = self.regs.alloc();
-        let mut src = Loc::Tmp(src_tmp);
+        let mut src = Loc::Reg(src_tmp);
         let cond_tmp = self.regs.alloc();
-        let mut cond = Loc::Tmp(cond_tmp);
+        let mut cond = Loc::Reg(cond_tmp);
 
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr, &mut src);
@@ -341,7 +346,7 @@ impl Compiler {
             self.push_scope();
 
             if let Some(pat) = case.pat() {
-                cond = Loc::Tmp(cond_tmp);
+                cond = Loc::Reg(cond_tmp);
                 self.compile_pat(pat.clone(), src, &mut cond);
             }
 
@@ -378,7 +383,7 @@ impl Compiler {
         let mut num_args = 0;
         for (i, arg) in args.enumerate() {
             let reg = RegId(i as u16);
-            self.scopes.set(arg, Loc::Persistent(reg));
+            self.scopes.set(arg, reg);
             num_args += 1;
         }
         self.regs.advance(num_args);
@@ -386,7 +391,7 @@ impl Compiler {
 
     fn compile_fn(&mut self, args: impl Iterator<Item = Ident>, body: Expr) {
         self.compile_args(args);
-        let mut dst = Loc::Tmp(self.regs.alloc());
+        let mut dst = Loc::Reg(self.regs.alloc());
         self.compile_expr(body, &mut dst);
         self.instrs.add(Instr::Ret { arg: dst });
     }
@@ -482,7 +487,7 @@ impl Compiler {
 
         let loc_mapping = |loc| match loc {
             Loc::Invalid => RegId(0),
-            Loc::Tmp(reg) | Loc::Persistent(reg) => RegId(reg.0 + num_consts),
+            Loc::Reg(reg) => RegId(reg.0 + num_consts),
             Loc::Const(id) => RegId(id.0),
         };
 
