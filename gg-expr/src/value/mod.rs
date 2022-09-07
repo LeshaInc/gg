@@ -5,6 +5,7 @@ use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::hint::unreachable_unchecked;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::sync::Arc;
 
 pub use self::func::{DebugInfo, Func};
@@ -519,4 +520,41 @@ enum HeapValue {
     Thunk(Thunk),
     List(im::Vector<Value>),
     Map(im::HashMap<Value, Value>),
+}
+
+#[derive(Clone)]
+pub struct FuncValue(Value);
+
+impl Debug for FuncValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Deref for FuncValue {
+    type Target = Func;
+
+    fn deref(&self) -> &Func {
+        unsafe {
+            match &**self.0.payload.heap {
+                HeapValue::Func(v) => v,
+                _ => unreachable_unchecked(),
+            }
+        }
+    }
+}
+
+impl TryFrom<Value> for FuncValue {
+    type Error = FromValueError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if value.ty == Type::Func {
+            Ok(FuncValue(value))
+        } else {
+            Err(FromValueError {
+                expected: Type::Func,
+                got: value.ty,
+            })
+        }
+    }
 }

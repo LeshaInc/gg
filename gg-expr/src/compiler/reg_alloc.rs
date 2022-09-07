@@ -20,6 +20,10 @@ impl RegAlloc {
         self.slots += num;
     }
 
+    pub fn slots(&self) -> u16 {
+        self.slots
+    }
+
     pub fn free(&mut self, id: RegId) {
         self.free.push(id);
     }

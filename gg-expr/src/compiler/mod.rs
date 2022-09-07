@@ -498,9 +498,9 @@ impl Compiler {
 
         CompileResult {
             func: Func {
+                slots: self.regs.slots() + num_consts,
                 instrs: self.instrs.compile(loc_mapping, seq_mapping),
                 consts: self.consts.compile(),
-                captures: Vec::new(),
                 debug_info: None,
             },
             diagnostics: self.diagnostics,

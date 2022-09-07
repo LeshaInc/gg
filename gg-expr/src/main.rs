@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use gg_expr::compile_text;
+use gg_expr::{compile_text, Vm};
 
 fn main() {
     let mut input = String::new();
@@ -12,11 +12,16 @@ fn main() {
         println!("{}", diagnostic);
     }
 
-    let value = match value {
-        Some(v) => v,
+    let func = match value {
+        Some(v) => v.try_into().unwrap(),
         None => return,
     };
 
     println!();
-    println!("{:?}", value);
+    println!("{:?}", func);
+
+    let mut vm = Vm::new();
+    let result = vm.eval(func);
+    println!();
+    println!("{:?}", result);
 }

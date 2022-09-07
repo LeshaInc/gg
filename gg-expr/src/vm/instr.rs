@@ -1,5 +1,5 @@
 use std::fmt::{self, Debug};
-use std::ops::{Add, Sub};
+use std::ops::{Add, AddAssign, Index, Sub};
 
 use super::reg::{RegId, RegSeq};
 pub use crate::syntax::{BinOp, UnOp};
@@ -139,6 +139,12 @@ impl Sub<InstrIdx> for InstrIdx {
     }
 }
 
+impl AddAssign<InstrOffset> for InstrIdx {
+    fn add_assign(&mut self, rhs: InstrOffset) {
+        *self = *self + rhs;
+    }
+}
+
 impl Add<i32> for InstrOffset {
     type Output = InstrOffset;
 
@@ -198,3 +204,11 @@ impl<Loc> Instrs<Loc> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct CompiledInstrs(pub Box<[Instr]>);
+
+impl Index<InstrIdx> for CompiledInstrs {
+    type Output = Instr;
+
+    fn index(&self, index: InstrIdx) -> &Self::Output {
+        &self.0[index.0 as usize]
+    }
+}

@@ -9,7 +9,8 @@ pub mod vm;
 pub use self::compiler::{compile, Compiler};
 pub use self::error::Error;
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
-pub use self::value::{DebugInfo, Func, Thunk, Type, Value};
+pub use self::value::{DebugInfo, Func, FuncValue, Thunk, Type, Value};
+pub use self::vm::Vm;
 use crate::diagnostic::Diagnostic;
 
 pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {

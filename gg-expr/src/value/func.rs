@@ -5,13 +5,13 @@ use indenter::indented;
 
 use crate::syntax::TextRange;
 use crate::vm::{CompiledConsts, CompiledInstrs};
-use crate::{Source, Value};
+use crate::Source;
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Func {
+    pub slots: u16,
     pub instrs: CompiledInstrs,
     pub consts: CompiledConsts,
-    pub captures: Vec<Value>,
     pub debug_info: Option<Arc<DebugInfo>>,
 }
 

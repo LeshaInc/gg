@@ -1,5 +1,7 @@
 use std::fmt::{self, Debug};
-use std::ops::Range;
+use std::ops::{Index, IndexMut, Range};
+
+use crate::Value;
 
 #[derive(Clone, Copy, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RegId(pub u16);
@@ -43,5 +45,22 @@ impl Iterator for RegSeqIter {
 
     fn next(&mut self) -> Option<RegId> {
         self.range.next().map(RegId)
+    }
+}
+
+#[derive(Debug)]
+pub struct Regs<'a>(pub &'a mut [Value]);
+
+impl Index<RegId> for Regs<'_> {
+    type Output = Value;
+
+    fn index(&self, index: RegId) -> &Self::Output {
+        &self.0[usize::from(index.0)]
+    }
+}
+
+impl IndexMut<RegId> for Regs<'_> {
+    fn index_mut(&mut self, index: RegId) -> &mut Self::Output {
+        &mut self.0[usize::from(index.0)]
     }
 }
