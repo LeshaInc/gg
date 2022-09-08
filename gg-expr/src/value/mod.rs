@@ -195,27 +195,37 @@ impl Value {
 
 impl Clone for Value {
     fn clone(&self) -> Value {
-        if self.ty.is_heap() {
-            let heap = unsafe { &self.payload.heap };
-
-            Value {
-                ty: self.ty,
-                payload: Payload {
-                    heap: ManuallyDrop::new(Arc::clone(heap)),
-                },
+        unsafe {
+            if self.ty.is_heap() {
+                clone_heap(self)
+            } else {
+                std::ptr::read(self)
             }
-        } else {
-            unsafe { std::ptr::read(self) }
         }
+    }
+}
+
+unsafe fn clone_heap(value: &Value) -> Value {
+    let heap = &value.payload.heap;
+
+    Value {
+        ty: value.ty,
+        payload: Payload {
+            heap: ManuallyDrop::new(Arc::clone(heap)),
+        },
     }
 }
 
 impl Drop for Value {
     fn drop(&mut self) {
         if self.ty.is_heap() {
-            unsafe { ManuallyDrop::drop(&mut self.payload.heap) }
+            unsafe { drop_heap(self) }
         }
     }
+}
+
+unsafe fn drop_heap(value: &mut Value) {
+    ManuallyDrop::drop(&mut value.payload.heap)
 }
 
 impl Debug for Value {

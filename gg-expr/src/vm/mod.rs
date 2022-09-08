@@ -59,8 +59,8 @@ impl Vm {
                 let instr = frame.func.instrs[frame.ip];
                 frame.ip += InstrOffset(1);
 
-                let start_idx = self.stack.len() - usize::from(frame.func.slots);
-                let regs = Regs(&mut self.stack[start_idx..]);
+                let base = self.stack.len() - usize::from(frame.func.slots);
+                let regs = Regs(&mut self.stack[base..]);
 
                 match instr {
                     Instr::Call { seq, dst } => {
@@ -100,8 +100,37 @@ impl Vm {
         }
     }
 
-    fn instr_call(&mut self, _seq: RegSeq, _dst: RegId) {
-        todo!()
+    fn instr_call(&mut self, seq: RegSeq, dst: RegId) {
+        let frame = self.callstack.last().unwrap();
+
+        let base = self.stack.len() - usize::from(frame.func.slots);
+        let dst = base + usize::from(dst.0);
+
+        let value = self.stack[base + usize::from(seq.base.0)].clone();
+        let func = FuncValue::try_from(value).unwrap();
+
+        let mut rem_slots = func.slots;
+
+        for val in func.consts.0.iter() {
+            self.stack.push(val.clone());
+            rem_slots -= 1;
+        }
+
+        for arg in seq.into_iter().skip(1) {
+            let val = self.stack[base + usize::from(arg.0)].clone();
+            self.stack.push(val);
+            rem_slots -= 1;
+        }
+
+        for _ in 0..rem_slots {
+            self.stack.push(Value::null());
+        }
+
+        self.callstack.push(Frame {
+            ip: InstrIdx(0),
+            func,
+            dst,
+        });
     }
 }
 
@@ -144,10 +173,13 @@ impl CurrentFrame<'_> {
     }
 
     fn instr_bin_op(&mut self, op: BinOp, lhs: RegId, rhs: RegId, dst: RegId) {
-        self.regs[dst] = ops::bin_op(op, &self.regs[lhs], &self.regs[rhs]).unwrap();
+        let lhs = &self.regs[lhs];
+        let rhs = &self.regs[rhs];
+        self.regs[dst] = ops::bin_op(op, lhs, rhs).unwrap();
     }
 
     fn instr_un_op(&mut self, op: UnOp, arg: RegId, dst: RegId) {
-        self.regs[dst] = ops::un_op(op, &self.regs[arg]).unwrap();
+        let arg = &self.regs[arg];
+        self.regs[dst] = ops::un_op(op, arg).unwrap();
     }
 }
