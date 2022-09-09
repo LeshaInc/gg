@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
+use std::ops::Index;
 
 use crate::Value;
 
@@ -40,3 +41,11 @@ impl Consts {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CompiledConsts(pub Box<[Value]>);
+
+impl Index<ConstId> for CompiledConsts {
+    type Output = Value;
+
+    fn index(&self, idx: ConstId) -> &Value {
+        &self.0[idx.0 as usize]
+    }
+}

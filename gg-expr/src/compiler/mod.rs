@@ -1,4 +1,3 @@
-mod location;
 mod reg_alloc;
 mod scope;
 
@@ -7,7 +6,6 @@ use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 
-use self::location::Loc;
 use self::reg_alloc::RegAlloc;
 use self::scope::ScopeStack;
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
@@ -17,7 +15,7 @@ use crate::{Func, Source, Value};
 
 pub struct Compiler {
     regs: RegAlloc,
-    instrs: Instrs<Loc>,
+    instrs: Instrs,
     consts: Consts,
     scopes: ScopeStack,
     diagnostics: Vec<Diagnostic>,
@@ -41,10 +39,8 @@ impl Compiler {
     }
 
     fn pop_scope(&mut self) {
-        for loc in self.scopes.pop() {
-            if let Loc::Reg(reg) = loc {
-                self.regs.free(reg)
-            }
+        for reg in self.scopes.pop() {
+            self.regs.free(reg)
         }
     }
 
@@ -58,18 +54,12 @@ impl Compiler {
         ))
     }
 
-    fn compile_const(&mut self, value: impl Into<Value>, dst: &mut Loc) {
-        let id = self.consts.add(value.into());
-        *dst = Loc::Const(id);
+    fn compile_const(&mut self, value: impl Into<Value>, dst: RegId) {
+        let src = self.consts.add(value.into());
+        self.instrs.add(Instr::LoadConst { src, dst });
     }
 
-    fn compile_const_dst(&mut self, value: impl Into<Value>, dst: Loc) {
-        let id = self.consts.add(value.into());
-        let src = Loc::Const(id);
-        self.instrs.add(Instr::Copy { src, dst });
-    }
-
-    fn compile_expr(&mut self, expr: Expr, dst: &mut Loc) {
+    fn compile_expr(&mut self, expr: Expr, dst: &mut RegId) {
         match expr {
             Expr::Null(expr) => self.compile_expr_null(expr, dst),
             Expr::Bool(expr) => self.compile_expr_bool(expr, dst),
@@ -91,7 +81,7 @@ impl Compiler {
         }
     }
 
-    fn compile_expr_dst(&mut self, expr: Expr, dst: Loc) {
+    fn compile_expr_dst(&mut self, expr: Expr, dst: RegId) {
         let mut tmp = dst;
         self.compile_expr(expr, &mut tmp);
         if dst != tmp {
@@ -99,31 +89,31 @@ impl Compiler {
         }
     }
 
-    fn compile_expr_null(&mut self, _expr: ExprNull, dst: &mut Loc) {
-        self.compile_const(Value::null(), dst)
+    fn compile_expr_null(&mut self, _expr: ExprNull, dst: &mut RegId) {
+        self.compile_const(Value::null(), *dst)
     }
 
-    fn compile_expr_bool(&mut self, expr: ExprBool, dst: &mut Loc) {
+    fn compile_expr_bool(&mut self, expr: ExprBool, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, dst)
+        self.compile_const(value, *dst)
     }
 
-    fn compile_expr_int(&mut self, expr: ExprInt, dst: &mut Loc) {
+    fn compile_expr_int(&mut self, expr: ExprInt, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, dst)
+        self.compile_const(value, *dst)
     }
 
-    fn compile_expr_float(&mut self, expr: ExprFloat, dst: &mut Loc) {
+    fn compile_expr_float(&mut self, expr: ExprFloat, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, dst)
+        self.compile_const(value, *dst)
     }
 
-    fn compile_expr_string(&mut self, expr: ExprString, dst: &mut Loc) {
+    fn compile_expr_string(&mut self, expr: ExprString, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, dst)
+        self.compile_const(value, *dst)
     }
 
-    fn compile_expr_binding(&mut self, expr: ExprBinding, dst: &mut Loc) {
+    fn compile_expr_binding(&mut self, expr: ExprBinding, dst: &mut RegId) {
         let ident = match expr.ident() {
             Some(v) => v,
             None => return,
@@ -177,7 +167,7 @@ impl Compiler {
         self.add_error(diagnostic);
     }
 
-    fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut Loc) {
+    fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut RegId) {
         let mut lhs = *dst;
 
         if let Some(expr) = expr.lhs() {
@@ -187,7 +177,7 @@ impl Compiler {
         let mut rhs = *dst;
         let mut rhs_temp = None;
         if lhs == rhs {
-            rhs = Loc::Reg(self.regs.alloc());
+            rhs = self.regs.alloc();
             rhs_temp = Some(rhs);
         }
 
@@ -195,7 +185,7 @@ impl Compiler {
             self.compile_expr(expr, &mut rhs);
         }
 
-        if let Some(Loc::Reg(reg)) = rhs_temp {
+        if let Some(reg) = rhs_temp {
             self.regs.free(reg);
         }
 
@@ -207,7 +197,7 @@ impl Compiler {
         });
     }
 
-    fn compile_expr_unary(&mut self, expr: ExprUnary, dst: &mut Loc) {
+    fn compile_expr_unary(&mut self, expr: ExprUnary, dst: &mut RegId) {
         let mut arg = *dst;
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr, &mut arg);
@@ -217,37 +207,37 @@ impl Compiler {
         self.instrs.add(Instr::UnOp { op, arg, dst: *dst });
     }
 
-    fn compile_expr_grouped(&mut self, expr: ExprGrouped, dst: &mut Loc) {
+    fn compile_expr_grouped(&mut self, expr: ExprGrouped, dst: &mut RegId) {
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr, dst)
         }
     }
 
-    fn compile_expr_list(&mut self, expr: ExprList, dst: &mut Loc) {
+    fn compile_expr_list(&mut self, expr: ExprList, dst: &mut RegId) {
         let len = expr.exprs().count() as u16;
         let seq = self.regs.alloc_seq(len);
 
         for (expr, dst) in expr.exprs().zip(seq) {
-            self.compile_expr_dst(expr, Loc::Reg(dst));
+            self.compile_expr_dst(expr, dst);
         }
 
         self.instrs.add(Instr::NewList { seq, dst: *dst });
         self.regs.free_seq(seq);
     }
 
-    fn compile_expr_map(&mut self, expr: ExprMap, dst: &mut Loc) {
+    fn compile_expr_map(&mut self, expr: ExprMap, dst: &mut RegId) {
         let len = expr.pairs().count() as u16;
         let seq = self.regs.alloc_seq(len * 2);
 
         for (pair, dst) in expr.pairs().zip(seq.into_iter().step_by(2)) {
             if let Some(expr) = pair.key_expr() {
-                self.compile_expr_dst(expr, Loc::Reg(dst));
+                self.compile_expr_dst(expr, dst);
             } else if let Some(ident) = pair.key_ident() {
-                self.compile_const_dst(ident.name(), Loc::Reg(dst));
+                self.compile_const(ident.name(), dst);
             }
 
             if let Some(expr) = pair.value() {
-                self.compile_expr_dst(expr, Loc::Reg(RegId(dst.0 + 1)));
+                self.compile_expr_dst(expr, RegId(dst.0 + 1));
             }
         }
 
@@ -255,27 +245,27 @@ impl Compiler {
         self.regs.free_seq(seq);
     }
 
-    fn compile_expr_call(&mut self, expr: ExprCall, dst: &mut Loc) {
+    fn compile_expr_call(&mut self, expr: ExprCall, dst: &mut RegId) {
         let arity = expr.args().count() as u16;
         let seq = self.regs.alloc_seq(arity + 1);
 
         if let Some(expr) = expr.func() {
-            self.compile_expr_dst(expr, Loc::Reg(seq.base));
+            self.compile_expr_dst(expr, seq.base);
         }
 
         for (expr, dst) in expr.args().zip(seq.into_iter().skip(1)) {
-            self.compile_expr_dst(expr, Loc::Reg(dst));
+            self.compile_expr_dst(expr, dst);
         }
 
         self.instrs.add(Instr::Call { seq, dst: *dst });
         self.regs.free_seq(seq);
     }
 
-    fn compile_expr_index(&mut self, _expr: ExprIndex, _dst: &mut Loc) {
+    fn compile_expr_index(&mut self, _expr: ExprIndex, _dst: &mut RegId) {
         todo!()
     }
 
-    fn compile_expr_if_else(&mut self, expr: ExprIfElse, dst: &mut Loc) {
+    fn compile_expr_if_else(&mut self, expr: ExprIfElse, dst: &mut RegId) {
         let mut cond = *dst;
 
         if let Some(expr) = expr.cond() {
@@ -303,18 +293,18 @@ impl Compiler {
         self.instrs.set(mid, Instr::Jump { offset });
     }
 
-    fn compile_expr_let_in(&mut self, expr: ExprLetIn, dst: &mut Loc) {
+    fn compile_expr_let_in(&mut self, expr: ExprLetIn, dst: &mut RegId) {
         self.push_scope();
 
         for binding in expr.bindings() {
             let tmp_reg = self.regs.alloc();
-            let mut loc = Loc::Reg(tmp_reg);
+            let mut loc = tmp_reg;
 
             if let Some(expr) = binding.expr() {
                 self.compile_expr(expr, &mut loc);
             }
 
-            if loc != Loc::Reg(tmp_reg) {
+            if loc != tmp_reg {
                 self.regs.free(tmp_reg);
             }
 
@@ -330,11 +320,11 @@ impl Compiler {
         self.pop_scope();
     }
 
-    fn compile_expr_when(&mut self, expr: ExprWhen, dst: &mut Loc) {
+    fn compile_expr_when(&mut self, expr: ExprWhen, dst: &mut RegId) {
         let src_tmp = self.regs.alloc();
-        let mut src = Loc::Reg(src_tmp);
+        let mut src = src_tmp;
         let cond_tmp = self.regs.alloc();
-        let mut cond = Loc::Reg(cond_tmp);
+        let mut cond = cond_tmp;
 
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr, &mut src);
@@ -346,7 +336,7 @@ impl Compiler {
             self.push_scope();
 
             if let Some(pat) = case.pat() {
-                cond = Loc::Reg(cond_tmp);
+                cond = cond_tmp;
                 self.compile_pat(pat.clone(), src, &mut cond);
             }
 
@@ -391,12 +381,12 @@ impl Compiler {
 
     fn compile_fn(&mut self, args: impl Iterator<Item = Ident>, body: Expr) {
         self.compile_args(args);
-        let mut dst = Loc::Reg(self.regs.alloc());
+        let mut dst = self.regs.alloc();
         self.compile_expr(body, &mut dst);
         self.instrs.add(Instr::Ret { arg: dst });
     }
 
-    fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut Loc) {
+    fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut RegId) {
         let mut compiler = Compiler::new(self.source.clone());
 
         if let Some(body) = expr.expr() {
@@ -405,10 +395,10 @@ impl Compiler {
 
         let mut res = compiler.finish();
         self.diagnostics.append(&mut res.diagnostics);
-        self.compile_const(res.func, dst)
+        self.compile_const(res.func, *dst)
     }
 
-    fn compile_pat(&mut self, pat: Pat, src: Loc, dst: &mut Loc) {
+    fn compile_pat(&mut self, pat: Pat, src: RegId, dst: &mut RegId) {
         match pat {
             Pat::Grouped(pat) => self.compile_pat_grouped(pat, src, dst),
             Pat::Or(pat) => self.compile_pat_or(pat, src, dst),
@@ -421,23 +411,23 @@ impl Compiler {
         }
     }
 
-    fn compile_pat_grouped(&mut self, pat: PatGrouped, src: Loc, dst: &mut Loc) {
+    fn compile_pat_grouped(&mut self, pat: PatGrouped, src: RegId, dst: &mut RegId) {
         if let Some(pat) = pat.pat() {
             self.compile_pat(pat, src, dst);
         }
     }
 
-    fn compile_pat_or(&mut self, _pat: PatOr, _src: Loc, _dst: &mut Loc) {
+    fn compile_pat_or(&mut self, _pat: PatOr, _src: RegId, _dst: &mut RegId) {
         todo!()
     }
 
-    fn compile_pat_list(&mut self, _pat: PatList, _src: Loc, _dst: &mut Loc) {
+    fn compile_pat_list(&mut self, _pat: PatList, _src: RegId, _dst: &mut RegId) {
         todo!()
     }
 
-    fn compile_pat_const_eq(&mut self, value: impl Into<Value>, src: Loc, dst: &mut Loc) {
-        let mut lhs = *dst;
-        self.compile_const(value, &mut lhs);
+    fn compile_pat_const_eq(&mut self, value: impl Into<Value>, src: RegId, dst: &mut RegId) {
+        let lhs = *dst;
+        self.compile_const(value, lhs);
         self.instrs.add(Instr::BinOp {
             op: BinOp::Eq,
             lhs,
@@ -446,19 +436,19 @@ impl Compiler {
         });
     }
 
-    fn compile_pat_int(&mut self, pat: PatInt, src: Loc, dst: &mut Loc) {
+    fn compile_pat_int(&mut self, pat: PatInt, src: RegId, dst: &mut RegId) {
         if let Some(value) = pat.value() {
             self.compile_pat_const_eq(value, src, dst);
         }
     }
 
-    fn compile_pat_string(&mut self, pat: PatString, src: Loc, dst: &mut Loc) {
+    fn compile_pat_string(&mut self, pat: PatString, src: RegId, dst: &mut RegId) {
         if let Some(value) = pat.value() {
             self.compile_pat_const_eq(value, src, dst);
         }
     }
 
-    fn compile_pat_rest(&mut self, pat: PatRest, _src: Loc, _dst: &mut Loc) {
+    fn compile_pat_rest(&mut self, pat: PatRest, _src: RegId, _dst: &mut RegId) {
         self.add_simple_error(
             pat.range(),
             "invalid pattern",
@@ -466,15 +456,15 @@ impl Compiler {
         );
     }
 
-    fn compile_pat_hole(&mut self, _pat: PatHole, _src: Loc, dst: &mut Loc) {
-        self.compile_const(true, dst)
+    fn compile_pat_hole(&mut self, _pat: PatHole, _src: RegId, dst: &mut RegId) {
+        self.compile_const(true, *dst)
     }
 
-    fn compile_pat_binding(&mut self, pat: PatBinding, src: Loc, dst: &mut Loc) {
+    fn compile_pat_binding(&mut self, pat: PatBinding, src: RegId, dst: &mut RegId) {
         if let Some(pat) = pat.pat() {
             self.compile_pat(pat, src, dst);
         } else {
-            self.compile_const(true, dst)
+            self.compile_const(true, *dst)
         }
 
         if let Some(ident) = pat.ident() {
@@ -483,23 +473,10 @@ impl Compiler {
     }
 
     fn finish(self) -> CompileResult {
-        let num_consts = self.consts.len();
-
-        let loc_mapping = |loc| match loc {
-            Loc::Invalid => RegId(0),
-            Loc::Reg(reg) => RegId(reg.0 + num_consts),
-            Loc::Const(id) => RegId(id.0),
-        };
-
-        let seq_mapping = |seq: RegSeq| RegSeq {
-            base: RegId(seq.base.0 + num_consts),
-            len: seq.len,
-        };
-
         CompileResult {
             func: Func {
-                slots: self.regs.slots() + num_consts,
-                instrs: self.instrs.compile(loc_mapping, seq_mapping),
+                slots: self.regs.slots(),
+                instrs: self.instrs.compile(),
                 consts: self.consts.compile(),
                 debug_info: None,
             },

@@ -8,7 +8,7 @@ pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs};
 use self::reg::Regs;
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
 use crate::syntax::{BinOp, UnOp};
-use crate::{FuncValue, Value};
+use crate::{Func, FuncValue, Value};
 
 #[derive(Debug, Default)]
 pub struct Vm {
@@ -33,10 +33,6 @@ impl Vm {
 
         for _ in 0..func.slots {
             self.stack.push(Value::null());
-        }
-
-        for (i, val) in func.consts.0.iter().enumerate() {
-            self.stack[i + 1] = val.clone();
         }
 
         self.callstack.push(Frame {
@@ -80,11 +76,16 @@ impl Vm {
                     _ => {}
                 }
 
-                let mut cur = CurrentFrame { ip: frame.ip, regs };
+                let mut cur = CurrentFrame {
+                    func: &frame.func,
+                    ip: frame.ip,
+                    regs,
+                };
 
                 match instr {
                     Instr::Panic => cur.instr_panic(),
                     Instr::Copy { src, dst } => cur.instr_copy(src, dst),
+                    Instr::LoadConst { src, dst } => cur.instr_load_const(src, dst),
                     Instr::NewList { seq, dst } => cur.instr_new_list(seq, dst),
                     Instr::NewMap { seq, dst } => cur.instr_new_map(seq, dst),
                     Instr::Jump { offset } => cur.instr_jump(offset),
@@ -111,11 +112,6 @@ impl Vm {
 
         let mut rem_slots = func.slots;
 
-        for val in func.consts.0.iter() {
-            self.stack.push(val.clone());
-            rem_slots -= 1;
-        }
-
         for arg in seq.into_iter().skip(1) {
             let val = self.stack[base + usize::from(arg.0)].clone();
             self.stack.push(val);
@@ -135,6 +131,7 @@ impl Vm {
 }
 
 struct CurrentFrame<'a> {
+    func: &'a Func,
     ip: InstrIdx,
     regs: Regs<'a>,
 }
@@ -146,6 +143,10 @@ impl CurrentFrame<'_> {
 
     fn instr_copy(&mut self, src: RegId, dst: RegId) {
         self.regs[dst] = self.regs[src].clone();
+    }
+
+    fn instr_load_const(&mut self, src: ConstId, dst: RegId) {
+        self.regs[dst] = self.func.consts[src].clone();
     }
 
     fn instr_new_list(&mut self, _seq: RegSeq, _dst: RegId) {
