@@ -19,7 +19,7 @@ pub struct Vm {
 #[derive(Debug)]
 struct Frame {
     ip: InstrIdx,
-    func: FuncValue,
+    func_idx: usize,
     dst: usize,
 }
 
@@ -29,15 +29,18 @@ impl Vm {
     }
 
     pub fn eval(&mut self, func: FuncValue) -> Value {
-        self.stack.push(Value::null());
+        let num_slots = func.slots;
 
-        for _ in 0..func.slots {
+        self.stack.push(Value::null());
+        self.stack.push(func.into());
+
+        for _ in 0..num_slots {
             self.stack.push(Value::null());
         }
 
         self.callstack.push(Frame {
             ip: InstrIdx(0),
-            func,
+            func_idx: 1,
             dst: 0,
         });
 
@@ -52,11 +55,14 @@ impl Vm {
     fn run(&mut self) {
         while let Some(frame) = self.callstack.last_mut() {
             loop {
-                let instr = frame.func.instrs[frame.ip];
+                let func = &self.stack[frame.func_idx].as_func().unwrap();
+                let instr = func.instrs[frame.ip];
                 frame.ip += InstrOffset(1);
 
-                let base = self.stack.len() - usize::from(frame.func.slots);
-                let regs = Regs(&mut self.stack[base..]);
+                let base = self.stack.len() - usize::from(func.slots);
+                let (lhs, rhs) = self.stack.split_at_mut(base);
+                let func = &lhs[frame.func_idx].as_func().unwrap();
+                let regs = Regs(rhs);
 
                 match instr {
                     Instr::Call { seq, dst } => {
@@ -64,12 +70,12 @@ impl Vm {
                         break;
                     }
                     Instr::Ret { arg } => {
-                        self.stack[frame.dst] = regs[arg].clone();
-
-                        for _ in 0..frame.func.slots {
+                        let ret = regs[arg].clone();
+                        for _ in 0..func.slots {
                             self.stack.pop();
                         }
 
+                        self.stack[frame.dst] = ret;
                         self.callstack.pop();
                         break;
                     }
@@ -77,7 +83,7 @@ impl Vm {
                 }
 
                 let mut cur = CurrentFrame {
-                    func: &frame.func,
+                    func,
                     ip: frame.ip,
                     regs,
                 };
@@ -103,12 +109,13 @@ impl Vm {
 
     fn instr_call(&mut self, seq: RegSeq, dst: RegId) {
         let frame = self.callstack.last().unwrap();
+        let func = self.stack[frame.func_idx].as_func().unwrap();
 
-        let base = self.stack.len() - usize::from(frame.func.slots);
+        let base = self.stack.len() - usize::from(func.slots);
         let dst = base + usize::from(dst.0);
 
-        let value = self.stack[base + usize::from(seq.base.0)].clone();
-        let func = FuncValue::try_from(value).unwrap();
+        let func_idx = base + usize::from(seq.base.0);
+        let func = self.stack[func_idx].as_func().unwrap();
 
         let mut rem_slots = func.slots;
 
@@ -124,7 +131,7 @@ impl Vm {
 
         self.callstack.push(Frame {
             ip: InstrIdx(0),
-            func,
+            func_idx,
             dst,
         });
     }

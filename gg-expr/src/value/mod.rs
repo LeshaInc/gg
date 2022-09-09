@@ -568,3 +568,9 @@ impl TryFrom<Value> for FuncValue {
         }
     }
 }
+
+impl From<FuncValue> for Value {
+    fn from(v: FuncValue) -> Value {
+        v.0
+    }
+}
