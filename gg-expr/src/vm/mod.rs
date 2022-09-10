@@ -247,9 +247,7 @@ impl VmContext {
         let old_base = self.frame.base;
         let new_base = self.stack.len();
 
-        for _ in 0..func.slots {
-            self.stack.push(Value::null());
-        }
+        self.push_nulls(usize::from(func.slots));
 
         for (i, arg) in args.into_iter().enumerate() {
             let src = old_base + usize::from(arg.0);
@@ -268,6 +266,14 @@ impl VmContext {
         self.frames.push(old_frame);
 
         Ok(())
+    }
+
+    fn push_nulls(&mut self, count: usize) {
+        unsafe {
+            self.stack.reserve(count);
+            std::ptr::write_bytes(self.stack.as_mut_ptr().add(self.stack.len()), 0, count);
+            self.stack.set_len(self.stack.len() + count);
+        }
     }
 
     fn instr_ret(&mut self, instr: Instr) -> Result<()> {
@@ -368,6 +374,7 @@ impl VmContext {
         self.instr_un_op(instr, UnOp::Not)
     }
 
+    #[inline(always)]
     fn instr_bin_op(&mut self, instr: Instr, op: BinOp) -> Result<()> {
         let lhs = self.reg_read(instr.reg_a())?;
         let rhs = self.reg_read(instr.reg_b())?;
@@ -376,6 +383,7 @@ impl VmContext {
         Ok(())
     }
 
+    #[inline(always)]
     fn instr_un_op(&mut self, instr: Instr, op: UnOp) -> Result<()> {
         let arg = self.reg_read(instr.reg_a())?;
         let res = ops::un_op(op, arg).ok_or_else(|| self.op_invalid())?;
