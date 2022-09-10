@@ -117,22 +117,22 @@ impl Vm {
         let frame = self.callstack.last().unwrap();
         let func = self.stack[frame.func_idx].as_func().unwrap();
 
-        let base = self.stack.len() - usize::from(func.slots);
-        let dst = base + usize::from(dst.0);
+        let old_base = self.stack.len() - usize::from(func.slots);
+        let dst = old_base + usize::from(dst.0);
 
-        let func_idx = base + usize::from(seq.base.0);
+        let func_idx = old_base + usize::from(seq.base.0);
         let func = self.stack[func_idx].as_func().unwrap();
 
-        let mut rem_slots = func.slots;
+        let new_base = self.stack.len();
 
-        for arg in seq.into_iter().skip(1) {
-            let val = self.stack[base + usize::from(arg.0)].clone();
-            self.stack.push(val);
-            rem_slots -= 1;
+        for _ in 0..func.slots {
+            self.stack.push(Value::null());
         }
 
-        for _ in 0..rem_slots {
-            self.stack.push(Value::null());
+        for (i, arg) in seq.into_iter().skip(1).enumerate() {
+            let src = old_base + usize::from(arg.0);
+            let dst = new_base + i;
+            self.stack.swap(src, dst);
         }
 
         self.callstack.push(Frame {
