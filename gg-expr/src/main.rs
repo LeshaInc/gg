@@ -22,7 +22,7 @@ fn main() {
 
     let mut vm = Vm::new();
     let t = std::time::Instant::now();
-    let result = vm.eval(func);
+    let result = vm.eval(&func, &[]);
     let elapsed = t.elapsed();
     println!();
     println!("{:?}", result);

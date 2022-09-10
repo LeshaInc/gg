@@ -16,8 +16,6 @@ use crate::diagnostic::Diagnostic;
 pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {
     let parse_res = syntax::parse(text);
 
-    println!("{:#?}", parse_res.node);
-
     let mut diagnostics = parse_res.diagnostics;
 
     let value = parse_res.expr.map(|e| {

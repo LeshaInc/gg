@@ -28,13 +28,19 @@ impl Vm {
         Vm::default()
     }
 
-    pub fn eval(&mut self, func: FuncValue) -> Value {
-        let num_slots = func.slots;
+    pub fn eval(&mut self, func: &Value, args: &[&Value]) -> Value {
+        let func = FuncValue::try_from(func.clone()).unwrap();
+        let mut rem_slots = func.slots;
 
         self.stack.push(Value::null());
         self.stack.push(func.into());
 
-        for _ in 0..num_slots {
+        for &arg in args {
+            self.stack.push(arg.clone());
+            rem_slots -= 1;
+        }
+
+        for _ in 0..rem_slots {
             self.stack.push(Value::null());
         }
 
