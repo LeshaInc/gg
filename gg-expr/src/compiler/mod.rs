@@ -68,7 +68,10 @@ impl Compiler {
 
     fn compile_const(&mut self, range: TextRange, value: impl Into<Value>, dst: RegId) {
         let src = self.consts.add(value.into());
-        self.add_instr_ranged(&[range], Instr::LoadConst { src, dst });
+        let instr = Instr::new(Opcode::LoadConst)
+            .with_const_id(src)
+            .with_reg_b(dst);
+        self.add_instr_ranged(&[range], instr);
     }
 
     fn compile_expr(&mut self, expr: Expr, dst: &mut RegId) {
@@ -97,7 +100,8 @@ impl Compiler {
         let mut tmp = dst;
         self.compile_expr(expr, &mut tmp);
         if dst != tmp {
-            self.instrs.add(Instr::Copy { src: tmp, dst });
+            let instr = Instr::new(Opcode::Copy).with_reg_a(tmp).with_reg_b(dst);
+            self.instrs.add(instr);
         }
     }
 
@@ -206,15 +210,32 @@ impl Compiler {
             self.regs.free(reg);
         }
 
-        self.add_instr_ranged(
-            &[expr.range(), lhs_range, rhs_range],
-            Instr::BinOp {
-                op: expr.op().unwrap_or(BinOp::Add),
-                lhs,
-                rhs,
-                dst: *dst,
-            },
-        );
+        let opcode = match expr.op() {
+            Some(BinOp::Or) => Opcode::OpOr,
+            Some(BinOp::Coalesce) => Opcode::OpCoalesce,
+            Some(BinOp::And) => Opcode::OpAnd,
+            Some(BinOp::Lt) => Opcode::OpLt,
+            Some(BinOp::Le) => Opcode::OpLe,
+            Some(BinOp::Eq) => Opcode::OpEq,
+            Some(BinOp::Neq) => Opcode::OpNeq,
+            Some(BinOp::Ge) => Opcode::OpGe,
+            Some(BinOp::Gt) => Opcode::OpGt,
+            Some(BinOp::Add) => Opcode::OpAdd,
+            Some(BinOp::Sub) => Opcode::OpSub,
+            Some(BinOp::Mul) => Opcode::OpMul,
+            Some(BinOp::Div) => Opcode::OpDiv,
+            Some(BinOp::Rem) => Opcode::OpRem,
+            Some(BinOp::Pow) => Opcode::OpPow,
+            Some(BinOp::Index) => Opcode::OpIndex,
+            Some(BinOp::IndexNullable) => Opcode::OpIndexNullable,
+            _ => Opcode::OpAdd,
+        };
+
+        let instr = Instr::new(opcode)
+            .with_reg_a(lhs)
+            .with_reg_b(rhs)
+            .with_reg_c(*dst);
+        self.add_instr_ranged(&[expr.range(), lhs_range, rhs_range], instr);
     }
 
     fn compile_expr_unary(&mut self, expr: ExprUnary, dst: &mut RegId) {
@@ -226,8 +247,14 @@ impl Compiler {
             self.compile_expr(expr, &mut arg);
         }
 
-        let op = expr.op().unwrap_or(UnOp::Neg);
-        self.add_instr_ranged(&[range, arg_range], Instr::UnOp { op, arg, dst: *dst });
+        let opcode = match expr.op() {
+            Some(UnOp::Neg) => Opcode::UnOpNeg,
+            Some(UnOp::Not) => Opcode::UnOpNot,
+            _ => Opcode::UnOpNeg,
+        };
+
+        let instr = Instr::new(opcode).with_reg_a(arg).with_reg_b(*dst);
+        self.add_instr_ranged(&[range, arg_range], instr);
     }
 
     fn compile_expr_grouped(&mut self, expr: ExprGrouped, dst: &mut RegId) {
@@ -244,7 +271,10 @@ impl Compiler {
             self.compile_expr_dst(expr, dst);
         }
 
-        self.add_instr_ranged(&[expr.range()], Instr::NewList { seq, dst: *dst });
+        let instr = Instr::new(Opcode::NewList)
+            .with_reg_seq(seq)
+            .with_reg_c(*dst);
+        self.add_instr_ranged(&[expr.range()], instr);
         self.regs.free_seq(seq);
     }
 
@@ -264,7 +294,10 @@ impl Compiler {
             }
         }
 
-        self.add_instr_ranged(&[expr.range()], Instr::NewMap { seq, dst: *dst });
+        let instr = Instr::new(Opcode::NewMap)
+            .with_reg_seq(seq)
+            .with_reg_c(*dst);
+        self.add_instr_ranged(&[expr.range()], instr);
         self.regs.free_seq(seq);
     }
 
@@ -283,7 +316,8 @@ impl Compiler {
             self.compile_expr_dst(expr, dst);
         }
 
-        self.add_instr_ranged(&[range, fn_range], Instr::Call { seq, dst: *dst });
+        let instr = Instr::new(Opcode::Call).with_reg_seq(seq).with_reg_c(*dst);
+        self.add_instr_ranged(&[range, fn_range], instr);
         self.regs.free_seq(seq);
     }
 
@@ -298,13 +332,13 @@ impl Compiler {
             self.compile_expr(expr, &mut cond);
         }
 
-        let start = self.instrs.add(Instr::Nop);
+        let start = self.instrs.add(Instr::new(Opcode::Nop));
 
         if let Some(expr) = expr.if_false() {
             self.compile_expr_dst(expr, *dst);
         }
 
-        let mid = self.instrs.add(Instr::Nop);
+        let mid = self.instrs.add(Instr::new(Opcode::Nop));
 
         if let Some(expr) = expr.if_true() {
             self.compile_expr_dst(expr, *dst);
@@ -313,10 +347,14 @@ impl Compiler {
         let end = self.instrs.next_idx();
 
         let offset = mid - start;
-        self.instrs.set(start, Instr::JumpIfTrue { cond, offset });
+        let instr = Instr::new(Opcode::JumpIfTrue)
+            .with_reg_a(cond)
+            .with_offset(offset);
+        self.instrs.set(start, instr);
 
         let offset = end - mid - 1;
-        self.instrs.set(mid, Instr::Jump { offset });
+        let instr = Instr::new(Opcode::Jump).with_offset(offset);
+        self.instrs.set(mid, instr);
     }
 
     fn compile_expr_let_in(&mut self, expr: ExprLetIn, dst: &mut RegId) {
@@ -366,29 +404,32 @@ impl Compiler {
                 self.compile_pat(pat.clone(), src, &mut cond);
             }
 
-            let jump_idx = self.instrs.add(Instr::Nop);
+            let jump_idx = self.instrs.add(Instr::new(Opcode::Nop));
             let start_idx = self.instrs.next_idx();
 
             if let Some(expr) = case.expr() {
                 self.compile_expr_dst(expr, *dst);
             }
 
-            holes.push(self.instrs.add(Instr::Nop));
+            holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
 
             let end_idx = self.instrs.next_idx();
             let offset = end_idx - start_idx;
 
-            let instr = Instr::JumpIfFalse { offset, cond };
+            let instr = Instr::new(Opcode::JumpIfFalse)
+                .with_reg_a(cond)
+                .with_offset(offset);
             self.instrs.set(jump_idx, instr);
 
             self.pop_scope();
         }
 
-        let end_idx = self.instrs.add(Instr::Panic);
+        let end_idx = self.instrs.add(Instr::new(Opcode::Panic));
 
         for hole in holes {
             let offset = end_idx - hole;
-            self.instrs.set(hole, Instr::Jump { offset });
+            let instr = Instr::new(Opcode::Jump).with_offset(offset);
+            self.instrs.set(hole, instr);
         }
 
         self.regs.free(src_tmp);
@@ -409,7 +450,7 @@ impl Compiler {
         self.compile_args(args);
         let mut dst = self.regs.alloc();
         self.compile_expr(body, &mut dst);
-        self.instrs.add(Instr::Ret { arg: dst });
+        self.instrs.add(Instr::new(Opcode::Ret).with_reg_a(dst));
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut RegId) {
@@ -460,12 +501,11 @@ impl Compiler {
     ) {
         let lhs = *dst;
         self.compile_const(range, value, lhs);
-        self.instrs.add(Instr::BinOp {
-            op: BinOp::Eq,
-            lhs,
-            rhs: src,
-            dst: *dst,
-        });
+        let instr = Instr::new(Opcode::OpEq)
+            .with_reg_a(lhs)
+            .with_reg_b(src)
+            .with_reg_c(*dst);
+        self.instrs.add(instr);
     }
 
     fn compile_pat_int(&mut self, pat: PatInt, src: RegId, dst: &mut RegId) {

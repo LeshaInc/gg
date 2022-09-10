@@ -5,100 +5,181 @@ use super::reg::{RegId, RegSeq};
 use super::ConstId;
 pub use crate::syntax::{BinOp, UnOp};
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub enum Instr {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Opcode {
     Nop,
     Panic,
-    LoadConst {
-        src: ConstId,
-        dst: RegId,
-    },
-    Copy {
-        src: RegId,
-        dst: RegId,
-    },
-    NewList {
-        seq: RegSeq,
-        dst: RegId,
-    },
-    NewMap {
-        seq: RegSeq,
-        dst: RegId,
-    },
-    Jump {
-        offset: InstrOffset,
-    },
-    JumpIfTrue {
-        cond: RegId,
-        offset: InstrOffset,
-    },
-    JumpIfFalse {
-        cond: RegId,
-        offset: InstrOffset,
-    },
-    BinOp {
-        op: BinOp,
-        lhs: RegId,
-        rhs: RegId,
-        dst: RegId,
-    },
-    UnOp {
-        op: UnOp,
-        arg: RegId,
-        dst: RegId,
-    },
-    Call {
-        seq: RegSeq,
-        dst: RegId,
-    },
-    Ret {
-        arg: RegId,
-    },
+    LoadConst,
+    Copy,
+    NewList,
+    NewMap,
+    Jump,
+    JumpIfTrue,
+    JumpIfFalse,
+    Call,
+    Ret,
+
+    OpOr,
+    OpCoalesce,
+    OpAnd,
+    OpLt,
+    OpLe,
+    OpEq,
+    OpNeq,
+    OpGe,
+    OpGt,
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpRem,
+    OpPow,
+    OpIndex,
+    OpIndexNullable,
+
+    UnOpNeg,
+    UnOpNot,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Operand {
+    None,
+    ConstId,
+    RegA,
+    RegB,
+    RegC,
+    RegSeq,
+    Offset,
+}
+
+impl Opcode {
+    pub fn operands(self) -> [Operand; 3] {
+        use Opcode::*;
+        use Operand::*;
+        match self {
+            Nop | Panic => [None; 3],
+            LoadConst => [ConstId, RegB, None],
+            Copy => [RegA, RegB, None],
+            NewList | NewMap => [RegSeq, RegC, None],
+            Jump => [Offset, None, None],
+            JumpIfTrue | JumpIfFalse => [RegA, Offset, None],
+            Call => [RegSeq, RegC, None],
+            Ret => [RegA, None, None],
+            OpOr | OpCoalesce | OpAnd | OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd
+            | OpSub | OpMul | OpDiv | OpRem | OpPow | OpIndex | OpIndexNullable => {
+                [RegA, RegB, RegC]
+            }
+            UnOpNeg | UnOpNot => [RegA, RegB, None],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct Instr {
+    pub opcode: Opcode,
+    pub operands: [u16; 3],
+}
+
+impl Instr {
+    pub fn new(opcode: Opcode) -> Self {
+        Self {
+            opcode,
+            operands: [0; 3],
+        }
+    }
+
+    pub fn const_id(self) -> ConstId {
+        ConstId(self.operands[0])
+    }
+
+    pub fn with_const_id(mut self, id: ConstId) -> Self {
+        self.operands[0] = id.0;
+        self
+    }
+
+    pub fn offset(self) -> InstrOffset {
+        let hi = self.operands[1].to_le_bytes();
+        let lo = self.operands[2].to_le_bytes();
+        InstrOffset(i32::from_le_bytes([hi[0], hi[1], lo[0], lo[1]]))
+    }
+
+    pub fn with_offset(mut self, offset: InstrOffset) -> Self {
+        let ofs = offset.0.to_le_bytes();
+        self.operands[1] = u16::from_le_bytes([ofs[0], ofs[1]]);
+        self.operands[2] = u16::from_le_bytes([ofs[2], ofs[3]]);
+        self
+    }
+
+    pub fn reg_seq(self) -> RegSeq {
+        RegSeq {
+            base: RegId(self.operands[0]),
+            len: self.operands[1],
+        }
+    }
+
+    pub fn with_reg_seq(mut self, seq: RegSeq) -> Self {
+        self.operands[0] = seq.base.0;
+        self.operands[1] = seq.len;
+        self
+    }
+
+    pub fn reg_a(self) -> RegId {
+        RegId(self.operands[0])
+    }
+
+    pub fn with_reg_a(mut self, reg: RegId) -> Self {
+        self.operands[0] = reg.0;
+        self
+    }
+
+    pub fn reg_b(self) -> RegId {
+        RegId(self.operands[1])
+    }
+
+    pub fn with_reg_b(mut self, reg: RegId) -> Self {
+        self.operands[1] = reg.0;
+        self
+    }
+
+    pub fn reg_c(self) -> RegId {
+        RegId(self.operands[2])
+    }
+
+    pub fn with_reg_c(mut self, reg: RegId) -> Self {
+        self.operands[2] = reg.0;
+        self
+    }
 }
 
 impl Debug for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Instr::Nop => {
-                write!(f, "Nop")?;
+        write!(f, "{:11}", format!("{:?}", self.opcode))?;
+
+        let operands = self.opcode.operands();
+        if operands[0] == Operand::None {
+            return Ok(());
+        };
+
+        write!(f, " ")?;
+
+        for (i, operand) in operands.into_iter().enumerate() {
+            if operand == Operand::None {
+                break;
             }
-            Instr::Panic => {
-                write!(f, "Panic")?;
+            if i > 0 {
+                write!(f, ", ")?;
             }
-            Instr::LoadConst { src, dst } => {
-                write!(f, "LoadConst   {:?} -> {:?}", src, dst)?;
-            }
-            Instr::Copy { src, dst } => {
-                write!(f, "Copy        {:?} -> {:?}", src, dst)?;
-            }
-            Instr::NewList { seq, dst } => {
-                write!(f, "NewList     {:?} -> {:?}", seq, dst)?;
-            }
-            Instr::NewMap { seq, dst } => {
-                write!(f, "NewMap      {:?} -> {:?}", seq, dst)?;
-            }
-            Instr::Jump { offset } => {
-                write!(f, "Jump        {:?}", offset)?;
-            }
-            Instr::JumpIfTrue { cond, offset } => {
-                write!(f, "JumpIfTrue  {:?}, {:?}", cond, offset)?;
-            }
-            Instr::JumpIfFalse { cond, offset } => {
-                write!(f, "JumpIfFalse {:?}, {:?}", cond, offset)?;
-            }
-            Instr::BinOp { op, lhs, rhs, dst } => {
-                write!(f, "BinOp       {:?}({:?}, {:?}) -> {:?}", op, lhs, rhs, dst)?;
-            }
-            Instr::UnOp { op, arg, dst } => {
-                write!(f, "UnOp        {:?}({:?}) -> {:?}", op, arg, dst)?;
-            }
-            Instr::Call { seq, dst } => {
-                write!(f, "Call        {:?} -> {:?}", seq, dst)?;
-            }
-            Instr::Ret { arg } => {
-                write!(f, "Ret         {:?}", arg)?;
+            match operand {
+                Operand::ConstId => write!(f, "{:?}", self.const_id())?,
+                Operand::RegA => write!(f, "{:?}", self.reg_a(),)?,
+                Operand::RegB => write!(f, "{:?}", self.reg_b())?,
+                Operand::RegC => write!(f, "{:?}", self.reg_c())?,
+                Operand::RegSeq => write!(f, "{:?}", self.reg_seq())?,
+                Operand::Offset => write!(f, "{:?}", self.offset())?,
+                _ => {}
             }
         }
+
         Ok(())
     }
 }

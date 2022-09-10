@@ -219,7 +219,7 @@ macro_rules! add_bin_ops {
                 Some(($func).into())
             }
 
-            $lut[$lhs as usize][$rhs as usize][$op as usize] = operator;
+            $lut[$op as usize][$lhs as usize][$rhs as usize] = operator;
         }
         )*
     };
@@ -243,15 +243,15 @@ macro_rules! add_un_ops {
                 Some(($func).into())
             }
 
-            $lut[$val as usize][$op as usize] = operator;
+            $lut[$op as usize][$val as usize] = operator;
         }
         )*
     };
 }
 
-type BinOpLut = [[[BinOpFn; NUM_BIN_OPS]; NUM_TYPES]; NUM_TYPES];
+type BinOpLut = [[[BinOpFn; NUM_TYPES]; NUM_TYPES]; NUM_BIN_OPS];
 
-static BIN_OP_LUT: BinOpLut = build_bin_op_lut();
+const BIN_OP_LUT: BinOpLut = build_bin_op_lut();
 
 fn bin_op_err(_: &Value, _: &Value) -> Option<Value> {
     None
@@ -278,7 +278,7 @@ fn bin_op_map_idx_nullable(map: &Value, idx: &Value) -> Option<Value> {
 }
 
 const fn build_bin_op_lut() -> BinOpLut {
-    let mut lut: BinOpLut = [[[bin_op_err; NUM_BIN_OPS]; NUM_TYPES]; NUM_TYPES];
+    let mut lut: BinOpLut = [[[bin_op_err; NUM_TYPES]; NUM_TYPES]; NUM_BIN_OPS];
 
     let mut type_lhs = 0;
     while type_lhs < NUM_TYPES {
@@ -298,7 +298,7 @@ const fn build_bin_op_lut() -> BinOpLut {
                     bin_op,
                 };
 
-                lut[type_lhs][type_rhs][bin_op] = if bin_op == Eq as usize {
+                lut[bin_op][type_lhs][type_rhs] = if bin_op == Eq as usize {
                     bin_op_eq
                 } else if bin_op == Coalesce as usize && type_lhs == Null as usize {
                     bin_op_ret_b
@@ -327,20 +327,20 @@ const fn build_bin_op_lut() -> BinOpLut {
 }
 
 pub fn bin_op(op: BinOp, lhs: &Value, rhs: &Value) -> Option<Value> {
-    let func = BIN_OP_LUT[lhs.ty() as usize][rhs.ty() as usize][op as usize];
+    let func = BIN_OP_LUT[op as usize][lhs.ty() as usize][rhs.ty() as usize];
     func(lhs, rhs)
 }
 
-type UnOpLut = [[UnOpFn; NUM_UN_OPS]; NUM_TYPES];
+type UnOpLut = [[UnOpFn; NUM_TYPES]; NUM_UN_OPS];
 
-static UN_OP_LUT: UnOpLut = build_un_op_lut();
+const UN_OP_LUT: UnOpLut = build_un_op_lut();
 
 fn un_op_err(_: &Value) -> Option<Value> {
     None
 }
 
 const fn build_un_op_lut() -> UnOpLut {
-    let mut lut: UnOpLut = [[un_op_err; NUM_UN_OPS]; NUM_TYPES];
+    let mut lut: UnOpLut = [[un_op_err; NUM_TYPES]; NUM_UN_OPS];
 
     let mut type_val = 0;
     while type_val < NUM_TYPES {
@@ -364,6 +364,6 @@ const fn build_un_op_lut() -> UnOpLut {
 }
 
 pub fn un_op(op: UnOp, value: &Value) -> Option<Value> {
-    let func = UN_OP_LUT[value.ty() as usize][op as usize];
+    let func = UN_OP_LUT[op as usize][value.ty() as usize];
     func(value)
 }
