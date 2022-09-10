@@ -1,13 +1,15 @@
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Write};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use indenter::indented;
 
 use crate::syntax::TextRange;
-use crate::vm::{CompiledConsts, CompiledInstrs};
+use crate::vm::{CompiledConsts, CompiledInstrs, InstrIdx};
 use crate::Source;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone)]
 pub struct Func {
     pub slots: u16,
     pub instrs: CompiledInstrs,
@@ -41,10 +43,10 @@ impl Debug for Func {
                 writeln!(f)?;
             }
 
-            write!(f, "{:20}", format!("{:?}", instr))?;
+            write!(f, "{:35}", format!("{:?}", instr))?;
 
             let (di, ranges) = match &self.debug_info {
-                Some(di) => match di.instruction_ranges.get(i) {
+                Some(di) => match di.instruction_ranges.get(&InstrIdx(i as u32)) {
                     Some(ranges) if !ranges.is_empty() => (di, ranges),
                     _ => continue,
                 },
@@ -67,12 +69,28 @@ impl Debug for Func {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+impl PartialEq for Func {
+    fn eq(&self, other: &Self) -> bool {
+        self.slots == other.slots && self.instrs == other.instrs && self.consts == other.consts
+    }
+}
+
+impl Eq for Func {}
+
+impl Hash for Func {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.slots.hash(state);
+        self.instrs.hash(state);
+        self.consts.hash(state);
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct DebugInfo {
     pub source: Arc<Source>,
     pub range: TextRange,
     pub name: Option<String>,
-    pub instruction_ranges: Vec<Vec<TextRange>>,
+    pub instruction_ranges: HashMap<InstrIdx, Vec<TextRange>>,
 }
 
 impl DebugInfo {
@@ -81,7 +99,7 @@ impl DebugInfo {
             source,
             range: TextRange::default(),
             name: None,
-            instruction_ranges: Vec::new(),
+            instruction_ranges: HashMap::new(),
         }
     }
 }

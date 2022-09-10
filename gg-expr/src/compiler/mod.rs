@@ -11,7 +11,7 @@ use self::scope::ScopeStack;
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::*;
 use crate::vm::*;
-use crate::{Func, Source, Value};
+use crate::{DebugInfo, Func, Source, Value};
 
 pub struct Compiler {
     regs: RegAlloc,
@@ -19,7 +19,7 @@ pub struct Compiler {
     consts: Consts,
     scopes: ScopeStack,
     diagnostics: Vec<Diagnostic>,
-    source: Arc<Source>,
+    debug_info: DebugInfo,
 }
 
 impl Compiler {
@@ -30,7 +30,7 @@ impl Compiler {
             consts: Default::default(),
             scopes: Default::default(),
             diagnostics: Default::default(),
-            source,
+            debug_info: DebugInfo::new(source),
         }
     }
 
@@ -50,13 +50,25 @@ impl Compiler {
 
     fn add_simple_error(&mut self, range: TextRange, message: &str, label: &str) {
         self.add_error(Diagnostic::new(Severity::Error, message).with_source(
-            SourceComponent::new(self.source.clone()).with_label(Severity::Error, range, label),
+            SourceComponent::new(self.debug_info.source.clone()).with_label(
+                Severity::Error,
+                range,
+                label,
+            ),
         ))
     }
 
-    fn compile_const(&mut self, value: impl Into<Value>, dst: RegId) {
+    fn add_instr_ranged(&mut self, ranges: &[TextRange], instr: Instr) -> InstrIdx {
+        let idx = self.instrs.add(instr);
+        self.debug_info
+            .instruction_ranges
+            .insert(idx, ranges.into());
+        idx
+    }
+
+    fn compile_const(&mut self, range: TextRange, value: impl Into<Value>, dst: RegId) {
         let src = self.consts.add(value.into());
-        self.instrs.add(Instr::LoadConst { src, dst });
+        self.add_instr_ranged(&[range], Instr::LoadConst { src, dst });
     }
 
     fn compile_expr(&mut self, expr: Expr, dst: &mut RegId) {
@@ -89,28 +101,28 @@ impl Compiler {
         }
     }
 
-    fn compile_expr_null(&mut self, _expr: ExprNull, dst: &mut RegId) {
-        self.compile_const(Value::null(), *dst)
+    fn compile_expr_null(&mut self, expr: ExprNull, dst: &mut RegId) {
+        self.compile_const(expr.range(), Value::null(), *dst)
     }
 
     fn compile_expr_bool(&mut self, expr: ExprBool, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, *dst)
+        self.compile_const(expr.range(), value, *dst)
     }
 
     fn compile_expr_int(&mut self, expr: ExprInt, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, *dst)
+        self.compile_const(expr.range(), value, *dst)
     }
 
     fn compile_expr_float(&mut self, expr: ExprFloat, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, *dst)
+        self.compile_const(expr.range(), value, *dst)
     }
 
     fn compile_expr_string(&mut self, expr: ExprString, dst: &mut RegId) {
         let value = expr.value().unwrap_or_default();
-        self.compile_const(value, *dst)
+        self.compile_const(expr.range(), value, *dst)
     }
 
     fn compile_expr_binding(&mut self, expr: ExprBinding, dst: &mut RegId) {
@@ -155,7 +167,7 @@ impl Compiler {
         }
 
         let message = format!("cannot find binding `{}`", ident.name());
-        let source = self.source.clone();
+        let source = self.debug_info.source.clone();
         let source =
             SourceComponent::new(source).with_label(Severity::Error, range, "no such binding");
         let mut diagnostic = Diagnostic::new(Severity::Error, message).with_source(source);
@@ -168,12 +180,16 @@ impl Compiler {
     }
 
     fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut RegId) {
+        let range = expr.range();
+        let mut lhs_range = range;
         let mut lhs = *dst;
 
         if let Some(expr) = expr.lhs() {
+            lhs_range = expr.range();
             self.compile_expr(expr, &mut lhs);
         }
 
+        let mut rhs_range = range;
         let mut rhs = *dst;
         let mut rhs_temp = None;
         if lhs == rhs {
@@ -182,6 +198,7 @@ impl Compiler {
         }
 
         if let Some(expr) = expr.rhs() {
+            rhs_range = expr.range();
             self.compile_expr(expr, &mut rhs);
         }
 
@@ -189,22 +206,28 @@ impl Compiler {
             self.regs.free(reg);
         }
 
-        self.instrs.add(Instr::BinOp {
-            op: expr.op().unwrap_or(BinOp::Add),
-            lhs,
-            rhs,
-            dst: *dst,
-        });
+        self.add_instr_ranged(
+            &[expr.range(), lhs_range, rhs_range],
+            Instr::BinOp {
+                op: expr.op().unwrap_or(BinOp::Add),
+                lhs,
+                rhs,
+                dst: *dst,
+            },
+        );
     }
 
     fn compile_expr_unary(&mut self, expr: ExprUnary, dst: &mut RegId) {
+        let range = expr.range();
+        let mut arg_range = expr.range();
         let mut arg = *dst;
         if let Some(expr) = expr.expr() {
+            arg_range = expr.range();
             self.compile_expr(expr, &mut arg);
         }
 
         let op = expr.op().unwrap_or(UnOp::Neg);
-        self.instrs.add(Instr::UnOp { op, arg, dst: *dst });
+        self.add_instr_ranged(&[range, arg_range], Instr::UnOp { op, arg, dst: *dst });
     }
 
     fn compile_expr_grouped(&mut self, expr: ExprGrouped, dst: &mut RegId) {
@@ -221,7 +244,7 @@ impl Compiler {
             self.compile_expr_dst(expr, dst);
         }
 
-        self.instrs.add(Instr::NewList { seq, dst: *dst });
+        self.add_instr_ranged(&[expr.range()], Instr::NewList { seq, dst: *dst });
         self.regs.free_seq(seq);
     }
 
@@ -233,7 +256,7 @@ impl Compiler {
             if let Some(expr) = pair.key_expr() {
                 self.compile_expr_dst(expr, dst);
             } else if let Some(ident) = pair.key_ident() {
-                self.compile_const(ident.name(), dst);
+                self.compile_const(ident.range(), ident.name(), dst);
             }
 
             if let Some(expr) = pair.value() {
@@ -241,15 +264,18 @@ impl Compiler {
             }
         }
 
-        self.instrs.add(Instr::NewMap { seq, dst: *dst });
+        self.add_instr_ranged(&[expr.range()], Instr::NewMap { seq, dst: *dst });
         self.regs.free_seq(seq);
     }
 
     fn compile_expr_call(&mut self, expr: ExprCall, dst: &mut RegId) {
+        let range = expr.range();
+        let mut fn_range = range;
         let arity = expr.args().count() as u16;
         let seq = self.regs.alloc_seq(arity + 1);
 
         if let Some(expr) = expr.func() {
+            fn_range = expr.range();
             self.compile_expr_dst(expr, seq.base);
         }
 
@@ -257,7 +283,7 @@ impl Compiler {
             self.compile_expr_dst(expr, dst);
         }
 
-        self.instrs.add(Instr::Call { seq, dst: *dst });
+        self.add_instr_ranged(&[range, fn_range], Instr::Call { seq, dst: *dst });
         self.regs.free_seq(seq);
     }
 
@@ -387,7 +413,7 @@ impl Compiler {
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut RegId) {
-        let mut compiler = Compiler::new(self.source.clone());
+        let mut compiler = Compiler::new(self.debug_info.source.clone());
 
         if let Some(body) = expr.expr() {
             compiler.compile_fn(expr.args(), body);
@@ -395,7 +421,7 @@ impl Compiler {
 
         let mut res = compiler.finish();
         self.diagnostics.append(&mut res.diagnostics);
-        self.compile_const(res.func, *dst)
+        self.compile_const(expr.range(), res.func, *dst)
     }
 
     fn compile_pat(&mut self, pat: Pat, src: RegId, dst: &mut RegId) {
@@ -425,9 +451,15 @@ impl Compiler {
         todo!()
     }
 
-    fn compile_pat_const_eq(&mut self, value: impl Into<Value>, src: RegId, dst: &mut RegId) {
+    fn compile_pat_const_eq(
+        &mut self,
+        range: TextRange,
+        value: impl Into<Value>,
+        src: RegId,
+        dst: &mut RegId,
+    ) {
         let lhs = *dst;
-        self.compile_const(value, lhs);
+        self.compile_const(range, value, lhs);
         self.instrs.add(Instr::BinOp {
             op: BinOp::Eq,
             lhs,
@@ -438,13 +470,13 @@ impl Compiler {
 
     fn compile_pat_int(&mut self, pat: PatInt, src: RegId, dst: &mut RegId) {
         if let Some(value) = pat.value() {
-            self.compile_pat_const_eq(value, src, dst);
+            self.compile_pat_const_eq(pat.range(), value, src, dst);
         }
     }
 
     fn compile_pat_string(&mut self, pat: PatString, src: RegId, dst: &mut RegId) {
         if let Some(value) = pat.value() {
-            self.compile_pat_const_eq(value, src, dst);
+            self.compile_pat_const_eq(pat.range(), value, src, dst);
         }
     }
 
@@ -456,15 +488,15 @@ impl Compiler {
         );
     }
 
-    fn compile_pat_hole(&mut self, _pat: PatHole, _src: RegId, dst: &mut RegId) {
-        self.compile_const(true, *dst)
+    fn compile_pat_hole(&mut self, pat: PatHole, _src: RegId, dst: &mut RegId) {
+        self.compile_const(pat.range(), true, *dst)
     }
 
     fn compile_pat_binding(&mut self, pat: PatBinding, src: RegId, dst: &mut RegId) {
         if let Some(pat) = pat.pat() {
             self.compile_pat(pat, src, dst);
         } else {
-            self.compile_const(true, *dst)
+            self.compile_const(pat.range(), true, *dst)
         }
 
         if let Some(ident) = pat.ident() {
@@ -478,7 +510,7 @@ impl Compiler {
                 slots: self.regs.slots(),
                 instrs: self.instrs.compile(),
                 consts: self.consts.compile(),
-                debug_info: None,
+                debug_info: Some(Arc::new(self.debug_info)),
             },
             diagnostics: self.diagnostics,
         }

@@ -59,24 +59,47 @@ pub enum Instr {
 impl Debug for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Instr::Nop => write!(f, "Nop"),
-            Instr::Panic => write!(f, "Panic"),
-            Instr::LoadConst { src, dst } => write!(f, "LoadConst\t{:?} -> {:?}", src, dst),
-            Instr::Copy { src, dst } => write!(f, "Copy\t{:?} -> {:?}", src, dst),
-            Instr::NewList { seq, dst } => write!(f, "NewList\t{:?} -> {:?}", seq, dst),
-            Instr::NewMap { seq, dst } => write!(f, "NewMap\t{:?} -> {:?}", seq, dst),
-            Instr::Jump { offset } => write!(f, "Jump\t{:?}", offset),
-            Instr::JumpIfTrue { cond, offset } => write!(f, "JumpIfTrue\t{:?}, {:?}", cond, offset),
+            Instr::Nop => {
+                write!(f, "Nop")?;
+            }
+            Instr::Panic => {
+                write!(f, "Panic")?;
+            }
+            Instr::LoadConst { src, dst } => {
+                write!(f, "LoadConst   {:?} -> {:?}", src, dst)?;
+            }
+            Instr::Copy { src, dst } => {
+                write!(f, "Copy        {:?} -> {:?}", src, dst)?;
+            }
+            Instr::NewList { seq, dst } => {
+                write!(f, "NewList     {:?} -> {:?}", seq, dst)?;
+            }
+            Instr::NewMap { seq, dst } => {
+                write!(f, "NewMap      {:?} -> {:?}", seq, dst)?;
+            }
+            Instr::Jump { offset } => {
+                write!(f, "Jump        {:?}", offset)?;
+            }
+            Instr::JumpIfTrue { cond, offset } => {
+                write!(f, "JumpIfTrue  {:?}, {:?}", cond, offset)?;
+            }
             Instr::JumpIfFalse { cond, offset } => {
-                write!(f, "JumpIfFalse\t{:?}, {:?}", cond, offset)
+                write!(f, "JumpIfFalse {:?}, {:?}", cond, offset)?;
             }
             Instr::BinOp { op, lhs, rhs, dst } => {
-                write!(f, "BinOp\t{:?}({:?}, {:?}) -> {:?}", op, lhs, rhs, dst)
+                write!(f, "BinOp       {:?}({:?}, {:?}) -> {:?}", op, lhs, rhs, dst)?;
             }
-            Instr::UnOp { op, arg, dst } => write!(f, "UnOp\t{:?}({:?}) -> {:?}", op, arg, dst),
-            Instr::Call { seq, dst } => write!(f, "Call\t{:?} -> {:?}", seq, dst),
-            Instr::Ret { arg } => write!(f, "Ret\t{:?}", arg),
+            Instr::UnOp { op, arg, dst } => {
+                write!(f, "UnOp        {:?}({:?}) -> {:?}", op, arg, dst)?;
+            }
+            Instr::Call { seq, dst } => {
+                write!(f, "Call        {:?} -> {:?}", seq, dst)?;
+            }
+            Instr::Ret { arg } => {
+                write!(f, "Ret         {:?}", arg)?;
+            }
         }
+        Ok(())
     }
 }
 

@@ -79,11 +79,11 @@ impl SourceText {
         let end_line_idx = lines.end - 1;
         let end_line_range = self.lines[end_line_idx as usize];
         let mut end_line = self.line_text(end_line_idx);
-        end_line.truncate((range.end() - end_line_range.end()).into());
+        end_line.truncate((range.end() - end_line_range.start()).into());
         let end_col = end_line.chars().count();
         let end = LineColPos {
             line: end_line_idx + 1,
-            col: end_col as u32,
+            col: (end_col as u32).max(end_line_idx + 1),
         };
 
         LineColRange { start, end }
