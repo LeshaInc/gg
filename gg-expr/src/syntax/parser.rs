@@ -598,11 +598,11 @@ fn postfix_bp(token: SyntaxKind) -> Option<u8> {
     })
 }
 
-pub fn int_value(text: &str) -> Option<i64> {
+pub fn int_value(text: &str) -> Option<i32> {
     text.parse().ok()
 }
 
-pub fn float_value(text: &str) -> Option<f64> {
+pub fn float_value(text: &str) -> Option<f32> {
     text.parse().ok()
 }
 

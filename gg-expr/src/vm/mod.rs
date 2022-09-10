@@ -8,7 +8,7 @@ pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opco
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::syntax::{BinOp, UnOp};
-use crate::{Error, Func, FuncValue, Result, Value};
+use crate::{Error, Func, Result, Value};
 
 #[derive(Debug, Default)]
 pub struct Vm {
@@ -37,11 +37,10 @@ impl Vm {
     }
 
     pub fn eval(&mut self, func: &Value, args: &[&Value]) -> Result<Value> {
-        let func = FuncValue::try_from(func.clone()).unwrap();
-        let mut rem_slots = func.slots;
+        let mut rem_slots = func.as_func().unwrap().slots;
 
         self.stack.push(Value::null());
-        self.stack.push(func.into());
+        self.stack.push(func.clone());
 
         for &arg in args {
             self.stack.push(arg.clone());

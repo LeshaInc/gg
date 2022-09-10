@@ -71,20 +71,20 @@ macro_rules! add_bin_ops {
         (Int, Int, Add) => |x, y| {
             let (x, y) = (as_int!(x), as_int!(y));
             x.checked_add(y).map(Value::from)
-                .unwrap_or_else(|| ((x as f64) + (y as f64)).into())
+                .unwrap_or_else(|| ((x as f32) + (y as f32)).into())
         },
         (Int, Int, Sub) => |x, y| {
             let (x, y) = (as_int!(x), as_int!(y));
             x.checked_sub(y).map(Value::from)
-                .unwrap_or_else(|| ((x as f64) - (y as f64)).into())
+                .unwrap_or_else(|| ((x as f32) - (y as f32)).into())
         },
         (Int, Int, Mul) => |x, y| {
             let (x, y) = (as_int!(x), as_int!(y));
             x.checked_mul(y).map(Value::from)
-                .unwrap_or_else(|| ((x as f64) * (y as f64)).into())
+                .unwrap_or_else(|| ((x as f32) * (y as f32)).into())
         },
         (Int, Int, Div) => |x, y| {
-            (as_int!(x) as f64) / (as_int!(y) as f64)
+            (as_int!(x) as f32) / (as_int!(y) as f32)
         },
         (Int, Int, Rem) => |x, y| {
             as_int!(x).wrapping_rem(as_int!(y))
@@ -94,25 +94,25 @@ macro_rules! add_bin_ops {
             if y > 0 {
                 let y = y.min(i32::MAX.into()) as u32;
                 x.checked_pow(y).map(Value::from)
-                    .unwrap_or_else(|| ((x as f64).powi(y as i32)).into())
+                    .unwrap_or_else(|| ((x as f32).powi(y as i32)).into())
             } else {
-                (x as f64).powf(y as f64).into()
+                (x as f32).powf(y as f32).into()
             }
         },
 
-        (Int, Float, Add) => |x, y| (as_int!(x) as f64) + as_float!(y),
-        (Int, Float, Sub) => |x, y| (as_int!(x) as f64) - as_float!(y),
-        (Int, Float, Mul) => |x, y| (as_int!(x) as f64) * as_float!(y),
-        (Int, Float, Div) => |x, y| (as_int!(x) as f64) / as_float!(y),
-        (Int, Float, Rem) => |x, y| (as_int!(x) as f64) % as_float!(y),
-        (Int, Float, Pow) => |x, y| (as_int!(x) as f64).powf(as_float!(y)),
+        (Int, Float, Add) => |x, y| (as_int!(x) as f32) + as_float!(y),
+        (Int, Float, Sub) => |x, y| (as_int!(x) as f32) - as_float!(y),
+        (Int, Float, Mul) => |x, y| (as_int!(x) as f32) * as_float!(y),
+        (Int, Float, Div) => |x, y| (as_int!(x) as f32) / as_float!(y),
+        (Int, Float, Rem) => |x, y| (as_int!(x) as f32) % as_float!(y),
+        (Int, Float, Pow) => |x, y| (as_int!(x) as f32).powf(as_float!(y)),
 
-        (Float, Int, Add) => |x, y| as_float!(x) + (as_int!(y) as f64),
-        (Float, Int, Sub) => |x, y| as_float!(x) - (as_int!(y) as f64),
-        (Float, Int, Mul) => |x, y| as_float!(x) * (as_int!(y) as f64),
-        (Float, Int, Div) => |x, y| as_float!(x) / (as_int!(y) as f64),
-        (Float, Int, Rem) => |x, y| as_float!(x) % (as_int!(y) as f64),
-        (Float, Int, Pow) => |x, y| as_float!(x).powf(as_int!(y) as f64),
+        (Float, Int, Add) => |x, y| as_float!(x) + (as_int!(y) as f32),
+        (Float, Int, Sub) => |x, y| as_float!(x) - (as_int!(y) as f32),
+        (Float, Int, Mul) => |x, y| as_float!(x) * (as_int!(y) as f32),
+        (Float, Int, Div) => |x, y| as_float!(x) / (as_int!(y) as f32),
+        (Float, Int, Rem) => |x, y| as_float!(x) % (as_int!(y) as f32),
+        (Float, Int, Pow) => |x, y| as_float!(x).powf(as_int!(y) as f32),
 
         (Float, Float, Add) => |x, y| as_float!(x) + as_float!(y),
         (Float, Float, Sub) => |x, y| as_float!(x) - as_float!(y),
@@ -169,19 +169,19 @@ macro_rules! add_bin_ops {
         (Int, Int, Ge) => |x, y| as_int!(x) >= as_int!(y),
         (Int, Int, Gt) => |x, y| as_int!(x) > as_int!(y),
 
-        (Float, Int, Lt) => |x, y| as_float!(x) < (as_int!(y) as f64),
-        (Float, Int, Le) => |x, y| as_float!(x) <= (as_int!(y) as f64),
-        (Float, Int, Eq) => |x, y| as_float!(x) == (as_int!(y) as f64),
-        (Float, Int, Neq) => |x, y| as_float!(x) != (as_int!(y) as f64),
-        (Float, Int, Ge) => |x, y| as_float!(x) >= (as_int!(y) as f64),
-        (Float, Int, Gt) => |x, y| as_float!(x) > (as_int!(y) as f64),
+        (Float, Int, Lt) => |x, y| as_float!(x) < (as_int!(y) as f32),
+        (Float, Int, Le) => |x, y| as_float!(x) <= (as_int!(y) as f32),
+        (Float, Int, Eq) => |x, y| as_float!(x) == (as_int!(y) as f32),
+        (Float, Int, Neq) => |x, y| as_float!(x) != (as_int!(y) as f32),
+        (Float, Int, Ge) => |x, y| as_float!(x) >= (as_int!(y) as f32),
+        (Float, Int, Gt) => |x, y| as_float!(x) > (as_int!(y) as f32),
 
-        (Int, Float, Lt) => |x, y| (as_int!(x) as f64) < as_float!(y),
-        (Int, Float, Le) => |x, y| (as_int!(x) as f64) <= as_float!(y),
-        (Int, Float, Eq) => |x, y| (as_int!(x) as f64) == as_float!(y),
-        (Int, Float, Neq) => |x, y| (as_int!(x) as f64) != as_float!(y),
-        (Int, Float, Ge) => |x, y| (as_int!(x) as f64) >= as_float!(y),
-        (Int, Float, Gt) => |x, y| (as_int!(x) as f64) > as_float!(y),
+        (Int, Float, Lt) => |x, y| (as_int!(x) as f32) < as_float!(y),
+        (Int, Float, Le) => |x, y| (as_int!(x) as f32) <= as_float!(y),
+        (Int, Float, Eq) => |x, y| (as_int!(x) as f32) == as_float!(y),
+        (Int, Float, Neq) => |x, y| (as_int!(x) as f32) != as_float!(y),
+        (Int, Float, Ge) => |x, y| (as_int!(x) as f32) >= as_float!(y),
+        (Int, Float, Gt) => |x, y| (as_int!(x) as f32) > as_float!(y),
 
         (Float, Float, Lt) => |x, y| as_float!(x) < as_float!(y),
         (Float, Float, Le) => |x, y| as_float!(x) <= as_float!(y),

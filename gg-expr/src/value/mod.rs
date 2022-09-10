@@ -1,16 +1,16 @@
 mod func;
-mod thunk;
 
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::hint::unreachable_unchecked;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::{Acquire, Release};
 
 pub use self::func::{DebugInfo, Func};
-pub use self::thunk::Thunk;
-use crate::Error;
+
+pub type List = im::Vector<Value>;
+pub type Map = im::HashMap<Value, Value>;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Type {
@@ -20,27 +20,25 @@ pub enum Type {
     Bool = 3,
     String = 4,
     Func = 5,
-    Thunk = 6,
-    List = 7,
-    Map = 8,
+    List = 6,
+    Map = 7,
 }
 
 impl Type {
-    pub const VALUES: [Type; 9] = [
+    pub const VALUES: [Type; 8] = [
         Type::Null,
         Type::Int,
         Type::Float,
         Type::Bool,
         Type::String,
         Type::Func,
-        Type::Thunk,
         Type::List,
         Type::Map,
     ];
 
     fn is_heap(&self) -> bool {
         use Type::*;
-        matches!(self, String | Func | Thunk | List | Map)
+        matches!(self, String | Func | List | Map)
     }
 }
 
@@ -53,191 +51,323 @@ impl Debug for Type {
             Type::Bool => "bool",
             Type::String => "string",
             Type::Func => "func",
-            Type::Thunk => "thunk",
             Type::List => "list",
             Type::Map => "map",
         })
     }
 }
 
-pub struct Value {
-    ty: Type,
-    payload: Payload,
+const TAG_MASK: u64 = 7;
+
+#[repr(C)]
+#[cfg(target_pointer_width = "64")]
+pub union Value {
+    u64: u64,
+    ptr: *mut HeapValue,
+}
+
+#[repr(align(8))]
+struct HeapValue {
+    refcount: AtomicUsize,
+    payload: HeapPayload,
+}
+
+union HeapPayload {
+    string: ManuallyDrop<String>,
+    func: ManuallyDrop<Func>,
+    list: ManuallyDrop<List>,
+    map: ManuallyDrop<Map>,
 }
 
 impl Value {
-    fn new_heap(ty: Type, heap: HeapValue) -> Value {
-        Value {
-            ty,
-            payload: Payload {
-                heap: ManuallyDrop::new(Arc::new(heap)),
-            },
-        }
-    }
-
-    unsafe fn heap_make_mut(&mut self) -> &mut HeapValue {
-        Arc::make_mut(&mut self.payload.heap)
-    }
-
     pub fn null() -> Value {
-        Value {
-            ty: Type::Null,
-            payload: Payload { null: () },
-        }
-    }
-
-    pub fn ty(&self) -> Type {
-        self.ty
+        Value { u64: 0 }
     }
 
     pub fn is_null(&self) -> bool {
-        self.ty == Type::Null
+        self.ty() == Type::Null
+    }
+
+    pub fn ty(&self) -> Type {
+        match unsafe { self.u64 & TAG_MASK } {
+            0 => Type::Null,
+            1 => Type::Int,
+            2 => Type::Float,
+            3 => Type::Bool,
+            4 => Type::String,
+            5 => Type::Func,
+            6 => Type::List,
+            7 => Type::Map,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    }
+
+    // int
+
+    pub fn from_int(v: i32) -> Value {
+        Value {
+            u64: (v as u64) << 32 | (Type::Int as u64),
+        }
     }
 
     pub fn is_int(&self) -> bool {
-        self.ty == Type::Int
+        self.ty() == Type::Int
     }
 
-    pub fn as_int(&self) -> Result<i64, FromValueError> {
-        self.try_into()
-    }
-
-    pub fn is_float(&self) -> bool {
-        self.ty == Type::Float
-    }
-
-    pub fn as_float(&self) -> Result<f64, FromValueError> {
-        self.try_into()
-    }
-
-    pub fn is_bool(&self) -> bool {
-        self.ty == Type::Bool
-    }
-
-    pub fn as_bool(&self) -> Result<bool, FromValueError> {
-        self.try_into()
-    }
-
-    pub fn is_string(&self) -> bool {
-        self.ty == Type::String
-    }
-
-    pub fn as_string(&self) -> Result<&str, FromValueError> {
-        self.try_into()
-    }
-
-    pub fn is_func(&self) -> bool {
-        self.ty == Type::Func
-    }
-
-    pub fn as_func(&self) -> Result<&Func, FromValueError> {
-        self.try_into()
-    }
-
-    pub fn as_func_mut(&mut self) -> Result<&mut Func, FromValueError> {
-        if self.ty == Type::Func {
-            match unsafe { self.heap_make_mut() } {
-                HeapValue::Func(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
+    pub fn as_int(&self) -> Result<i32, FromValueError> {
+        if self.is_int() {
+            unsafe { Ok((self.u64 >> 32) as i32) }
         } else {
             Err(FromValueError {
-                expected: Type::Func,
-                got: self.ty,
+                expected: Type::Int,
+                got: self.ty(),
             })
         }
     }
 
-    pub fn is_thunk(&self) -> bool {
-        self.ty == Type::Thunk
+    // float
+
+    pub fn from_float(v: f32) -> Value {
+        Value {
+            u64: u64::from(v.to_bits()) << 32 | (Type::Float as u64),
+        }
     }
 
-    pub fn as_thunk(&self) -> Result<&Thunk, FromValueError> {
-        self.try_into()
+    pub fn is_float(&self) -> bool {
+        self.ty() == Type::Float
     }
 
-    pub fn is_list(&self) -> bool {
-        self.ty == Type::List
+    pub fn as_float(&self) -> Result<f32, FromValueError> {
+        if self.is_float() {
+            unsafe { Ok(f32::from_bits((self.u64 >> 32) as u32)) }
+        } else {
+            Err(FromValueError {
+                expected: Type::Float,
+                got: self.ty(),
+            })
+        }
     }
 
-    pub fn as_list(&self) -> Result<&im::Vector<Value>, FromValueError> {
-        self.try_into()
+    // bool
+
+    pub fn from_bool(v: bool) -> Value {
+        Value {
+            u64: (v as u64) << 32 | (Type::Bool as u64),
+        }
     }
 
-    pub fn is_map(&self) -> bool {
-        self.ty == Type::Map
+    pub fn is_bool(&self) -> bool {
+        self.ty() == Type::Bool
     }
 
-    pub fn as_map(&self) -> Result<&im::HashMap<Value, Value>, FromValueError> {
-        self.try_into()
+    pub fn as_bool(&self) -> Result<bool, FromValueError> {
+        if self.is_bool() {
+            unsafe { Ok((self.u64 >> 32) != 0) }
+        } else {
+            Err(FromValueError {
+                expected: Type::Bool,
+                got: self.ty(),
+            })
+        }
     }
 
     pub fn is_truthy(&self) -> bool {
         !self.is_null() && self.as_bool() != Ok(false)
     }
 
-    pub fn force_eval(&self) -> Result<(), Error> {
-        if let Ok(thunk) = self.as_thunk() {
-            thunk.force_eval()?;
-        } else if let Ok(list) = self.as_list() {
-            for value in list.iter() {
-                value.force_eval()?;
-            }
-        } else if let Ok(map) = self.as_map() {
-            for value in map.values() {
-                value.force_eval()?;
-            }
-        }
+    // heap
 
-        Ok(())
+    fn from_heap(ty: Type, heap: HeapValue) -> Value {
+        let mut v = Value {
+            ptr: Box::into_raw(Box::new(heap)),
+        };
+        unsafe {
+            v.u64 |= ty as u64;
+        }
+        v
+    }
+
+    fn is_heap(&self) -> bool {
+        self.ty().is_heap()
+    }
+
+    unsafe fn get_heap(&self) -> &HeapValue {
+        let mut v = ManuallyDrop::new(std::ptr::read(self));
+        v.u64 &= !TAG_MASK;
+        &*v.ptr
+    }
+
+    unsafe fn get_heap_mut(&mut self) -> &mut HeapValue {
+        let mut v = ManuallyDrop::new(std::ptr::read(self));
+        v.u64 &= !TAG_MASK;
+        &mut *v.ptr
+    }
+
+    // string
+
+    pub fn from_string(string: String) -> Value {
+        Value::from_heap(
+            Type::String,
+            HeapValue {
+                refcount: AtomicUsize::new(1),
+                payload: HeapPayload {
+                    string: ManuallyDrop::new(string),
+                },
+            },
+        )
+    }
+
+    pub fn is_string(&self) -> bool {
+        self.ty() == Type::String
+    }
+
+    pub fn as_string(&self) -> Result<&str, FromValueError> {
+        if self.is_string() {
+            unsafe { Ok(&self.get_heap().payload.string) }
+        } else {
+            Err(FromValueError {
+                expected: Type::String,
+                got: self.ty(),
+            })
+        }
+    }
+
+    // func
+
+    pub fn from_func(func: Func) -> Value {
+        Value::from_heap(
+            Type::Func,
+            HeapValue {
+                refcount: AtomicUsize::new(1),
+                payload: HeapPayload {
+                    func: ManuallyDrop::new(func),
+                },
+            },
+        )
+    }
+
+    pub fn is_func(&self) -> bool {
+        self.ty() == Type::Func
+    }
+
+    pub fn as_func(&self) -> Result<&Func, FromValueError> {
+        if self.is_func() {
+            unsafe { Ok(&self.get_heap().payload.func) }
+        } else {
+            Err(FromValueError {
+                expected: Type::Func,
+                got: self.ty(),
+            })
+        }
+    }
+
+    // list
+
+    pub fn from_list(list: List) -> Value {
+        Value::from_heap(
+            Type::List,
+            HeapValue {
+                refcount: AtomicUsize::new(1),
+                payload: HeapPayload {
+                    list: ManuallyDrop::new(list),
+                },
+            },
+        )
+    }
+
+    pub fn is_list(&self) -> bool {
+        self.ty() == Type::List
+    }
+
+    pub fn as_list(&self) -> Result<&List, FromValueError> {
+        if self.is_list() {
+            unsafe { Ok(&self.get_heap().payload.list) }
+        } else {
+            Err(FromValueError {
+                expected: Type::List,
+                got: self.ty(),
+            })
+        }
+    }
+
+    // list
+
+    pub fn from_map(map: Map) -> Value {
+        Value::from_heap(
+            Type::Map,
+            HeapValue {
+                refcount: AtomicUsize::new(1),
+                payload: HeapPayload {
+                    map: ManuallyDrop::new(map),
+                },
+            },
+        )
+    }
+
+    pub fn is_map(&self) -> bool {
+        self.ty() == Type::Map
+    }
+
+    pub fn as_map(&self) -> Result<&Map, FromValueError> {
+        if self.is_map() {
+            unsafe { Ok(&self.get_heap().payload.map) }
+        } else {
+            Err(FromValueError {
+                expected: Type::Map,
+                got: self.ty(),
+            })
+        }
     }
 }
 
 impl Clone for Value {
     fn clone(&self) -> Value {
         unsafe {
-            if self.ty.is_heap() {
-                clone_heap(self)
-            } else {
-                std::ptr::read(self)
+            if self.is_heap() {
+                self.get_heap().refcount.fetch_add(1, Acquire);
             }
+
+            std::ptr::read(self)
         }
-    }
-}
-
-unsafe fn clone_heap(value: &Value) -> Value {
-    let heap = &value.payload.heap;
-
-    Value {
-        ty: value.ty,
-        payload: Payload {
-            heap: ManuallyDrop::new(Arc::clone(heap)),
-        },
     }
 }
 
 impl Drop for Value {
     fn drop(&mut self) {
-        if self.ty.is_heap() {
-            unsafe { drop_heap(self) }
+        if !self.is_heap() {
+            return;
+        }
+
+        unsafe {
+            if self.get_heap().refcount.fetch_sub(1, Release) == 1 {
+                drop_slow(self)
+            }
         }
     }
 }
 
-unsafe fn drop_heap(value: &mut Value) {
-    ManuallyDrop::drop(&mut value.payload.heap)
+#[inline(never)]
+unsafe fn drop_slow(value: &mut Value) {
+    let ty = value.ty();
+    let payload = &mut value.get_heap_mut().payload;
+    match ty {
+        Type::Null | Type::Int | Type::Float | Type::Bool => unreachable_unchecked(),
+        Type::String => ManuallyDrop::drop(&mut payload.string),
+        Type::Func => ManuallyDrop::drop(&mut payload.func),
+        Type::List => ManuallyDrop::drop(&mut payload.list),
+        Type::Map => ManuallyDrop::drop(&mut payload.map),
+    }
 }
 
 impl Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.ty {
+        match self.ty() {
             Type::Null => f.write_str("null"),
             Type::Int => self.as_int().unwrap().fmt(f),
             Type::Float => self.as_float().unwrap().fmt(f),
             Type::Bool => self.as_bool().unwrap().fmt(f),
             Type::String => self.as_string().unwrap().fmt(f),
             Type::Func => self.as_func().unwrap().fmt(f),
-            Type::Thunk => self.as_thunk().unwrap().fmt(f),
             Type::List => self.as_list().unwrap().fmt(f),
             Type::Map => fmt_map(self.as_map().unwrap(), f),
         }
@@ -263,11 +393,11 @@ impl Eq for Value {}
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        if self.ty != other.ty {
+        if self.ty() != other.ty() {
             return false;
         }
 
-        match self.ty {
+        match self.ty() {
             Type::Null => true,
             Type::Int => self.as_int() == other.as_int(),
             Type::Float => {
@@ -281,7 +411,6 @@ impl PartialEq for Value {
             Type::Bool => self.as_bool() == other.as_bool(),
             Type::String => self.as_string() == other.as_string(),
             Type::Func => self.as_func() == other.as_func(),
-            Type::Thunk => self.as_thunk() == other.as_thunk(),
             Type::List => self.as_list() == other.as_list(),
             Type::Map => self.as_map() == other.as_map(),
         }
@@ -290,81 +419,130 @@ impl PartialEq for Value {
 
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ty.hash(state);
+        self.ty().hash(state);
 
-        match self.ty {
+        match self.ty() {
             Type::Null => {}
-            Type::Int => self.as_int().unwrap().hash(state),
+            Type::Int => {
+                self.as_int().unwrap().hash(state);
+            }
             Type::Float => {
                 let x = self.as_float().unwrap();
-                if x.is_nan() { f64::NAN } else { x }.to_bits().hash(state);
+                if x.is_nan() { f32::NAN } else { x }.to_bits().hash(state);
             }
-            Type::Bool => self.as_bool().unwrap().hash(state),
-            _ => unsafe { self.payload.heap.hash(state) },
+            Type::Bool => {
+                self.as_bool().unwrap().hash(state);
+            }
+            Type::String => {
+                self.as_string().unwrap().hash(state);
+            }
+            Type::Func => {
+                self.as_func().unwrap().hash(state);
+            }
+            Type::List => {
+                self.as_list().unwrap().hash(state);
+            }
+            Type::Map => {
+                self.as_map().unwrap().hash(state);
+            }
         }
     }
 }
 
-impl From<i64> for Value {
-    fn from(int: i64) -> Value {
-        Value {
-            ty: Type::Int,
-            payload: Payload { int },
-        }
+impl From<i32> for Value {
+    fn from(v: i32) -> Value {
+        Value::from_int(v)
     }
 }
 
-impl From<f64> for Value {
-    fn from(float: f64) -> Value {
-        Value {
-            ty: Type::Float,
-            payload: Payload { float },
-        }
+impl From<f32> for Value {
+    fn from(v: f32) -> Value {
+        Value::from_float(v)
     }
 }
 
 impl From<bool> for Value {
-    fn from(bool: bool) -> Value {
-        Value {
-            ty: Type::Bool,
-            payload: Payload { bool },
-        }
+    fn from(v: bool) -> Value {
+        Value::from_bool(v)
     }
 }
 
 impl From<String> for Value {
-    fn from(value: String) -> Value {
-        Value::new_heap(Type::String, HeapValue::String(value))
+    fn from(v: String) -> Value {
+        Value::from_string(v)
     }
 }
 
 impl From<&str> for Value {
-    fn from(value: &str) -> Value {
-        Value::new_heap(Type::String, HeapValue::String(value.into()))
+    fn from(v: &str) -> Value {
+        Value::from_string(v.into())
     }
 }
 
 impl From<Func> for Value {
-    fn from(value: Func) -> Value {
-        Value::new_heap(Type::Func, HeapValue::Func(value))
+    fn from(v: Func) -> Value {
+        Value::from_func(v)
     }
 }
 
-impl From<Thunk> for Value {
-    fn from(value: Thunk) -> Value {
-        Value::new_heap(Type::Thunk, HeapValue::Thunk(value))
+impl From<List> for Value {
+    fn from(v: List) -> Value {
+        Value::from_list(v)
     }
 }
 
-impl From<im::Vector<Value>> for Value {
-    fn from(value: im::Vector<Value>) -> Value {
-        Value::new_heap(Type::List, HeapValue::List(value))
+impl From<Map> for Value {
+    fn from(v: Map) -> Value {
+        Value::from_map(v)
     }
 }
 
-impl From<im::HashMap<Value, Value>> for Value {
-    fn from(value: im::HashMap<Value, Value>) -> Value {
-        Value::new_heap(Type::Map, HeapValue::Map(value))
+impl TryFrom<&Value> for i32 {
+    type Error = FromValueError;
+    fn try_from(v: &Value) -> Result<i32, FromValueError> {
+        v.as_int()
+    }
+}
+
+impl TryFrom<&Value> for f32 {
+    type Error = FromValueError;
+    fn try_from(v: &Value) -> Result<f32, FromValueError> {
+        v.as_float()
+    }
+}
+
+impl TryFrom<&Value> for bool {
+    type Error = FromValueError;
+    fn try_from(v: &Value) -> Result<bool, FromValueError> {
+        v.as_bool()
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a str {
+    type Error = FromValueError;
+    fn try_from(v: &'a Value) -> Result<&'a str, FromValueError> {
+        v.as_string()
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a Func {
+    type Error = FromValueError;
+    fn try_from(v: &'a Value) -> Result<&'a Func, FromValueError> {
+        v.as_func()
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a List {
+    type Error = FromValueError;
+    fn try_from(v: &'a Value) -> Result<&'a List, FromValueError> {
+        v.as_list()
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a Map {
+    type Error = FromValueError;
+    fn try_from(v: &'a Value) -> Result<&'a Map, FromValueError> {
+        v.as_map()
     }
 }
 
@@ -373,204 +551,4 @@ impl From<im::HashMap<Value, Value>> for Value {
 pub struct FromValueError {
     pub expected: Type,
     pub got: Type,
-}
-
-impl TryFrom<&Value> for i64 {
-    type Error = FromValueError;
-
-    fn try_from(value: &Value) -> Result<i64, FromValueError> {
-        if value.ty == Type::Int {
-            Ok(unsafe { value.payload.int })
-        } else {
-            Err(FromValueError {
-                expected: Type::Int,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl TryFrom<&Value> for f64 {
-    type Error = FromValueError;
-
-    fn try_from(value: &Value) -> Result<f64, FromValueError> {
-        if value.ty == Type::Float {
-            Ok(unsafe { value.payload.float })
-        } else {
-            Err(FromValueError {
-                expected: Type::Float,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl TryFrom<&Value> for bool {
-    type Error = FromValueError;
-
-    fn try_from(value: &Value) -> Result<bool, FromValueError> {
-        if value.ty == Type::Bool {
-            Ok(unsafe { value.payload.bool })
-        } else {
-            Err(FromValueError {
-                expected: Type::Bool,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Value> for &'a str {
-    type Error = FromValueError;
-
-    fn try_from(value: &'a Value) -> Result<&'a str, FromValueError> {
-        if value.ty == Type::String {
-            let heap = unsafe { &**value.payload.heap };
-            match heap {
-                HeapValue::String(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
-        } else {
-            Err(FromValueError {
-                expected: Type::String,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Value> for &'a Func {
-    type Error = FromValueError;
-
-    fn try_from(value: &'a Value) -> Result<&'a Func, FromValueError> {
-        if value.ty == Type::Func {
-            let heap = unsafe { &**value.payload.heap };
-            match heap {
-                HeapValue::Func(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
-        } else {
-            Err(FromValueError {
-                expected: Type::Func,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Value> for &'a Thunk {
-    type Error = FromValueError;
-
-    fn try_from(value: &'a Value) -> Result<&'a Thunk, FromValueError> {
-        if value.ty == Type::Thunk {
-            let heap = unsafe { &**value.payload.heap };
-            match heap {
-                HeapValue::Thunk(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
-        } else {
-            Err(FromValueError {
-                expected: Type::Thunk,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Value> for &'a im::Vector<Value> {
-    type Error = FromValueError;
-
-    fn try_from(value: &'a Value) -> Result<&'a im::Vector<Value>, FromValueError> {
-        if value.ty == Type::List {
-            let heap = unsafe { &**value.payload.heap };
-            match heap {
-                HeapValue::List(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
-        } else {
-            Err(FromValueError {
-                expected: Type::List,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Value> for &'a im::HashMap<Value, Value> {
-    type Error = FromValueError;
-
-    fn try_from(value: &'a Value) -> Result<&'a im::HashMap<Value, Value>, FromValueError> {
-        if value.ty == Type::Map {
-            let heap = unsafe { &**value.payload.heap };
-            match heap {
-                HeapValue::Map(v) => Ok(v),
-                _ => unsafe { unreachable_unchecked() },
-            }
-        } else {
-            Err(FromValueError {
-                expected: Type::Map,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-union Payload {
-    null: (),
-    int: i64,
-    float: f64,
-    bool: bool,
-    heap: ManuallyDrop<Arc<HeapValue>>,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash)]
-enum HeapValue {
-    String(String),
-    Func(Func),
-    Thunk(Thunk),
-    List(im::Vector<Value>),
-    Map(im::HashMap<Value, Value>),
-}
-
-#[derive(Clone)]
-pub struct FuncValue(Value);
-
-impl Debug for FuncValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Deref for FuncValue {
-    type Target = Func;
-
-    fn deref(&self) -> &Func {
-        unsafe {
-            match &**self.0.payload.heap {
-                HeapValue::Func(v) => v,
-                _ => unreachable_unchecked(),
-            }
-        }
-    }
-}
-
-impl TryFrom<Value> for FuncValue {
-    type Error = FromValueError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        if value.ty == Type::Func {
-            Ok(FuncValue(value))
-        } else {
-            Err(FromValueError {
-                expected: Type::Func,
-                got: value.ty,
-            })
-        }
-    }
-}
-
-impl From<FuncValue> for Value {
-    fn from(v: FuncValue) -> Value {
-        v.0
-    }
 }

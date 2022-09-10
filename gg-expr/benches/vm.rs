@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use gg_expr::{compile_text, Value, Vm};
 
-fn fib(vm: &mut Vm, func: &Value, arg: i64) -> i64 {
+fn fib(vm: &mut Vm, func: &Value, arg: i32) -> i32 {
     vm.eval(func, &[func, &arg.into()])
         .unwrap()
         .as_int()

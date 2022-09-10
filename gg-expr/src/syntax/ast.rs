@@ -260,14 +260,14 @@ impl ExprBool {
 }
 
 impl ExprInt {
-    pub fn value(&self) -> Option<i64> {
+    pub fn value(&self) -> Option<i32> {
         let token = self.nontrivial_tokens().next()?;
         parser::int_value(token.text())
     }
 }
 
 impl ExprFloat {
-    pub fn value(&self) -> Option<f64> {
+    pub fn value(&self) -> Option<f32> {
         let token = self.nontrivial_tokens().next()?;
         parser::float_value(token.text())
     }
@@ -386,7 +386,7 @@ impl ExprFn {
 }
 
 impl PatInt {
-    pub fn value(&self) -> Option<i64> {
+    pub fn value(&self) -> Option<i32> {
         let token = self.nontrivial_tokens().next()?;
         parser::int_value(token.text())
     }
