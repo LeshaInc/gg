@@ -5,22 +5,30 @@ mod reg;
 
 pub use self::consts::{CompiledConsts, ConstId, Consts};
 pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opcode};
-use self::reg::Regs;
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
+use crate::diagnostic::{Diagnostic, Severity};
 use crate::syntax::{BinOp, UnOp};
-use crate::{Func, FuncValue, Value};
+use crate::{Error, Func, FuncValue, Result, Value};
 
 #[derive(Debug, Default)]
 pub struct Vm {
+    frames: Vec<Frame>,
     stack: Vec<Value>,
-    callstack: Vec<Frame>,
+}
+
+#[derive(Debug)]
+struct VmContext {
+    frame: Frame,
+    frames: Vec<Frame>,
+    stack: Vec<Value>,
 }
 
 #[derive(Debug)]
 struct Frame {
     ip: InstrIdx,
-    func_idx: usize,
+    func: usize,
     dst: usize,
+    base: usize,
 }
 
 impl Vm {
@@ -28,7 +36,7 @@ impl Vm {
         Vm::default()
     }
 
-    pub fn eval(&mut self, func: &Value, args: &[&Value]) -> Value {
+    pub fn eval(&mut self, func: &Value, args: &[&Value]) -> Result<Value> {
         let func = FuncValue::try_from(func.clone()).unwrap();
         let mut rem_slots = func.slots;
 
@@ -44,99 +52,108 @@ impl Vm {
             self.stack.push(Value::null());
         }
 
-        self.callstack.push(Frame {
+        self.frames.push(Frame {
             ip: InstrIdx(0),
-            func_idx: 1,
+            func: 1,
             dst: 0,
+            base: 2,
         });
 
-        self.run();
+        self.run()?;
 
-        let value = self.stack.swap_remove(0);
+        let value = self.stack.remove(0);
         self.stack.clear();
 
-        value
+        Ok(value)
     }
 
-    fn run(&mut self) {
-        while let Some(frame) = self.callstack.last_mut() {
-            loop {
-                let func = &self.stack[frame.func_idx].as_func().unwrap();
-                let instr = func.instrs[frame.ip];
-                frame.ip += InstrOffset(1);
+    fn run(&mut self) -> Result<()> {
+        let frame = self.frames.pop().unwrap();
+        let mut ctx = VmContext {
+            frame,
+            frames: std::mem::take(&mut self.frames),
+            stack: std::mem::take(&mut self.stack),
+        };
 
-                let base = self.stack.len() - usize::from(func.slots);
-                let (lhs, rhs) = self.stack.split_at_mut(base);
-                let func = &lhs[frame.func_idx].as_func().unwrap();
-                let regs = Regs(rhs);
-
-                if instr.opcode == Opcode::Call {
-                    self.instr_call(instr.reg_seq(), instr.reg_c());
-                    break;
-                }
-
-                if instr.opcode == Opcode::Ret {
-                    let ret = regs[instr.reg_a()].clone();
-                    for _ in 0..func.slots {
-                        self.stack.pop();
-                    }
-
-                    self.stack[frame.dst] = ret;
-                    self.callstack.pop();
-                    break;
-                }
-
-                let mut cur = CurrentFrame {
-                    func,
-                    ip: frame.ip,
-                    regs,
-                };
-
-                cur.dispatch(instr);
-
-                frame.ip = cur.ip;
-            }
-        }
-    }
-
-    fn instr_call(&mut self, seq: RegSeq, dst: RegId) {
-        let frame = self.callstack.last().unwrap();
-        let func = self.stack[frame.func_idx].as_func().unwrap();
-
-        let old_base = self.stack.len() - usize::from(func.slots);
-        let dst = old_base + usize::from(dst.0);
-
-        let func_idx = old_base + usize::from(seq.base.0);
-        let func = self.stack[func_idx].as_func().unwrap();
-
-        let new_base = self.stack.len();
-
-        for _ in 0..func.slots {
-            self.stack.push(Value::null());
+        while ctx.frame.ip != InstrIdx(u32::MAX) {
+            let instr = ctx.fetch()?;
+            ctx.dispatch(instr)?;
         }
 
-        for (i, arg) in seq.into_iter().skip(1).enumerate() {
-            let src = old_base + usize::from(arg.0);
-            let dst = new_base + i;
-            self.stack.swap(src, dst);
-        }
+        self.frames = ctx.frames;
+        self.stack = ctx.stack;
 
-        self.callstack.push(Frame {
-            ip: InstrIdx(0),
-            func_idx,
-            dst,
-        });
+        Ok(())
     }
 }
 
-struct CurrentFrame<'a> {
-    func: &'a Func,
-    ip: InstrIdx,
-    regs: Regs<'a>,
-}
+impl VmContext {
+    fn cur_func(&self) -> Result<&Func> {
+        self.stack
+            .get(self.frame.func)
+            .and_then(|v| v.as_func().ok())
+            .ok_or_else(|| self.func_invalid())
+    }
 
-impl CurrentFrame<'_> {
-    fn dispatch(&mut self, instr: Instr) {
+    #[cold]
+    fn func_invalid(&self) -> Error {
+        Diagnostic::new(Severity::Error, "invalid function").into()
+    }
+
+    fn reg_offset(&self, id: RegId) -> Result<usize> {
+        let idx = self.frame.base + usize::from(id.0);
+        if idx >= self.stack.len() {
+            Err(self.reg_invalid())
+        } else {
+            Ok(idx)
+        }
+    }
+
+    #[cold]
+    fn reg_invalid(&self) -> Error {
+        Diagnostic::new(Severity::Error, "invalid register").into()
+    }
+
+    fn reg_read(&self, id: RegId) -> Result<&Value> {
+        let idx = self.reg_offset(id)?;
+        Ok(&self.stack[idx])
+    }
+
+    fn reg_write(&mut self, id: RegId, value: Value) -> Result<Value> {
+        let idx = self.reg_offset(id)?;
+        Ok(std::mem::replace(&mut self.stack[idx], value))
+    }
+
+    fn const_read(&self, id: ConstId) -> Result<&Value> {
+        let func = self.cur_func()?;
+        func.consts
+            .0
+            .get(usize::from(id.0))
+            .ok_or_else(|| self.const_invalid())
+    }
+
+    #[cold]
+    fn const_invalid(&self) -> Error {
+        Diagnostic::new(Severity::Error, "invalid register").into()
+    }
+
+    fn fetch(&mut self) -> Result<Instr> {
+        let func = self.cur_func()?;
+        let instrs = &func.instrs.0;
+        let instr = instrs
+            .get(self.frame.ip.0 as usize)
+            .copied()
+            .ok_or_else(|| self.code_overrun())?;
+        self.frame.ip += InstrOffset(1);
+        Ok(instr)
+    }
+
+    #[cold]
+    fn code_overrun(&self) -> Error {
+        Diagnostic::new(Severity::Error, "code overrun").into()
+    }
+
+    fn dispatch(&mut self, instr: Instr) -> Result<()> {
         match instr.opcode {
             Opcode::Nop => self.instr_nop(instr),
             Opcode::Panic => self.instr_panic(instr),
@@ -147,8 +164,8 @@ impl CurrentFrame<'_> {
             Opcode::Jump => self.instr_jump(instr),
             Opcode::JumpIfTrue => self.instr_jump_if_true(instr),
             Opcode::JumpIfFalse => self.instr_jump_if_false(instr),
-            Opcode::Call => self.instr_nop(instr),
-            Opcode::Ret => self.instr_nop(instr),
+            Opcode::Call => self.instr_call(instr),
+            Opcode::Ret => self.instr_ret(instr),
             Opcode::OpOr => self.instr_op_or(instr),
             Opcode::OpCoalesce => self.instr_op_coalesce(instr),
             Opcode::OpAnd => self.instr_op_and(instr),
@@ -171,128 +188,203 @@ impl CurrentFrame<'_> {
         }
     }
 
-    fn instr_nop(&mut self, _instr: Instr) {}
-
-    fn instr_panic(&mut self, _instr: Instr) {
-        panic!("vm panicked");
+    fn instr_nop(&mut self, _instr: Instr) -> Result<()> {
+        Ok(())
     }
 
-    fn instr_copy(&mut self, instr: Instr) {
-        self.regs[instr.reg_b()] = self.regs[instr.reg_a()].clone();
+    fn instr_panic(&mut self, _instr: Instr) -> Result<()> {
+        Err(Diagnostic::new(Severity::Error, "vm panicked").into())
     }
 
-    fn instr_load_const(&mut self, instr: Instr) {
-        self.regs[instr.reg_b()] = self.func.consts[instr.const_id()].clone();
+    fn instr_copy(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        self.reg_write(instr.reg_b(), val.clone())?;
+        Ok(())
     }
 
-    fn instr_new_list(&mut self, _instr: Instr) {
+    fn instr_load_const(&mut self, instr: Instr) -> Result<()> {
+        let val = self.const_read(instr.const_id())?;
+        self.reg_write(instr.reg_b(), val.clone())?;
+        Ok(())
+    }
+
+    fn instr_new_list(&mut self, _instr: Instr) -> Result<()> {
         todo!()
     }
 
-    fn instr_new_map(&mut self, _instr: Instr) {
+    fn instr_new_map(&mut self, _instr: Instr) -> Result<()> {
         todo!()
     }
 
-    fn instr_jump(&mut self, instr: Instr) {
-        self.ip += instr.offset();
+    fn instr_jump(&mut self, instr: Instr) -> Result<()> {
+        self.frame.ip += instr.offset();
+        Ok(())
     }
 
-    fn instr_jump_if_true(&mut self, instr: Instr) {
-        if self.regs[instr.reg_a()].is_truthy() {
-            self.ip += instr.offset();
+    fn instr_jump_if_true(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        if val.is_truthy() {
+            self.frame.ip += instr.offset();
         }
+        Ok(())
     }
 
-    fn instr_jump_if_false(&mut self, instr: Instr) {
-        if !self.regs[instr.reg_a()].is_truthy() {
-            self.ip += instr.offset();
+    fn instr_jump_if_false(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        if !val.is_truthy() {
+            self.frame.ip += instr.offset();
         }
+        Ok(())
     }
 
-    fn instr_op_or(&mut self, instr: Instr) {
+    fn instr_call(&mut self, instr: Instr) -> Result<()> {
+        let (func_reg, args) = instr.reg_seq().split_first();
+        let dst_reg = instr.reg_c();
+
+        let func_val = self.reg_read(func_reg)?;
+        let func = func_val.as_func().map_err(|_| self.func_invalid())?;
+
+        let old_base = self.frame.base;
+        let new_base = self.stack.len();
+
+        for _ in 0..func.slots {
+            self.stack.push(Value::null());
+        }
+
+        for (i, arg) in args.into_iter().enumerate() {
+            let src = old_base + usize::from(arg.0);
+            let dst = new_base + i;
+            self.stack.swap(src, dst);
+        }
+
+        let new_frame = Frame {
+            ip: InstrIdx(0),
+            func: old_base + usize::from(func_reg.0),
+            dst: old_base + usize::from(dst_reg.0),
+            base: new_base,
+        };
+
+        let old_frame = std::mem::replace(&mut self.frame, new_frame);
+        self.frames.push(old_frame);
+
+        Ok(())
+    }
+
+    fn instr_ret(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_write(instr.reg_a(), Value::null())?;
+
+        let cur_func = self.cur_func()?;
+        let num_slots = cur_func.slots;
+        let dst = self.frame.dst;
+
+        for _ in 0..num_slots {
+            self.stack.pop();
+        }
+
+        self.stack[dst] = val;
+
+        if let Some(v) = self.frames.pop() {
+            self.frame = v;
+        } else {
+            self.frame.ip = InstrIdx(u32::MAX);
+        }
+
+        Ok(())
+    }
+
+    fn instr_op_or(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Or)
     }
 
-    fn instr_op_coalesce(&mut self, instr: Instr) {
+    fn instr_op_coalesce(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Coalesce)
     }
 
-    fn instr_op_and(&mut self, instr: Instr) {
+    fn instr_op_and(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::And)
     }
 
-    fn instr_op_lt(&mut self, instr: Instr) {
+    fn instr_op_lt(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Lt)
     }
 
-    fn instr_op_le(&mut self, instr: Instr) {
+    fn instr_op_le(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Le)
     }
 
-    fn instr_op_eq(&mut self, instr: Instr) {
+    fn instr_op_eq(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Eq)
     }
 
-    fn instr_op_neq(&mut self, instr: Instr) {
+    fn instr_op_neq(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Neq)
     }
 
-    fn instr_op_ge(&mut self, instr: Instr) {
+    fn instr_op_ge(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Ge)
     }
 
-    fn instr_op_gt(&mut self, instr: Instr) {
+    fn instr_op_gt(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Gt)
     }
 
-    fn instr_op_add(&mut self, instr: Instr) {
+    fn instr_op_add(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Add)
     }
 
-    fn instr_op_sub(&mut self, instr: Instr) {
+    fn instr_op_sub(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Sub)
     }
 
-    fn instr_op_mul(&mut self, instr: Instr) {
+    fn instr_op_mul(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Mul)
     }
 
-    fn instr_op_div(&mut self, instr: Instr) {
+    fn instr_op_div(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Div)
     }
 
-    fn instr_op_rem(&mut self, instr: Instr) {
+    fn instr_op_rem(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Rem)
     }
 
-    fn instr_op_pow(&mut self, instr: Instr) {
+    fn instr_op_pow(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Pow)
     }
 
-    fn instr_op_index(&mut self, instr: Instr) {
+    fn instr_op_index(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::Index)
     }
 
-    fn instr_op_index_nullable(&mut self, instr: Instr) {
+    fn instr_op_index_nullable(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, BinOp::IndexNullable)
     }
 
-    fn instr_un_op_neg(&mut self, instr: Instr) {
+    fn instr_un_op_neg(&mut self, instr: Instr) -> Result<()> {
         self.instr_un_op(instr, UnOp::Neg)
     }
 
-    fn instr_un_op_not(&mut self, instr: Instr) {
+    fn instr_un_op_not(&mut self, instr: Instr) -> Result<()> {
         self.instr_un_op(instr, UnOp::Not)
     }
 
-    fn instr_bin_op(&mut self, instr: Instr, op: BinOp) {
-        let lhs = &self.regs[instr.reg_a()];
-        let rhs = &self.regs[instr.reg_b()];
-        self.regs[instr.reg_c()] = ops::bin_op(op, lhs, rhs).unwrap();
+    fn instr_bin_op(&mut self, instr: Instr, op: BinOp) -> Result<()> {
+        let lhs = self.reg_read(instr.reg_a())?;
+        let rhs = self.reg_read(instr.reg_b())?;
+        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.op_invalid())?;
+        self.reg_write(instr.reg_c(), res)?;
+        Ok(())
     }
 
-    fn instr_un_op(&mut self, instr: Instr, op: UnOp) {
-        let arg = &self.regs[instr.reg_a()];
-        self.regs[instr.reg_b()] = ops::un_op(op, arg).unwrap();
+    fn instr_un_op(&mut self, instr: Instr, op: UnOp) -> Result<()> {
+        let arg = self.reg_read(instr.reg_a())?;
+        let res = ops::un_op(op, arg).ok_or_else(|| self.op_invalid())?;
+        self.reg_write(instr.reg_b(), res)?;
+        Ok(())
+    }
+
+    #[cold]
+    fn op_invalid(&self) -> Error {
+        Diagnostic::new(Severity::Error, "invalid op").into()
     }
 }

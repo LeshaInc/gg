@@ -2,6 +2,8 @@ use std::fmt::{self, Debug, Display};
 
 use crate::diagnostic::Diagnostic;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 pub struct Error {
     inner: Box<ErrorInner>,
 }
@@ -31,6 +33,12 @@ impl Display for Error {
 impl Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<Diagnostic> for Error {
+    fn from(v: Diagnostic) -> Self {
+        Self::new(v)
     }
 }
 

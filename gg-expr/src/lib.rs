@@ -7,7 +7,7 @@ mod value;
 pub mod vm;
 
 pub use self::compiler::{compile, Compiler};
-pub use self::error::Error;
+pub use self::error::{Error, Result};
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
 pub use self::value::{DebugInfo, Func, FuncValue, Thunk, Type, Value};
 pub use self::vm::Vm;
