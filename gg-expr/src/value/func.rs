@@ -11,6 +11,7 @@ use crate::Source;
 
 #[derive(Clone)]
 pub struct Func {
+    pub arity: u16,
     pub slots: u16,
     pub instrs: CompiledInstrs,
     pub consts: CompiledConsts,
@@ -20,10 +21,12 @@ pub struct Func {
 impl Debug for Func {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.debug_info.as_ref().and_then(|di| di.name.as_ref()) {
-            write!(f, "fn {}(...):", name)?;
+            write!(f, "fn {}", name)?;
         } else {
-            write!(f, "fn(...):")?;
+            write!(f, "fn")?;
         }
+
+        write!(f, "({} args) {{", self.arity)?;
 
         if let Some(di) = &self.debug_info {
             let range = di.source.text.range_to_line_col(di.range);
@@ -32,7 +35,8 @@ impl Debug for Func {
 
         writeln!(f)?;
 
-        let mut f = indented(f);
+        let mut orig_f = f;
+        let mut f = indented(&mut orig_f);
 
         for (i, val) in self.consts.0.iter().enumerate() {
             writeln!(f, "{}: {:?}", i, val)?;
@@ -64,6 +68,9 @@ impl Debug for Func {
                 write!(f, "{}", range)?;
             }
         }
+
+        writeln!(f)?;
+        write!(orig_f, "}}")?;
 
         Ok(())
     }

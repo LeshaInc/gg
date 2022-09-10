@@ -4,6 +4,7 @@ use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::hint::unreachable_unchecked;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Release};
 
@@ -543,6 +544,44 @@ impl<'a> TryFrom<&'a Value> for &'a Map {
     type Error = FromValueError;
     fn try_from(v: &'a Value) -> Result<&'a Map, FromValueError> {
         v.as_map()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct FuncValue(Value);
+
+impl Deref for FuncValue {
+    type Target = Func;
+
+    fn deref(&self) -> &Func {
+        unsafe { self.0.as_func().unwrap_unchecked() }
+    }
+}
+
+impl From<FuncValue> for Value {
+    fn from(v: FuncValue) -> Self {
+        v.0
+    }
+}
+
+impl TryFrom<Value> for FuncValue {
+    type Error = FromValueError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if value.is_func() {
+            Ok(FuncValue(value))
+        } else {
+            Err(FromValueError {
+                expected: Type::Func,
+                got: value.ty(),
+            })
+        }
+    }
+}
+
+impl Debug for FuncValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 

@@ -1,14 +1,18 @@
 mod consts;
+mod error;
 mod instr;
 mod ops;
 mod reg;
 
+use std::sync::Arc;
+
 pub use self::consts::{CompiledConsts, ConstId, Consts};
+pub use self::error::{Error, Result, StackFrame, StackTrace};
 pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opcode};
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
-use crate::diagnostic::{Diagnostic, Severity};
-use crate::syntax::{BinOp, UnOp};
-use crate::{Error, Func, Result, Value};
+use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
+use crate::syntax::{BinOp, TextRange, UnOp};
+use crate::{Func, FuncValue, Source, Value};
 
 #[derive(Debug, Default)]
 pub struct Vm {
@@ -87,16 +91,55 @@ impl Vm {
 }
 
 impl VmContext {
-    fn cur_func(&self) -> Result<&Func> {
-        self.stack
-            .get(self.frame.func)
-            .and_then(|v| v.as_func().ok())
-            .ok_or_else(|| self.func_invalid())
+    fn stack_trace(&self, range: Option<TextRange>) -> StackTrace {
+        let mut frames = Vec::with_capacity(self.frames.len() + 1);
+
+        frames.push(StackFrame {
+            range,
+            func: self.stack[self.frame.func].clone().try_into().unwrap(),
+        });
+
+        for frame in self.frames.iter().rev() {
+            let func = FuncValue::try_from(self.stack[frame.func].clone()).unwrap();
+
+            let range = func.debug_info.as_ref().and_then(|di| {
+                let prev_ip = &(frame.ip + InstrOffset(-1));
+                di.instruction_ranges
+                    .get(&prev_ip)
+                    .and_then(|v| v.get(0).copied())
+            });
+
+            frames.push(StackFrame { range, func });
+        }
+
+        StackTrace { frames }
     }
 
-    #[cold]
-    fn func_invalid(&self) -> Error {
-        Diagnostic::new(Severity::Error, "invalid function").into()
+    fn cur_ranges(&self) -> Option<Vec<TextRange>> {
+        if let Some(di) = &self.cur_func().debug_info {
+            let prev_ip = &(self.frame.ip + InstrOffset(-1));
+            return di.instruction_ranges.get(&prev_ip).cloned();
+        }
+        None
+    }
+
+    fn error(
+        &self,
+        range: Option<TextRange>,
+        message: impl Into<String>,
+        extra: impl FnOnce(&mut Diagnostic, Option<Arc<Source>>),
+    ) -> Error {
+        let debug_info = self.cur_func().debug_info.as_ref();
+        let source = debug_info.map(|v| v.source.clone());
+
+        let mut diagnostic = Diagnostic::new(Severity::Error, message.into());
+        extra(&mut diagnostic, source);
+
+        Error::new(diagnostic).with_stack_trace(self.stack_trace(range))
+    }
+
+    fn cur_func(&self) -> &Func {
+        self.stack[self.frame.func].as_func().unwrap()
     }
 
     fn reg_offset(&self, id: RegId) -> Result<usize> {
@@ -124,7 +167,7 @@ impl VmContext {
     }
 
     fn const_read(&self, id: ConstId) -> Result<&Value> {
-        let func = self.cur_func()?;
+        let func = self.cur_func();
         func.consts
             .0
             .get(usize::from(id.0))
@@ -137,7 +180,7 @@ impl VmContext {
     }
 
     fn fetch(&mut self) -> Result<Instr> {
-        let func = self.cur_func()?;
+        let func = self.cur_func();
         let instrs = &func.instrs.0;
         let instr = instrs
             .get(self.frame.ip.0 as usize)
@@ -241,7 +284,9 @@ impl VmContext {
         let dst_reg = instr.reg_c();
 
         let func_val = self.reg_read(func_reg)?;
-        let func = func_val.as_func().map_err(|_| self.func_invalid())?;
+        let func = func_val
+            .as_func()
+            .map_err(|_| self.error(None, "not a function", |_, _| ()))?;
 
         let old_base = self.frame.base;
         let new_base = self.stack.len();
@@ -278,7 +323,7 @@ impl VmContext {
     fn instr_ret(&mut self, instr: Instr) -> Result<()> {
         let val = self.reg_write(instr.reg_a(), Value::null())?;
 
-        let cur_func = self.cur_func()?;
+        let cur_func = self.cur_func();
         let num_slots = cur_func.slots;
         let dst = self.frame.dst;
 
@@ -377,7 +422,7 @@ impl VmContext {
     fn instr_bin_op(&mut self, instr: Instr, op: BinOp) -> Result<()> {
         let lhs = self.reg_read(instr.reg_a())?;
         let rhs = self.reg_read(instr.reg_b())?;
-        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.op_invalid())?;
+        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.error_bin_op(lhs, rhs, op))?;
         self.reg_write(instr.reg_c(), res)?;
         Ok(())
     }
@@ -385,13 +430,53 @@ impl VmContext {
     #[inline(always)]
     fn instr_un_op(&mut self, instr: Instr, op: UnOp) -> Result<()> {
         let arg = self.reg_read(instr.reg_a())?;
-        let res = ops::un_op(op, arg).ok_or_else(|| self.op_invalid())?;
+        let res = ops::un_op(op, arg).ok_or_else(|| self.error_un_op(arg, op))?;
         self.reg_write(instr.reg_b(), res)?;
         Ok(())
     }
 
     #[cold]
-    fn op_invalid(&self) -> Error {
-        Diagnostic::new(Severity::Error, "invalid op").into()
+    fn error_bin_op(&self, lhs: &Value, rhs: &Value, op: BinOp) -> Error {
+        let message = format!(
+            "operator `{}` cannot be applied to `{:?}` and `{:?}`",
+            op,
+            lhs.ty(),
+            rhs.ty()
+        );
+
+        let ranges = self.cur_ranges();
+        let main_range = ranges.as_ref().map(|v| v[0]);
+
+        self.error(main_range, message, |diag, source| {
+            if let (Some(source), Some(ranges)) = (source, ranges) {
+                diag.add_source(
+                    SourceComponent::new(source)
+                        .with_label(Severity::Error, ranges[1], format!("`{:?}`", lhs.ty()))
+                        .with_label(Severity::Error, ranges[2], format!("`{:?}`", rhs.ty())),
+                );
+            }
+        })
+    }
+
+    #[cold]
+    fn error_un_op(&self, arg: &Value, op: UnOp) -> Error {
+        let message = format!(
+            "unary operator `{}` cannot be applied to `{:?}`",
+            op,
+            arg.ty(),
+        );
+
+        let ranges = self.cur_ranges();
+        let main_range = ranges.as_ref().map(|v| v[0]);
+
+        self.error(main_range, message, |diag, source| {
+            if let (Some(source), Some(ranges)) = (source, ranges) {
+                diag.add_source(SourceComponent::new(source).with_label(
+                    Severity::Error,
+                    ranges[1],
+                    format!("`{:?}`", arg.ty()),
+                ));
+            }
+        })
     }
 }

@@ -1,15 +1,13 @@
 pub mod compiler;
 pub mod diagnostic;
-mod error;
 mod source;
 pub mod syntax;
 mod value;
 pub mod vm;
 
 pub use self::compiler::{compile, Compiler};
-pub use self::error::{Error, Result};
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
-pub use self::value::{DebugInfo, Func, Type, Value};
+pub use self::value::{DebugInfo, Func, FuncValue, Type, Value};
 pub use self::vm::Vm;
 use crate::diagnostic::Diagnostic;
 

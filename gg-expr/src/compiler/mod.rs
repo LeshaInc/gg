@@ -20,6 +20,7 @@ pub struct Compiler {
     scopes: ScopeStack,
     diagnostics: Vec<Diagnostic>,
     debug_info: DebugInfo,
+    arity: u16,
 }
 
 impl Compiler {
@@ -31,6 +32,7 @@ impl Compiler {
             scopes: Default::default(),
             diagnostics: Default::default(),
             debug_info: DebugInfo::new(source),
+            arity: 0,
         }
     }
 
@@ -365,7 +367,11 @@ impl Compiler {
             let mut loc = tmp_reg;
 
             if let Some(expr) = binding.expr() {
-                self.compile_expr(expr, &mut loc);
+                if let Expr::Fn(v) = expr {
+                    self.compile_expr_fn_named(v, &mut loc, binding.ident());
+                } else {
+                    self.compile_expr(expr, &mut loc);
+                }
             }
 
             if loc != tmp_reg {
@@ -443,6 +449,7 @@ impl Compiler {
             self.scopes.set(arg, reg);
             num_args += 1;
         }
+        self.arity = num_args;
         self.regs.advance(num_args);
     }
 
@@ -454,7 +461,16 @@ impl Compiler {
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut RegId) {
+        self.compile_expr_fn_named(expr, dst, None);
+    }
+
+    fn compile_expr_fn_named(&mut self, expr: ExprFn, dst: &mut RegId, name: Option<Ident>) {
         let mut compiler = Compiler::new(self.debug_info.source.clone());
+        compiler.debug_info.name = Some(
+            name.map(|v| v.name().into())
+                .unwrap_or_else(|| "<anon>".into()),
+        );
+        compiler.debug_info.range = expr.range();
 
         if let Some(body) = expr.expr() {
             compiler.compile_fn(expr.args(), body);
@@ -547,6 +563,7 @@ impl Compiler {
     fn finish(self) -> CompileResult {
         CompileResult {
             func: Func {
+                arity: self.arity,
                 slots: self.regs.slots(),
                 instrs: self.instrs.compile(),
                 consts: self.consts.compile(),
@@ -559,6 +576,8 @@ impl Compiler {
 
 pub fn compile(source: Arc<Source>, expr: Expr) -> CompileResult {
     let mut compiler = Compiler::new(source);
+    compiler.debug_info.name = Some("<main>".into());
+    compiler.debug_info.range = expr.range();
     compiler.compile_fn(iter::empty(), expr);
     compiler.finish()
 }

@@ -19,12 +19,18 @@ fn main() {
 
     println!();
     println!("{:?}", func);
+    println!();
 
     let mut vm = Vm::new();
     let t = std::time::Instant::now();
-    let result = vm.eval(&func, &[]);
+
+    match vm.eval(&func, &[]) {
+        Ok(v) => println!("{:?}", v),
+        Err(e) => {
+            eprintln!("{}", e);
+        }
+    }
+
     let elapsed = t.elapsed();
-    println!();
-    println!("{:?}", result);
     println!("elapsed {:?}", elapsed);
 }

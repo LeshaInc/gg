@@ -55,13 +55,21 @@ impl Diagnostic {
         }
     }
 
-    pub fn with_help(mut self, help: String) -> Diagnostic {
-        self.components.push(Component::Help(help));
+    pub fn add_help(&mut self, help: impl Into<String>) {
+        self.components.push(Component::Help(help.into()));
+    }
+
+    pub fn with_help(mut self, help: impl Into<String>) -> Diagnostic {
+        self.add_help(help);
         self
     }
 
-    pub fn with_source(mut self, source: SourceComponent) -> Diagnostic {
+    pub fn add_source(&mut self, source: SourceComponent) {
         self.components.push(Component::Source(source));
+    }
+
+    pub fn with_source(mut self, source: SourceComponent) -> Diagnostic {
+        self.add_source(source);
         self
     }
 }
@@ -453,6 +461,10 @@ impl HlLine {
 
         while label_pos < pos + len && self.labels.iter().any(|&(pos, ..)| pos == label_pos) {
             label_pos += 1;
+        }
+
+        if label.message.trim().is_empty() {
+            return;
         }
 
         cells[label_pos - pos] = ('┯', color);
