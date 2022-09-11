@@ -16,6 +16,7 @@ use wgpu::{
     TextureUsages, TextureView,
 };
 use winit::window::Window;
+
 use crate::atlas::{AtlasPool, PoolConfig};
 use crate::batch::{Batcher, State, Vertex};
 use crate::bindings::Bindings;
