@@ -150,7 +150,7 @@ impl Display for SourceComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let max_range = max_range(self.labels.iter().map(|l| l.range));
 
-        let lines = self.source.text.lines_in_range(max_range, 3);
+        let lines = self.source.text.lines_in_range(max_range, 1);
         if lines.is_empty() {
             return Ok(());
         }
@@ -335,7 +335,7 @@ impl Display for HlGrid {
             Color::Cyan.paint(&self.name).bold().underline()
         )?;
 
-        for line in &self.lines {
+        for (line_i, line) in self.lines.iter().enumerate() {
             let number = style.paint(line.number);
             write!(f, " {0:>1$} {2} ", number, width, style.paint("│"))?;
 
@@ -348,7 +348,9 @@ impl Display for HlGrid {
             y += 1;
 
             for row in &line.cells {
-                write!(f, " {0:>1$} {2} ", "", width, style.paint("┆"))?;
+                let last = line_i == self.lines.len() - 1;
+                let c = if last { " " } else { "┆" };
+                write!(f, " {0:>1$} {2} ", "", width, style.paint(c))?;
 
                 for col in self.cells.iter().rev() {
                     let (char, color) = col[y];
@@ -363,7 +365,7 @@ impl Display for HlGrid {
             }
         }
 
-        writeln!(f, "{}{} ", " ".repeat(width + 2), style.paint("╰──"))?;
+        // writeln!(f, "{}{} ", " ".repeat(width + 2), style.paint("╰──"))?;
 
         Ok(())
     }

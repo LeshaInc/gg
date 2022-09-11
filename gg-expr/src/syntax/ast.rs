@@ -132,7 +132,7 @@ macro_rules! define_enum {
             }
 
             pub fn range(&self) -> TextRange {
-                self.syntax().text_range()
+                non_trivial_text_range(self.syntax())
             }
         }
 

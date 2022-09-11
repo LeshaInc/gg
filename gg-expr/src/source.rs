@@ -19,14 +19,16 @@ impl SourceText {
         let mut end = 0;
         let mut lines = Vec::new();
 
-        text.for_each_chunk(|chunk| {
-            if let Some(idx) = chunk.find('\n') {
+        text.for_each_chunk(|mut chunk| {
+            while let Some(idx) = chunk.find('\n') {
                 end += idx as u32;
                 lines.push(TextRange::new(TextSize::from(start), TextSize::from(end)));
                 start = end + 1;
-            } else {
-                end += chunk.len() as u32;
+                chunk = &chunk[idx + 1..];
+                end = start;
             }
+
+            end += chunk.len() as u32;
         });
 
         SourceText { root, lines }
