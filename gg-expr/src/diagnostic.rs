@@ -336,8 +336,11 @@ impl Display for HlGrid {
         )?;
 
         for (line_i, line) in self.lines.iter().enumerate() {
+            let last = line_i == self.lines.len() - 1;
+            let c = if last { "┕" } else { "│" };
+
             let number = style.paint(line.number);
-            write!(f, " {0:>1$} {2} ", number, width, style.paint("│"))?;
+            write!(f, " {0:>1$} {2} ", number, width, style.paint(c))?;
 
             for col in self.cells.iter().rev() {
                 let (char, color) = col[y];
@@ -348,7 +351,6 @@ impl Display for HlGrid {
             y += 1;
 
             for row in &line.cells {
-                let last = line_i == self.lines.len() - 1;
                 let c = if last { " " } else { "┆" };
                 write!(f, " {0:>1$} {2} ", "", width, style.paint(c))?;
 
