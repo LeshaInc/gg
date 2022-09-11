@@ -3,7 +3,6 @@ use std::ops::{Add, AddAssign, Index, Sub};
 
 use super::reg::{RegId, RegSeq};
 use super::ConstId;
-pub use crate::syntax::{BinOp, UnOp};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Opcode {
@@ -53,6 +52,33 @@ pub enum Operand {
 }
 
 impl Opcode {
+    pub fn operator(self) -> &'static str {
+        use Opcode::*;
+
+        match self {
+            OpOr => "||",
+            OpCoalesce => "??",
+            OpAnd => "&&",
+            OpLt => "<",
+            OpLe => "<=",
+            OpEq => "==",
+            OpNeq => "!=",
+            OpGe => ">=",
+            OpGt => ">",
+            OpAdd => "+",
+            OpSub => "-",
+            OpMul => "*",
+            OpDiv => "/",
+            OpRem => "%",
+            OpPow => "**",
+            OpIndex => "[]",
+            OpIndexNullable => "?[]",
+            UnOpNeg => "-",
+            UnOpNot => "!",
+            _ => "?",
+        }
+    }
+
     pub fn operands(self) -> [Operand; 3] {
         use Opcode::*;
         use Operand::*;

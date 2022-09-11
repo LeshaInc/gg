@@ -4,7 +4,6 @@ use std::hash::{Hash, Hasher};
 use rowan::NodeOrToken;
 
 use super::{parser, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange};
-use crate::syntax::{BinOp, UnOp};
 
 type WalkEvent = rowan::WalkEvent<NodeOrToken<SyntaxNode, SyntaxToken>>;
 
@@ -288,9 +287,8 @@ impl ExprBinding {
 }
 
 impl ExprBinary {
-    pub fn op(&self) -> Option<BinOp> {
-        let token = self.nontrivial_tokens().next()?;
-        BinOp::from_token(token.kind())
+    pub fn op(&self) -> Option<SyntaxKind> {
+        self.nontrivial_tokens().next().map(|v| v.kind())
     }
 
     pub fn lhs(&self) -> Option<Expr> {
@@ -303,16 +301,14 @@ impl ExprBinary {
 }
 
 impl ExprUnary {
-    pub fn op(&self) -> Option<UnOp> {
-        let token = self.nontrivial_tokens().next()?;
-        UnOp::from_token(token.kind())
+    pub fn op(&self) -> Option<SyntaxKind> {
+        self.nontrivial_tokens().next().map(|v| v.kind())
     }
 }
 
 impl ExprIndex {
-    pub fn op(&self) -> Option<BinOp> {
-        let token = self.nontrivial_tokens().next().map(|v| v.kind())?;
-        BinOp::from_token(token)
+    pub fn op(&self) -> Option<SyntaxKind> {
+        self.nontrivial_tokens().next().map(|v| v.kind())
     }
 
     pub fn lhs(&self) -> Option<Expr> {

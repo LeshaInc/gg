@@ -9,7 +9,7 @@ use std::sync::Arc;
 use self::reg_alloc::RegAlloc;
 use self::scope::ScopeStack;
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::syntax::*;
+use crate::syntax::{SyntaxKind as SK, *};
 use crate::vm::*;
 use crate::{DebugInfo, Func, Source, Value};
 
@@ -213,23 +213,21 @@ impl Compiler {
         }
 
         let opcode = match expr.op() {
-            Some(BinOp::Or) => Opcode::OpOr,
-            Some(BinOp::Coalesce) => Opcode::OpCoalesce,
-            Some(BinOp::And) => Opcode::OpAnd,
-            Some(BinOp::Lt) => Opcode::OpLt,
-            Some(BinOp::Le) => Opcode::OpLe,
-            Some(BinOp::Eq) => Opcode::OpEq,
-            Some(BinOp::Neq) => Opcode::OpNeq,
-            Some(BinOp::Ge) => Opcode::OpGe,
-            Some(BinOp::Gt) => Opcode::OpGt,
-            Some(BinOp::Add) => Opcode::OpAdd,
-            Some(BinOp::Sub) => Opcode::OpSub,
-            Some(BinOp::Mul) => Opcode::OpMul,
-            Some(BinOp::Div) => Opcode::OpDiv,
-            Some(BinOp::Rem) => Opcode::OpRem,
-            Some(BinOp::Pow) => Opcode::OpPow,
-            Some(BinOp::Index) => Opcode::OpIndex,
-            Some(BinOp::IndexNullable) => Opcode::OpIndexNullable,
+            Some(SK::TokOr) => Opcode::OpOr,
+            Some(SK::TokCoalesce) => Opcode::OpCoalesce,
+            Some(SK::TokAnd) => Opcode::OpAnd,
+            Some(SK::TokLt) => Opcode::OpLt,
+            Some(SK::TokLe) => Opcode::OpLe,
+            Some(SK::TokEq) => Opcode::OpEq,
+            Some(SK::TokNeq) => Opcode::OpNeq,
+            Some(SK::TokGe) => Opcode::OpGe,
+            Some(SK::TokGt) => Opcode::OpGt,
+            Some(SK::TokAdd) => Opcode::OpAdd,
+            Some(SK::TokSub) => Opcode::OpSub,
+            Some(SK::TokMul) => Opcode::OpMul,
+            Some(SK::TokDiv) => Opcode::OpDiv,
+            Some(SK::TokRem) => Opcode::OpRem,
+            Some(SK::TokPow) => Opcode::OpPow,
             _ => Opcode::OpAdd,
         };
 
@@ -250,8 +248,8 @@ impl Compiler {
         }
 
         let opcode = match expr.op() {
-            Some(UnOp::Neg) => Opcode::UnOpNeg,
-            Some(UnOp::Not) => Opcode::UnOpNot,
+            Some(SK::TokSub) => Opcode::UnOpNeg,
+            Some(SK::TokNot) => Opcode::UnOpNot,
             _ => Opcode::UnOpNeg,
         };
 
@@ -339,12 +337,12 @@ impl Compiler {
         let mut rhs_range = range;
 
         if lhs == rhs {
-            dbg!(rhs);
+            rhs = self.regs.alloc();
             rhs_temp = Some(rhs);
         }
 
         if let Some(ident) = expr.rhs_ident() {
-            rhs_range = expr.range();
+            rhs_range = ident.range();
             self.compile_const(rhs_range, ident.name(), rhs);
         } else if let Some(expr) = expr.rhs_expr() {
             rhs_range = expr.range();
@@ -356,8 +354,8 @@ impl Compiler {
         }
 
         let opcode = match expr.op() {
-            Some(BinOp::Index) => Opcode::OpIndex,
-            Some(BinOp::IndexNullable) => Opcode::OpIndexNullable,
+            Some(SK::TokLBracket | SK::TokDot) => Opcode::OpIndex,
+            Some(SK::TokQuestionLBracket | SK::TokQuestionDot) => Opcode::OpIndexNullable,
             _ => Opcode::OpIndex,
         };
 

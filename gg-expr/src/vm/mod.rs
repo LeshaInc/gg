@@ -1,9 +1,9 @@
 mod consts;
 mod error;
 mod instr;
-mod ops;
 mod reg;
 
+use std::fmt::Write;
 use std::sync::Arc;
 
 pub use self::consts::{CompiledConsts, ConstId, Consts};
@@ -11,7 +11,7 @@ pub use self::error::{Error, Result, StackFrame, StackTrace};
 pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opcode};
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
-use crate::syntax::{BinOp, TextRange, UnOp};
+use crate::syntax::TextRange;
 use crate::{Func, FuncValue, List, Map, Source, Value};
 
 #[derive(Debug, Default)]
@@ -208,6 +208,7 @@ impl VmContext {
         self.error_simple("code overrun")
     }
 
+    #[inline(always)]
     fn dispatch(&mut self, instr: Instr) -> Result<()> {
         match instr.opcode {
             Opcode::Nop => self.instr_nop(instr),
@@ -241,6 +242,8 @@ impl VmContext {
             Opcode::UnOpNeg => self.instr_un_op_neg(instr),
             Opcode::UnOpNot => self.instr_un_op_not(instr),
         }
+
+        // JUMP_TABLE[instr.opcode as usize](self, instr)
     }
 
     fn instr_nop(&mut self, _instr: Instr) -> Result<()> {
@@ -377,107 +380,37 @@ impl VmContext {
         Ok(())
     }
 
-    fn instr_op_or(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Or)
-    }
-
-    fn instr_op_coalesce(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Coalesce)
-    }
-
-    fn instr_op_and(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::And)
-    }
-
-    fn instr_op_lt(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Lt)
-    }
-
-    fn instr_op_le(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Le)
-    }
-
-    fn instr_op_eq(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Eq)
-    }
-
-    fn instr_op_neq(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Neq)
-    }
-
-    fn instr_op_ge(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Ge)
-    }
-
-    fn instr_op_gt(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Gt)
-    }
-
-    fn instr_op_add(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Add)
-    }
-
-    fn instr_op_sub(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Sub)
-    }
-
-    fn instr_op_mul(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Mul)
-    }
-
-    fn instr_op_div(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Div)
-    }
-
-    fn instr_op_rem(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Rem)
-    }
-
-    fn instr_op_pow(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Pow)
-    }
-
-    fn instr_op_index(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::Index)
-    }
-
-    fn instr_op_index_nullable(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, BinOp::IndexNullable)
-    }
-
-    fn instr_un_op_neg(&mut self, instr: Instr) -> Result<()> {
-        self.instr_un_op(instr, UnOp::Neg)
-    }
-
-    fn instr_un_op_not(&mut self, instr: Instr) -> Result<()> {
-        self.instr_un_op(instr, UnOp::Not)
-    }
-
-    #[inline(always)]
-    fn instr_bin_op(&mut self, instr: Instr, op: BinOp) -> Result<()> {
+    fn instr_bin_op(
+        &mut self,
+        instr: Instr,
+        op: impl FnOnce(&VmContext, &Value, &Value) -> Result<Value>,
+    ) -> Result<()> {
         let lhs = self.reg_read(instr.reg_a())?;
         let rhs = self.reg_read(instr.reg_b())?;
-        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.error_bin_op(instr, op))?;
+        let res = op(self, lhs, rhs)?;
         self.reg_write(instr.reg_c(), res)?;
         Ok(())
     }
 
-    #[inline(always)]
-    fn instr_un_op(&mut self, instr: Instr, op: UnOp) -> Result<()> {
+    fn instr_un_op(
+        &mut self,
+        instr: Instr,
+        op: impl FnOnce(&VmContext, &Value) -> Result<Value>,
+    ) -> Result<()> {
         let arg = self.reg_read(instr.reg_a())?;
-        let res = ops::un_op(op, arg).ok_or_else(|| self.error_un_op(instr, op))?;
+        let res = op(self, arg)?;
         self.reg_write(instr.reg_b(), res)?;
         Ok(())
     }
 
     #[inline(never)]
-    fn error_bin_op(&self, instr: Instr, op: BinOp) -> Error {
+    fn error_bin_op(&self, instr: Instr) -> Error {
         let lhs = self.reg_read(instr.reg_a()).unwrap();
         let rhs = self.reg_read(instr.reg_b()).unwrap();
 
         let message = format!(
             "operator `{}` cannot be applied to `{:?}` and `{:?}`",
-            op,
+            instr.opcode.operator(),
             lhs.ty(),
             rhs.ty()
         );
@@ -497,12 +430,12 @@ impl VmContext {
     }
 
     #[inline(never)]
-    fn error_un_op(&self, instr: Instr, op: UnOp) -> Error {
+    fn error_un_op(&self, instr: Instr) -> Error {
         let arg = self.reg_read(instr.reg_a()).unwrap();
 
         let message = format!(
             "unary operator `{}` cannot be applied to `{:?}`",
-            op,
+            instr.opcode.operator(),
             arg.ty(),
         );
 
@@ -518,5 +451,272 @@ impl VmContext {
                 ));
             }
         })
+    }
+
+    fn instr_op_or(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |_, x, y| Ok((x.is_truthy() || y.is_truthy()).into()))
+    }
+
+    fn instr_op_coalesce(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |_, x, y| {
+            Ok((if x.is_null() { y } else { x }).clone())
+        })
+    }
+
+    fn instr_op_and(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |_, x, y| Ok((x.is_truthy() && y.is_truthy()).into()))
+    }
+
+    fn instr_op_index(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |s, x, y| {
+            let val = if let (Ok(x), Ok(y)) = (x.as_list(), y.as_int()) {
+                usize::try_from(y)
+                    .ok()
+                    .and_then(|idx| x.get(idx))
+                    .ok_or_else(|| s.error_list_oob(instr))?
+            } else if let Ok(map) = x.as_map() {
+                map.get(y).ok_or_else(|| s.error_no_such_key(instr))?
+            } else {
+                return Err(s.error_bin_op(instr));
+            };
+
+            Ok(val.clone())
+        })
+    }
+
+    #[cold]
+    fn error_list_oob(&self, instr: Instr) -> Error {
+        let lhs = self.reg_read(instr.reg_a()).unwrap().as_list().unwrap();
+        let rhs = self.reg_read(instr.reg_b()).unwrap().as_int().unwrap();
+
+        let message = if !lhs.is_empty() {
+            format!(
+                "list index out of bounds: {} not in [0, {})",
+                rhs,
+                lhs.len()
+            )
+        } else {
+            "list index out of bounds: empty list".to_string()
+        };
+
+        let ranges = self.cur_ranges();
+        let main_range = ranges.as_ref().map(|v| v[0]);
+
+        self.error(main_range, message, |diag, source| {
+            if let (Some(source), Some(ranges)) = (source, ranges) {
+                diag.add_source(
+                    SourceComponent::new(source)
+                        .with_label(Severity::Error, ranges[1], format!("length: {}", lhs.len()))
+                        .with_label(Severity::Error, ranges[2], format!("index: {}", rhs)),
+                );
+            }
+        })
+    }
+
+    #[cold]
+    fn error_no_such_key(&self, instr: Instr) -> Error {
+        let lhs = self.reg_read(instr.reg_a()).unwrap().as_map().unwrap();
+        let rhs = self.reg_read(instr.reg_b()).unwrap();
+
+        let lhs_label = format!("map of {} entries", lhs.len());
+        let (message, rhs_label) =
+            if rhs.is_string() || rhs.is_int() || rhs.is_float() || rhs.is_bool() {
+                (
+                    format!("key not present in map: {:?}", rhs),
+                    format!("key: {:?}", rhs),
+                )
+            } else {
+                ("key not present in map".to_string(), "key".to_string())
+            };
+
+        let mut help = None;
+
+        if let Ok(str) = rhs.as_string() {
+            let mut keys = lhs.keys().flat_map(|k| k.as_string()).collect::<Vec<_>>();
+            keys.sort_by_cached_key(|v| strsim::damerau_levenshtein(v, str));
+
+            let mut new_help = String::from("perhaps you meant ");
+
+            for (i, var) in keys.iter().take(3).enumerate() {
+                if i > 0 {
+                    new_help.push_str(", ");
+                }
+
+                let _ = write!(&mut new_help, "{:?}", var);
+            }
+
+            if !keys.is_empty() {
+                help = Some(new_help);
+            }
+        }
+
+        let ranges = self.cur_ranges();
+        let main_range = ranges.as_ref().map(|v| v[0]);
+
+        self.error(main_range, message, |diag, source| {
+            if let (Some(source), Some(ranges)) = (source, ranges) {
+                diag.add_source(
+                    SourceComponent::new(source)
+                        .with_label(Severity::Error, ranges[1], lhs_label)
+                        .with_label(Severity::Error, ranges[2], rhs_label),
+                );
+            }
+
+            if let Some(help) = help {
+                diag.add_help(help)
+            }
+        })
+    }
+
+    fn instr_op_index_nullable(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |s, x, y| {
+            let val = if let Ok(x) = x.as_list() {
+                let idx = y.as_int().ok().and_then(|v| usize::try_from(v).ok());
+                idx.and_then(|idx| x.get(idx))
+                    .cloned()
+                    .unwrap_or_else(Value::null)
+            } else if let Ok(map) = x.as_map() {
+                map.get(y).cloned().unwrap_or_else(Value::null)
+            } else {
+                return Err(s.error_bin_op(instr));
+            };
+
+            Ok(val)
+        })
+    }
+}
+
+macro_rules! op_cmp {
+    ($self:ident, $instr:ident, $op:tt) => {
+        $self.instr_bin_op($instr, |s, x, y| {
+            let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
+                x $op  y
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {
+                x $op (y as f32)
+            } else if let (Ok(x), Ok(y)) = (x.as_int(), y.as_float()) {
+                (x as f32) $op y
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_float()) {
+                x $op y
+            } else if let (Ok(x), Ok(y)) = (x.as_string(), y.as_string()) {
+                x $op y
+            } else {
+                return Err(s.error_bin_op($instr))
+            };
+
+            Ok(res.into())
+        })
+    };
+}
+
+impl VmContext {
+    fn instr_op_lt(&mut self, instr: Instr) -> Result<()> {
+        op_cmp!(self, instr, <)
+    }
+
+    fn instr_op_le(&mut self, instr: Instr) -> Result<()> {
+        op_cmp!(self, instr, <=)
+    }
+
+    fn instr_op_ge(&mut self, instr: Instr) -> Result<()> {
+        op_cmp!(self, instr, >=)
+    }
+
+    fn instr_op_gt(&mut self, instr: Instr) -> Result<()> {
+        op_cmp!(self, instr, >)
+    }
+
+    fn instr_op_eq(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |_, x, y| Ok(Value::from(x == y)))
+    }
+
+    fn instr_op_neq(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |_, x, y| Ok(Value::from(x != y)))
+    }
+}
+
+macro_rules! op_arith {
+    ($self:ident, $instr:ident, $int:ident, $op:tt) => {
+        $self.instr_bin_op($instr, |s, x, y| {
+            let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
+                (x.$int(y)).map(Value::from)
+                    .unwrap_or_else(|| ((x as f32) $op (y as f32)).into())
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {
+                (x $op (y as f32)).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_int(), y.as_float()) {
+                ((x as f32) $op y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_float()) {
+                (x $op y).into()
+            } else {
+                return Err(s.error_bin_op($instr))
+            };
+
+            Ok(res)
+        })
+    };
+}
+
+impl VmContext {
+    fn instr_op_add(&mut self, instr: Instr) -> Result<()> {
+        op_arith!(self, instr, checked_add, +)
+    }
+
+    fn instr_op_sub(&mut self, instr: Instr) -> Result<()> {
+        op_arith!(self, instr, checked_sub, -)
+    }
+
+    fn instr_op_mul(&mut self, instr: Instr) -> Result<()> {
+        op_arith!(self, instr, checked_mul, *)
+    }
+
+    fn instr_op_div(&mut self, instr: Instr) -> Result<()> {
+        op_arith!(self, instr, checked_div, /)
+    }
+
+    fn instr_op_rem(&mut self, instr: Instr) -> Result<()> {
+        op_arith!(self, instr, checked_rem, %)
+    }
+
+    fn instr_op_pow(&mut self, instr: Instr) -> Result<()> {
+        self.instr_bin_op(instr, |s, x, y| {
+            let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
+                if y > 0 {
+                    x.checked_pow(y as u32)
+                        .map(Value::from)
+                        .unwrap_or_else(|| (x as f32).powi(y).into())
+                } else {
+                    (x as f32).powi(y).into()
+                }
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {
+                x.powi(y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_int(), y.as_float()) {
+                (x as f32).powf(y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_float()) {
+                x.powf(y).into()
+            } else {
+                return Err(s.error_bin_op(instr));
+            };
+
+            Ok(res)
+        })
+    }
+
+    fn instr_un_op_neg(&mut self, instr: Instr) -> Result<()> {
+        self.instr_un_op(instr, |s, x| {
+            let res = if let Ok(x) = x.as_int() {
+                x.checked_neg()
+                    .map(Value::from)
+                    .unwrap_or_else(|| (-(x as f32)).into())
+            } else if let Ok(x) = x.as_float() {
+                (-x).into()
+            } else {
+                return Err(s.error_un_op(instr));
+            };
+
+            Ok(res)
+        })
+    }
+
+    fn instr_un_op_not(&mut self, instr: Instr) -> Result<()> {
+        self.instr_un_op(instr, |_, x| Ok((!x.is_truthy()).into()))
     }
 }
