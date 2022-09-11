@@ -116,7 +116,7 @@ impl VmContext {
     }
 
     fn cur_ranges(&self) -> Option<Vec<TextRange>> {
-        if let Some(di) = &self.cur_func().debug_info {
+        if let Some(di) = &self.cur_func().ok()?.debug_info {
             let prev_ip = &(self.frame.ip + InstrOffset(-1));
             return di.instruction_ranges.get(&prev_ip).cloned();
         }
@@ -129,7 +129,7 @@ impl VmContext {
         message: impl Into<String>,
         extra: impl FnOnce(&mut Diagnostic, Option<Arc<Source>>),
     ) -> Error {
-        let debug_info = self.cur_func().debug_info.as_ref();
+        let debug_info = self.cur_func().ok().and_then(|f| f.debug_info.as_ref());
         let source = debug_info.map(|v| v.source.clone());
 
         let mut diagnostic = Diagnostic::new(Severity::Error, message.into());
@@ -138,22 +138,35 @@ impl VmContext {
         Error::new(diagnostic).with_stack_trace(self.stack_trace(range))
     }
 
-    fn cur_func(&self) -> &Func {
-        self.stack[self.frame.func].as_func().unwrap()
+    #[inline(never)]
+    fn error_simple(&self, message: &str) -> Error {
+        self.error(None, message, |_, _| ())
+    }
+
+    fn cur_func(&self) -> Result<&Func> {
+        self.stack
+            .get(self.frame.func)
+            .and_then(|v| v.as_func().ok())
+            .ok_or_else(|| self.error_bad_fn())
+    }
+
+    #[inline(never)]
+    fn error_bad_fn(&self) -> Error {
+        self.error_simple("invalid function")
     }
 
     fn reg_offset(&self, id: RegId) -> Result<usize> {
         let idx = self.frame.base + usize::from(id.0);
         if idx >= self.stack.len() {
-            Err(self.reg_invalid())
+            Err(self.error_bad_reg())
         } else {
             Ok(idx)
         }
     }
 
-    #[cold]
-    fn reg_invalid(&self) -> Error {
-        Diagnostic::new(Severity::Error, "invalid register").into()
+    #[inline(never)]
+    fn error_bad_reg(&self) -> Error {
+        self.error_simple("invalid register")
     }
 
     fn reg_read(&self, id: RegId) -> Result<&Value> {
@@ -167,32 +180,32 @@ impl VmContext {
     }
 
     fn const_read(&self, id: ConstId) -> Result<&Value> {
-        let func = self.cur_func();
+        let func = self.cur_func()?;
         func.consts
             .0
             .get(usize::from(id.0))
-            .ok_or_else(|| self.const_invalid())
+            .ok_or_else(|| self.error_bad_const())
     }
 
-    #[cold]
-    fn const_invalid(&self) -> Error {
-        Diagnostic::new(Severity::Error, "invalid register").into()
+    #[inline(never)]
+    fn error_bad_const(&self) -> Error {
+        self.error_simple("invalid constant")
     }
 
     fn fetch(&mut self) -> Result<Instr> {
-        let func = self.cur_func();
+        let func = self.cur_func()?;
         let instrs = &func.instrs.0;
         let instr = instrs
             .get(self.frame.ip.0 as usize)
             .copied()
-            .ok_or_else(|| self.code_overrun())?;
+            .ok_or_else(|| self.error_code_overrun())?;
         self.frame.ip += InstrOffset(1);
         Ok(instr)
     }
 
-    #[cold]
-    fn code_overrun(&self) -> Error {
-        Diagnostic::new(Severity::Error, "code overrun").into()
+    #[inline(never)]
+    fn error_code_overrun(&self) -> Error {
+        self.error_simple("code overrun")
     }
 
     fn dispatch(&mut self, instr: Instr) -> Result<()> {
@@ -235,7 +248,12 @@ impl VmContext {
     }
 
     fn instr_panic(&mut self, _instr: Instr) -> Result<()> {
-        Err(Diagnostic::new(Severity::Error, "vm panicked").into())
+        Err(self.error_panic())
+    }
+
+    #[inline(never)]
+    fn error_panic(&self) -> Error {
+        self.error_simple("panic")
     }
 
     fn instr_copy(&mut self, instr: Instr) -> Result<()> {
@@ -284,9 +302,7 @@ impl VmContext {
         let dst_reg = instr.reg_c();
 
         let func_val = self.reg_read(func_reg)?;
-        let func = func_val
-            .as_func()
-            .map_err(|_| self.error(None, "not a function", |_, _| ()))?;
+        let func = func_val.as_func().map_err(|_| self.error_bad_fn())?;
 
         let old_base = self.frame.base;
         let new_base = self.stack.len();
@@ -323,7 +339,7 @@ impl VmContext {
     fn instr_ret(&mut self, instr: Instr) -> Result<()> {
         let val = self.reg_write(instr.reg_a(), Value::null())?;
 
-        let cur_func = self.cur_func();
+        let cur_func = self.cur_func()?;
         let num_slots = cur_func.slots;
         let dst = self.frame.dst;
 
@@ -422,7 +438,7 @@ impl VmContext {
     fn instr_bin_op(&mut self, instr: Instr, op: BinOp) -> Result<()> {
         let lhs = self.reg_read(instr.reg_a())?;
         let rhs = self.reg_read(instr.reg_b())?;
-        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.error_bin_op(lhs, rhs, op))?;
+        let res = ops::bin_op(op, lhs, rhs).ok_or_else(|| self.error_bin_op(instr, op))?;
         self.reg_write(instr.reg_c(), res)?;
         Ok(())
     }
@@ -430,13 +446,16 @@ impl VmContext {
     #[inline(always)]
     fn instr_un_op(&mut self, instr: Instr, op: UnOp) -> Result<()> {
         let arg = self.reg_read(instr.reg_a())?;
-        let res = ops::un_op(op, arg).ok_or_else(|| self.error_un_op(arg, op))?;
+        let res = ops::un_op(op, arg).ok_or_else(|| self.error_un_op(instr, op))?;
         self.reg_write(instr.reg_b(), res)?;
         Ok(())
     }
 
-    #[cold]
-    fn error_bin_op(&self, lhs: &Value, rhs: &Value, op: BinOp) -> Error {
+    #[inline(never)]
+    fn error_bin_op(&self, instr: Instr, op: BinOp) -> Error {
+        let lhs = self.reg_read(instr.reg_a()).unwrap();
+        let rhs = self.reg_read(instr.reg_b()).unwrap();
+
         let message = format!(
             "operator `{}` cannot be applied to `{:?}` and `{:?}`",
             op,
@@ -458,8 +477,10 @@ impl VmContext {
         })
     }
 
-    #[cold]
-    fn error_un_op(&self, arg: &Value, op: UnOp) -> Error {
+    #[inline(never)]
+    fn error_un_op(&self, instr: Instr, op: UnOp) -> Error {
+        let arg = self.reg_read(instr.reg_a()).unwrap();
+
         let message = format!(
             "unary operator `{}` cannot be applied to `{:?}`",
             op,
