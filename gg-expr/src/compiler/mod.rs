@@ -323,8 +323,49 @@ impl Compiler {
         self.regs.free_seq(seq);
     }
 
-    fn compile_expr_index(&mut self, _expr: ExprIndex, _dst: &mut RegId) {
-        todo!()
+    fn compile_expr_index(&mut self, expr: ExprIndex, dst: &mut RegId) {
+        let range = expr.range();
+
+        let mut lhs = *dst;
+        let mut lhs_range = range;
+
+        if let Some(expr) = expr.lhs() {
+            lhs_range = expr.range();
+            self.compile_expr(expr, &mut lhs)
+        }
+
+        let mut rhs = *dst;
+        let mut rhs_temp = None;
+        let mut rhs_range = range;
+
+        if lhs == rhs {
+            dbg!(rhs);
+            rhs_temp = Some(rhs);
+        }
+
+        if let Some(ident) = expr.rhs_ident() {
+            rhs_range = expr.range();
+            self.compile_const(rhs_range, ident.name(), rhs);
+        } else if let Some(expr) = expr.rhs_expr() {
+            rhs_range = expr.range();
+            self.compile_expr(expr, &mut rhs);
+        }
+
+        if let Some(reg) = rhs_temp {
+            self.regs.free(reg);
+        }
+
+        let opcode = match expr.op() {
+            Some(BinOp::Index) => Opcode::OpIndex,
+            Some(BinOp::IndexNullable) => Opcode::OpIndexNullable,
+            _ => Opcode::OpIndex,
+        };
+
+        let instr = Instr::new(opcode)
+            .with_reg_a(lhs)
+            .with_reg_b(rhs)
+            .with_reg_c(*dst);
+        self.add_instr_ranged(&[range, lhs_range, rhs_range], instr);
     }
 
     fn compile_expr_if_else(&mut self, expr: ExprIfElse, dst: &mut RegId) {

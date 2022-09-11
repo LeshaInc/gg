@@ -12,7 +12,7 @@ pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opco
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{BinOp, TextRange, UnOp};
-use crate::{Func, FuncValue, Source, Value};
+use crate::{Func, FuncValue, List, Map, Source, Value};
 
 #[derive(Debug, Default)]
 pub struct Vm {
@@ -268,12 +268,31 @@ impl VmContext {
         Ok(())
     }
 
-    fn instr_new_list(&mut self, _instr: Instr) -> Result<()> {
-        todo!()
+    fn instr_new_list(&mut self, instr: Instr) -> Result<()> {
+        let mut list = List::new();
+
+        for reg in instr.reg_seq() {
+            let value = self.reg_read(reg)?;
+            list.push_back(value.clone());
+        }
+
+        self.reg_write(instr.reg_c(), list.into())?;
+
+        Ok(())
     }
 
-    fn instr_new_map(&mut self, _instr: Instr) -> Result<()> {
-        todo!()
+    fn instr_new_map(&mut self, instr: Instr) -> Result<()> {
+        let mut map = Map::new();
+
+        for reg in instr.reg_seq().into_iter().step_by(2) {
+            let key = self.reg_read(reg)?;
+            let value = self.reg_read(RegId(reg.0 + 1))?;
+            map.insert(key.clone(), value.clone());
+        }
+
+        self.reg_write(instr.reg_c(), map.into())?;
+
+        Ok(())
     }
 
     fn instr_jump(&mut self, instr: Instr) -> Result<()> {

@@ -7,7 +7,7 @@ pub mod vm;
 
 pub use self::compiler::{compile, Compiler};
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
-pub use self::value::{DebugInfo, Func, FuncValue, Type, Value};
+pub use self::value::{DebugInfo, Func, FuncValue, List, Map, Type, Value};
 pub use self::vm::Vm;
 use crate::diagnostic::Diagnostic;
 
