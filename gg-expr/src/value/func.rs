@@ -6,7 +6,7 @@ use std::sync::Arc;
 use indenter::indented;
 
 use crate::syntax::TextRange;
-use crate::vm::{CompiledConsts, CompiledInstrs, InstrIdx};
+use crate::vm::{CompiledConsts, CompiledInstrs, InstrIdx, Upvalues};
 use crate::Source;
 
 #[derive(Clone)]
@@ -15,6 +15,7 @@ pub struct Func {
     pub slots: u16,
     pub instrs: CompiledInstrs,
     pub consts: CompiledConsts,
+    pub upvalues: Upvalues,
     pub debug_info: Option<Arc<DebugInfo>>,
 }
 

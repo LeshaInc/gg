@@ -1,17 +1,21 @@
 use std::fmt::{self, Debug};
 use std::ops::{Add, AddAssign, Index, Sub};
+use std::sync::Arc;
 
 use super::reg::{RegId, RegSeq};
-use super::ConstId;
+use super::{ConstId, UpfnId, UpvalueId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Opcode {
     Nop,
     Panic,
     LoadConst,
+    LoadUpvalue,
+    LoadUpfn,
     Copy,
     NewList,
     NewMap,
+    NewFunc,
     Jump,
     JumpIfTrue,
     JumpIfFalse,
@@ -44,6 +48,7 @@ pub enum Opcode {
 pub enum Operand {
     None,
     ConstId,
+    UpvalueId,
     RegA,
     RegB,
     RegC,
@@ -85,8 +90,10 @@ impl Opcode {
         match self {
             Nop | Panic => [None; 3],
             LoadConst => [ConstId, RegB, None],
+            LoadUpvalue => [UpvalueId, RegB, None],
+            LoadUpfn => [UpvalueId, RegB, None],
             Copy => [RegA, RegB, None],
-            NewList | NewMap => [RegSeq, RegC, None],
+            NewList | NewMap | NewFunc => [RegSeq, RegC, None],
             Jump => [Offset, None, None],
             JumpIfTrue | JumpIfFalse => [RegA, Offset, None],
             Call => [RegSeq, RegC, None],
@@ -119,6 +126,24 @@ impl Instr {
     }
 
     pub fn with_const_id(mut self, id: ConstId) -> Self {
+        self.operands[0] = id.0;
+        self
+    }
+
+    pub fn upvalue_id(self) -> UpvalueId {
+        UpvalueId(self.operands[0])
+    }
+
+    pub fn with_upvalue_id(mut self, id: UpvalueId) -> Self {
+        self.operands[0] = id.0;
+        self
+    }
+
+    pub fn upfn_id(self) -> UpfnId {
+        UpfnId(self.operands[0])
+    }
+
+    pub fn with_upfn_id(mut self, id: UpfnId) -> Self {
         self.operands[0] = id.0;
         self
     }
@@ -195,14 +220,16 @@ impl Debug for Instr {
             if i > 0 {
                 write!(f, ", ")?;
             }
+
             match operand {
-                Operand::ConstId => write!(f, "{:?}", self.const_id())?,
-                Operand::RegA => write!(f, "{:?}", self.reg_a(),)?,
-                Operand::RegB => write!(f, "{:?}", self.reg_b())?,
-                Operand::RegC => write!(f, "{:?}", self.reg_c())?,
-                Operand::RegSeq => write!(f, "{:?}", self.reg_seq())?,
-                Operand::Offset => write!(f, "{:?}", self.offset())?,
-                _ => {}
+                Operand::ConstId => self.const_id().fmt(f)?,
+                Operand::UpvalueId => self.upvalue_id().fmt(f)?,
+                Operand::RegA => self.reg_a().fmt(f)?,
+                Operand::RegB => self.reg_b().fmt(f)?,
+                Operand::RegC => self.reg_c().fmt(f)?,
+                Operand::RegSeq => self.reg_seq().fmt(f)?,
+                Operand::Offset => self.offset().fmt(f)?,
+                Operand::None => {}
             }
         }
 
@@ -284,7 +311,7 @@ impl Instrs {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct CompiledInstrs(pub Box<[Instr]>);
+pub struct CompiledInstrs(pub Arc<[Instr]>);
 
 impl Index<InstrIdx> for CompiledInstrs {
     type Output = Instr;

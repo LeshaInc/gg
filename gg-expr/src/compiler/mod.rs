@@ -7,7 +7,7 @@ use std::iter;
 use std::sync::Arc;
 
 use self::reg_alloc::RegAlloc;
-use self::scope::ScopeStack;
+use self::scope::{ScopeStack, VarLoc};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{SyntaxKind as SK, *};
 use crate::vm::*;
@@ -17,6 +17,7 @@ pub struct Compiler {
     regs: RegAlloc,
     instrs: Instrs,
     consts: Consts,
+    upvalues: UpvalueNames,
     scopes: ScopeStack,
     diagnostics: Vec<Diagnostic>,
     debug_info: DebugInfo,
@@ -29,6 +30,7 @@ impl Compiler {
             regs: Default::default(),
             instrs: Default::default(),
             consts: Default::default(),
+            upvalues: Default::default(),
             scopes: Default::default(),
             diagnostics: Default::default(),
             debug_info: DebugInfo::new(source),
@@ -42,7 +44,9 @@ impl Compiler {
 
     fn pop_scope(&mut self) {
         for reg in self.scopes.pop() {
-            self.regs.free(reg)
+            if let VarLoc::Reg(reg) = reg {
+                self.regs.free(reg)
+            }
         }
     }
 
@@ -131,35 +135,62 @@ impl Compiler {
         self.compile_const(expr.range(), value, *dst)
     }
 
-    fn compile_expr_binding(&mut self, expr: ExprBinding, dst: &mut RegId) {
-        let ident = match expr.ident() {
-            Some(v) => v,
-            None => return,
-        };
+    fn compile_var_dst(&mut self, ident: Ident, dst: RegId) {
+        let mut tmp = dst;
+        self.compile_var(ident, &mut tmp);
+        if dst != tmp {
+            let instr = Instr::new(Opcode::Copy).with_reg_a(tmp).with_reg_b(dst);
+            self.instrs.add(instr);
+        }
+    }
 
+    fn compile_var(&mut self, ident: Ident, dst: &mut RegId) {
+        let range = ident.range();
         match self.scopes.get(&ident) {
-            Some(loc) => *dst = loc,
+            Some(VarLoc::Reg(id)) => {
+                *dst = id;
+            }
+            Some(VarLoc::Upvalue(id)) => {
+                let instr = Instr::new(Opcode::LoadUpvalue)
+                    .with_upvalue_id(id)
+                    .with_reg_b(*dst);
+                self.add_instr_ranged(&[range], instr);
+            }
+            Some(VarLoc::PossibleUpvalue) => {
+                let id = self.upvalues.add(ident.clone());
+                self.scopes.set(ident.clone(), id);
+                let instr = Instr::new(Opcode::LoadUpvalue)
+                    .with_upvalue_id(id)
+                    .with_reg_b(*dst);
+                self.add_instr_ranged(&[range], instr);
+            }
+            Some(VarLoc::Upfn(id)) => {
+                let instr = Instr::new(Opcode::LoadUpfn)
+                    .with_upfn_id(id)
+                    .with_reg_b(*dst);
+                self.add_instr_ranged(&[range], instr);
+            }
             None => {
-                self.no_such_binding(ident);
+                self.no_such_var(ident);
             }
         }
     }
 
-    fn bindings_in_scope(&self) -> Vec<Ident> {
-        let mut bindings = HashSet::new();
+    fn vars_in_scope(&self) -> Vec<Ident> {
+        let mut vars = HashSet::new();
 
         for ident in self.scopes.names() {
-            if !bindings.contains(&ident) {
-                bindings.insert(ident);
+            if !vars.contains(&ident) {
+                vars.insert(ident);
             }
         }
 
-        bindings.into_iter().collect()
+        vars.into_iter().collect()
     }
 
-    fn no_such_binding(&mut self, ident: Ident) {
+    fn no_such_var(&mut self, ident: Ident) {
         let range = ident.range();
-        let mut in_scope = self.bindings_in_scope();
+        let mut in_scope = self.vars_in_scope();
         in_scope.sort_by_cached_key(|v| strsim::damerau_levenshtein(v.name(), ident.name()));
 
         let mut help = String::from("perhaps you meant ");
@@ -172,10 +203,10 @@ impl Compiler {
             let _ = write!(&mut help, "`{}`", ident.name());
         }
 
-        let message = format!("cannot find binding `{}`", ident.name());
+        let message = format!("cannot find variable `{}`", ident.name());
         let source = self.debug_info.source.clone();
         let source =
-            SourceComponent::new(source).with_label(Severity::Error, range, "no such binding");
+            SourceComponent::new(source).with_label(Severity::Error, range, "no such variable");
         let mut diagnostic = Diagnostic::new(Severity::Error, message).with_source(source);
 
         if !in_scope.is_empty() {
@@ -183,6 +214,12 @@ impl Compiler {
         }
 
         self.add_error(diagnostic);
+    }
+
+    fn compile_expr_binding(&mut self, expr: ExprBinding, dst: &mut RegId) {
+        if let Some(ident) = expr.ident() {
+            self.compile_var(ident, dst)
+        }
     }
 
     fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut RegId) {
@@ -504,20 +541,55 @@ impl Compiler {
     }
 
     fn compile_expr_fn_named(&mut self, expr: ExprFn, dst: &mut RegId, name: Option<Ident>) {
+        let range = expr.range();
+
         let mut compiler = Compiler::new(self.debug_info.source.clone());
+        compiler.debug_info.range = range;
         compiler.debug_info.name = Some(
-            name.map(|v| v.name().into())
+            name.clone()
+                .map(|v| v.name().into())
                 .unwrap_or_else(|| "<anon>".into()),
         );
-        compiler.debug_info.range = expr.range();
+
+        for name in self.scopes.names() {
+            let loc = if let Some(VarLoc::Upfn(id)) = self.scopes.get(&name) {
+                VarLoc::Upfn(UpfnId(id.0 + 1))
+            } else {
+                VarLoc::PossibleUpvalue
+            };
+
+            compiler.scopes.set(name, loc);
+        }
+
+        if let Some(name) = name {
+            compiler.scopes.set(name, UpfnId(0));
+        }
 
         if let Some(body) = expr.expr() {
             compiler.compile_fn(expr.args(), body);
         }
 
-        let mut res = compiler.finish();
-        self.diagnostics.append(&mut res.diagnostics);
-        self.compile_const(expr.range(), res.func, *dst)
+        if compiler.upvalues.is_empty() {
+            let mut res = compiler.finish();
+            self.diagnostics.append(&mut res.diagnostics);
+            self.compile_const(expr.range(), res.func, *dst)
+        } else {
+            let seq = self.regs.alloc_seq(compiler.upvalues.len() + 1);
+            let (fn_reg, up_regs) = seq.split_first();
+
+            for (up_name, up_reg) in compiler.upvalues.iter().zip(up_regs) {
+                self.compile_var_dst(up_name.clone(), up_reg);
+            }
+
+            let mut res = compiler.finish();
+            self.diagnostics.append(&mut res.diagnostics);
+            self.compile_const(expr.range(), res.func, fn_reg);
+
+            let instr = Instr::new(Opcode::NewFunc)
+                .with_reg_seq(seq)
+                .with_reg_c(*dst);
+            self.add_instr_ranged(&[range], instr);
+        }
     }
 
     fn compile_pat(&mut self, pat: Pat, src: RegId, dst: &mut RegId) {
@@ -606,6 +678,7 @@ impl Compiler {
                 slots: self.regs.slots(),
                 instrs: self.instrs.compile(),
                 consts: self.consts.compile(),
+                upvalues: self.upvalues.compile(),
                 debug_info: Some(Arc::new(self.debug_info)),
             },
             diagnostics: self.diagnostics,

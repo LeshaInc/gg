@@ -2,6 +2,7 @@ mod consts;
 mod error;
 mod instr;
 mod reg;
+mod upvalues;
 
 use std::fmt::Write;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ pub use self::consts::{CompiledConsts, ConstId, Consts};
 pub use self::error::{Error, Result, StackFrame, StackTrace};
 pub use self::instr::{CompiledInstrs, Instr, InstrIdx, InstrOffset, Instrs, Opcode};
 pub use self::reg::{RegId, RegSeq, RegSeqIter};
+pub use self::upvalues::{UpfnId, UpvalueId, UpvalueNames, Upvalues};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::TextRange;
 use crate::{Func, FuncValue, List, Map, Source, Value};
@@ -181,15 +183,37 @@ impl VmContext {
 
     fn const_read(&self, id: ConstId) -> Result<&Value> {
         let func = self.cur_func()?;
-        func.consts
-            .0
-            .get(usize::from(id.0))
-            .ok_or_else(|| self.error_bad_const())
+        func.consts.get(id).ok_or_else(|| self.error_bad_const())
     }
 
     #[inline(never)]
     fn error_bad_const(&self) -> Error {
         self.error_simple("invalid constant")
+    }
+
+    fn upvalue_read(&self, id: UpvalueId) -> Result<&Value> {
+        let func = self.cur_func()?;
+        func.upvalues
+            .get(id)
+            .ok_or_else(|| self.error_bad_upvalue())
+    }
+
+    fn upfn_read(&self, id: UpfnId) -> Result<&Value> {
+        let idx = if id.0 == 0 {
+            self.frame.func
+        } else {
+            self.frames
+                .get(id.0 as usize)
+                .map(|frame| frame.func)
+                .ok_or_else(|| self.error_bad_upvalue())?
+        };
+
+        self.stack.get(idx).ok_or_else(|| self.error_bad_upvalue())
+    }
+
+    #[inline(never)]
+    fn error_bad_upvalue(&self) -> Error {
+        self.error_simple("invalid upvalue")
     }
 
     fn fetch(&mut self) -> Result<Instr> {
@@ -214,9 +238,12 @@ impl VmContext {
             Opcode::Nop => self.instr_nop(instr),
             Opcode::Panic => self.instr_panic(instr),
             Opcode::LoadConst => self.instr_load_const(instr),
+            Opcode::LoadUpvalue => self.instr_load_upvalue(instr),
+            Opcode::LoadUpfn => self.instr_load_upfn(instr),
             Opcode::Copy => self.instr_copy(instr),
             Opcode::NewList => self.instr_new_list(instr),
             Opcode::NewMap => self.instr_new_map(instr),
+            Opcode::NewFunc => self.instr_new_func(instr),
             Opcode::Jump => self.instr_jump(instr),
             Opcode::JumpIfTrue => self.instr_jump_if_true(instr),
             Opcode::JumpIfFalse => self.instr_jump_if_false(instr),
@@ -271,6 +298,18 @@ impl VmContext {
         Ok(())
     }
 
+    fn instr_load_upvalue(&mut self, instr: Instr) -> Result<()> {
+        let val = self.upvalue_read(instr.upvalue_id())?;
+        self.reg_write(instr.reg_b(), val.clone())?;
+        Ok(())
+    }
+
+    fn instr_load_upfn(&mut self, instr: Instr) -> Result<()> {
+        let val = self.upfn_read(instr.upfn_id())?;
+        self.reg_write(instr.reg_b(), val.clone())?;
+        Ok(())
+    }
+
     fn instr_new_list(&mut self, instr: Instr) -> Result<()> {
         let mut list = List::new();
 
@@ -294,6 +333,33 @@ impl VmContext {
         }
 
         self.reg_write(instr.reg_c(), map.into())?;
+
+        Ok(())
+    }
+
+    fn instr_new_func(&mut self, instr: Instr) -> Result<()> {
+        let (fn_reg, ups_regs) = instr.reg_seq().split_first();
+        let func = self
+            .reg_read(fn_reg)?
+            .as_func()
+            .map_err(|_| self.error_bad_fn())?;
+
+        let mut ups = vec![Value::null(); ups_regs.len as usize];
+
+        for (up, up_reg) in ups.iter_mut().zip(ups_regs) {
+            *up = self.reg_read(up_reg)?.clone();
+        }
+
+        let func = Func {
+            arity: func.arity,
+            slots: func.slots,
+            instrs: func.instrs.clone(),
+            consts: func.consts.clone(),
+            upvalues: Upvalues(ups.into()),
+            debug_info: func.debug_info.clone(),
+        };
+
+        self.reg_write(instr.reg_c(), Value::from(func))?;
 
         Ok(())
     }

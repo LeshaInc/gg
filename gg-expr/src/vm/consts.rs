@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::ops::Index;
+use std::sync::Arc;
 
 use crate::Value;
 
@@ -40,12 +41,18 @@ impl Consts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CompiledConsts(pub Box<[Value]>);
+pub struct CompiledConsts(pub Arc<[Value]>);
+
+impl CompiledConsts {
+    pub fn get(&self, id: ConstId) -> Option<&Value> {
+        self.0.get(id.0 as usize)
+    }
+}
 
 impl Index<ConstId> for CompiledConsts {
     type Output = Value;
 
     fn index(&self, idx: ConstId) -> &Value {
-        &self.0[idx.0 as usize]
+        self.get(idx).unwrap()
     }
 }
