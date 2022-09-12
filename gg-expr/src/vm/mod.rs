@@ -723,7 +723,30 @@ macro_rules! op_arith {
 
 impl VmContext {
     fn instr_op_add(&mut self, instr: Instr) -> Result<()> {
-        op_arith!(self, instr, checked_add, +)
+        self.instr_bin_op(instr, |s, x, y| {
+            let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
+                (x.checked_add(y))
+                    .map(Value::from)
+                    .unwrap_or_else(|| ((x as f32) + (y as f32)).into())
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {
+                (x + (y as f32)).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_int(), y.as_float()) {
+                ((x as f32) + y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_float()) {
+                (x + y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_string(), y.as_string()) {
+                let mut res = String::with_capacity(x.len() + y.len());
+                res.push_str(x);
+                res.push_str(y);
+                res.into()
+            } else if let (Ok(x), Ok(y)) = (x.as_list(), y.as_list()) {
+                (x + y).into()
+            } else {
+                return Err(s.error_bin_op(instr));
+            };
+
+            Ok(res)
+        })
     }
 
     fn instr_op_sub(&mut self, instr: Instr) -> Result<()> {
@@ -731,7 +754,35 @@ impl VmContext {
     }
 
     fn instr_op_mul(&mut self, instr: Instr) -> Result<()> {
-        op_arith!(self, instr, checked_mul, *)
+        self.instr_bin_op(instr, |s, x, y| {
+            let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
+                (x.checked_div(y))
+                    .map(Value::from)
+                    .unwrap_or_else(|| ((x as f32) * (y as f32)).into())
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {
+                (x * (y as f32)).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_int(), y.as_float()) {
+                ((x as f32) * y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_float()) {
+                (x * y).into()
+            } else if let (Ok(x), Ok(y)) = (x.as_string(), y.as_int()) {
+                if let Ok(y) = usize::try_from(y) {
+                    x.repeat(y).into()
+                } else {
+                    "".into()
+                }
+            } else if let (Ok(x), Ok(y)) = (x.as_list(), y.as_int()) {
+                let mut res = List::new();
+                for _ in 0..y {
+                    res.append(x.clone());
+                }
+                res.into()
+            } else {
+                return Err(s.error_bin_op(instr));
+            };
+
+            Ok(res)
+        })
     }
 
     fn instr_op_div(&mut self, instr: Instr) -> Result<()> {
