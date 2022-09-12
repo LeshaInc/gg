@@ -22,6 +22,7 @@ pub struct Compiler {
     diagnostics: Vec<Diagnostic>,
     debug_info: DebugInfo,
     arity: u16,
+    in_ret_expr: bool,
 }
 
 impl Compiler {
@@ -35,6 +36,7 @@ impl Compiler {
             diagnostics: Default::default(),
             debug_info: DebugInfo::new(source),
             arity: 0,
+            in_ret_expr: true,
         }
     }
 
@@ -72,12 +74,20 @@ impl Compiler {
         idx
     }
 
+    fn compile_expr_ret(&mut self, range: TextRange, val: RegId) {
+        if self.in_ret_expr {
+            let instr = Instr::new(Opcode::Ret).with_reg_a(val);
+            self.add_instr_ranged(&[range], instr);
+        }
+    }
+
     fn compile_const(&mut self, range: TextRange, value: impl Into<Value>, dst: RegId) {
         let src = self.consts.add(value.into());
         let instr = Instr::new(Opcode::LoadConst)
             .with_const_id(src)
             .with_reg_b(dst);
         self.add_instr_ranged(&[range], instr);
+        self.compile_expr_ret(range, dst);
     }
 
     fn compile_expr(&mut self, expr: Expr, dst: &mut RegId) {
@@ -105,7 +115,7 @@ impl Compiler {
     fn compile_expr_dst(&mut self, expr: Expr, dst: RegId) {
         let mut tmp = dst;
         self.compile_expr(expr, &mut tmp);
-        if dst != tmp {
+        if !self.in_ret_expr && dst != tmp {
             let instr = Instr::new(Opcode::Copy).with_reg_a(tmp).with_reg_b(dst);
             self.instrs.add(instr);
         }
@@ -174,6 +184,8 @@ impl Compiler {
                 self.no_such_var(ident);
             }
         }
+
+        self.compile_expr_ret(range, *dst);
     }
 
     fn vars_in_scope(&self) -> Vec<Ident> {
@@ -223,6 +235,9 @@ impl Compiler {
     }
 
     fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
         let range = expr.range();
         let mut lhs_range = range;
         let mut lhs = *dst;
@@ -273,9 +288,15 @@ impl Compiler {
             .with_reg_b(rhs)
             .with_reg_c(*dst);
         self.add_instr_ranged(&[expr.range(), lhs_range, rhs_range], instr);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_expr_unary(&mut self, expr: ExprUnary, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
         let range = expr.range();
         let mut arg_range = expr.range();
         let mut arg = *dst;
@@ -292,6 +313,9 @@ impl Compiler {
 
         let instr = Instr::new(opcode).with_reg_a(arg).with_reg_b(*dst);
         self.add_instr_ranged(&[range, arg_range], instr);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_expr_grouped(&mut self, expr: ExprGrouped, dst: &mut RegId) {
@@ -301,6 +325,11 @@ impl Compiler {
     }
 
     fn compile_expr_list(&mut self, expr: ExprList, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
+        let range = expr.range();
+
         let len = expr.exprs().count() as u16;
         let seq = self.regs.alloc_seq(len);
 
@@ -311,11 +340,19 @@ impl Compiler {
         let instr = Instr::new(Opcode::NewList)
             .with_reg_seq(seq)
             .with_reg_c(*dst);
-        self.add_instr_ranged(&[expr.range()], instr);
+        self.add_instr_ranged(&[range], instr);
         self.regs.free_seq(seq);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_expr_map(&mut self, expr: ExprMap, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
+        let range = expr.range();
+
         let len = expr.pairs().count() as u16;
         let seq = self.regs.alloc_seq(len * 2);
 
@@ -334,11 +371,17 @@ impl Compiler {
         let instr = Instr::new(Opcode::NewMap)
             .with_reg_seq(seq)
             .with_reg_c(*dst);
-        self.add_instr_ranged(&[expr.range()], instr);
+        self.add_instr_ranged(&[range], instr);
         self.regs.free_seq(seq);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_expr_call(&mut self, expr: ExprCall, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
         let range = expr.range();
         let mut fn_range = range;
         let arity = expr.args().count() as u16;
@@ -353,12 +396,21 @@ impl Compiler {
             self.compile_expr_dst(expr, dst);
         }
 
-        let instr = Instr::new(Opcode::Call).with_reg_seq(seq).with_reg_c(*dst);
+        self.in_ret_expr = in_ret_expr;
+        let instr = if self.in_ret_expr {
+            Instr::new(Opcode::TailCall).with_reg_seq(seq)
+        } else {
+            Instr::new(Opcode::Call).with_reg_seq(seq).with_reg_c(*dst)
+        };
+
         self.add_instr_ranged(&[range, fn_range], instr);
         self.regs.free_seq(seq);
     }
 
     fn compile_expr_index(&mut self, expr: ExprIndex, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
         let range = expr.range();
 
         let mut lhs = *dst;
@@ -401,13 +453,19 @@ impl Compiler {
             .with_reg_b(rhs)
             .with_reg_c(*dst);
         self.add_instr_ranged(&[range, lhs_range, rhs_range], instr);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_expr_if_else(&mut self, expr: ExprIfElse, dst: &mut RegId) {
         let mut cond = *dst;
 
         if let Some(expr) = expr.cond() {
+            let in_ret_expr = self.in_ret_expr;
+            self.in_ret_expr = false;
             self.compile_expr(expr, &mut cond);
+            self.in_ret_expr = in_ret_expr;
         }
 
         let start = self.instrs.add(Instr::new(Opcode::Nop));
@@ -416,7 +474,11 @@ impl Compiler {
             self.compile_expr_dst(expr, *dst);
         }
 
-        let mid = self.instrs.add(Instr::new(Opcode::Nop));
+        let mid = if self.in_ret_expr {
+            self.instrs.last_idx()
+        } else {
+            self.instrs.add(Instr::new(Opcode::Nop))
+        };
 
         if let Some(expr) = expr.if_true() {
             self.compile_expr_dst(expr, *dst);
@@ -430,13 +492,18 @@ impl Compiler {
             .with_offset(offset);
         self.instrs.set(start, instr);
 
-        let offset = end - mid - 1;
-        let instr = Instr::new(Opcode::Jump).with_offset(offset);
-        self.instrs.set(mid, instr);
+        if !self.in_ret_expr {
+            let offset = end - mid - 1;
+            let instr = Instr::new(Opcode::Jump).with_offset(offset);
+            self.instrs.set(mid, instr);
+        }
     }
 
     fn compile_expr_let_in(&mut self, expr: ExprLetIn, dst: &mut RegId) {
         self.push_scope();
+
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
 
         for binding in expr.bindings() {
             let tmp_reg = self.regs.alloc();
@@ -459,6 +526,8 @@ impl Compiler {
             }
         }
 
+        self.in_ret_expr = in_ret_expr;
+
         if let Some(expr) = expr.expr() {
             self.compile_expr(expr, dst)
         }
@@ -473,13 +542,19 @@ impl Compiler {
         let mut cond = cond_tmp;
 
         if let Some(expr) = expr.expr() {
+            let in_ret_expr = self.in_ret_expr;
+            self.in_ret_expr = false;
             self.compile_expr(expr, &mut src);
+            self.in_ret_expr = in_ret_expr;
         }
 
         let mut holes = Vec::new();
 
         for case in expr.cases() {
             self.push_scope();
+
+            let in_ret_expr = self.in_ret_expr;
+            self.in_ret_expr = false;
 
             if let Some(pat) = case.pat() {
                 cond = cond_tmp;
@@ -489,11 +564,15 @@ impl Compiler {
             let jump_idx = self.instrs.add(Instr::new(Opcode::Nop));
             let start_idx = self.instrs.next_idx();
 
+            self.in_ret_expr = in_ret_expr;
+
             if let Some(expr) = case.expr() {
                 self.compile_expr_dst(expr, *dst);
             }
 
-            holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+            if !self.in_ret_expr {
+                holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+            }
 
             let end_idx = self.instrs.next_idx();
             let offset = end_idx - start_idx;
@@ -533,7 +612,6 @@ impl Compiler {
         self.compile_args(args);
         let mut dst = self.regs.alloc();
         self.compile_expr(body, &mut dst);
-        self.instrs.add(Instr::new(Opcode::Ret).with_reg_a(dst));
     }
 
     fn compile_expr_fn(&mut self, expr: ExprFn, dst: &mut RegId) {
@@ -569,6 +647,9 @@ impl Compiler {
             compiler.compile_fn(expr.args(), body);
         }
 
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
         if compiler.upvalues.is_empty() {
             let mut res = compiler.finish();
             self.diagnostics.append(&mut res.diagnostics);
@@ -590,6 +671,9 @@ impl Compiler {
                 .with_reg_c(*dst);
             self.add_instr_ranged(&[range], instr);
         }
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
     }
 
     fn compile_pat(&mut self, pat: Pat, src: RegId, dst: &mut RegId) {

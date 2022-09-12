@@ -32,9 +32,9 @@ struct VmContext {
 #[derive(Debug)]
 struct Frame {
     ip: InstrIdx,
+    base: usize,
     func: usize,
     dst: usize,
-    base: usize,
 }
 
 impl Vm {
@@ -59,9 +59,9 @@ impl Vm {
 
         self.frames.push(Frame {
             ip: InstrIdx(0),
+            base: 2,
             func: 1,
             dst: 0,
-            base: 2,
         });
 
         self.run()?;
@@ -248,6 +248,7 @@ impl VmContext {
             Opcode::JumpIfTrue => self.instr_jump_if_true(instr),
             Opcode::JumpIfFalse => self.instr_jump_if_false(instr),
             Opcode::Call => self.instr_call(instr),
+            Opcode::TailCall => self.instr_tail_call(instr),
             Opcode::Ret => self.instr_ret(instr),
             Opcode::OpOr => self.instr_op_or(instr),
             Opcode::OpCoalesce => self.instr_op_coalesce(instr),
@@ -269,8 +270,6 @@ impl VmContext {
             Opcode::UnOpNeg => self.instr_un_op_neg(instr),
             Opcode::UnOpNot => self.instr_un_op_not(instr),
         }
-
-        // JUMP_TABLE[instr.opcode as usize](self, instr)
     }
 
     fn instr_nop(&mut self, _instr: Instr) -> Result<()> {
@@ -392,7 +391,9 @@ impl VmContext {
             return Err(self.error_stack_overflow());
         }
 
-        let (func_reg, args) = instr.reg_seq().split_first();
+        let seq = instr.reg_seq();
+        let (func_reg, arg_regs) = seq.split_first();
+
         let dst_reg = instr.reg_c();
 
         let func_val = self.reg_read(func_reg)?;
@@ -403,7 +404,7 @@ impl VmContext {
 
         self.push_nulls(usize::from(func.slots));
 
-        for (i, arg) in args.into_iter().enumerate() {
+        for (i, arg) in arg_regs.into_iter().enumerate() {
             let src = old_base + usize::from(arg.0);
             let dst = new_base + i;
             self.stack.swap(src, dst);
@@ -411,13 +412,44 @@ impl VmContext {
 
         let new_frame = Frame {
             ip: InstrIdx(0),
-            func: old_base + usize::from(func_reg.0),
-            dst: old_base + usize::from(dst_reg.0),
             base: new_base,
+            dst: old_base + usize::from(dst_reg.0),
+            func: old_base + usize::from(func_reg.0),
         };
 
         let old_frame = std::mem::replace(&mut self.frame, new_frame);
         self.frames.push(old_frame);
+
+        Ok(())
+    }
+
+    fn instr_tail_call(&mut self, instr: Instr) -> Result<()> {
+        let seq = instr.reg_seq();
+        let (func_reg, arg_regs) = seq.split_first();
+
+        let func_val = self.reg_read(func_reg)?;
+        let func = func_val.as_func().map_err(|_| self.error_bad_fn())?;
+
+        let base = self.frame.base;
+
+        let cur_slots = self.stack.len() - base;
+        let req_slots = usize::from(func.slots) + 1;
+        if cur_slots < req_slots {
+            self.push_nulls(req_slots - cur_slots);
+        }
+
+        let src = base + usize::from(func_reg.0);
+        let dst = self.stack.len() - 1;
+        self.stack.swap(src, dst);
+
+        for (i, arg) in arg_regs.into_iter().enumerate() {
+            let src = base + usize::from(arg.0);
+            let dst = base + i;
+            self.stack.swap(src, dst);
+        }
+
+        self.frame.ip = InstrIdx(0);
+        self.frame.func = self.stack.len() - 1;
 
         Ok(())
     }
@@ -437,12 +469,9 @@ impl VmContext {
 
     fn instr_ret(&mut self, instr: Instr) -> Result<()> {
         let val = self.reg_write(instr.reg_a(), Value::null())?;
-
-        let cur_func = self.cur_func()?;
-        let num_slots = cur_func.slots;
         let dst = self.frame.dst;
 
-        for _ in 0..num_slots {
+        while self.stack.len() > self.frame.base {
             self.stack.pop();
         }
 
@@ -767,7 +796,7 @@ impl VmContext {
     fn instr_op_mul(&mut self, instr: Instr) -> Result<()> {
         self.instr_bin_op(instr, |s, x, y| {
             let res = if let (Ok(x), Ok(y)) = (x.as_int(), y.as_int()) {
-                (x.checked_div(y))
+                (x.checked_mul(y))
                     .map(Value::from)
                     .unwrap_or_else(|| ((x as f32) * (y as f32)).into())
             } else if let (Ok(x), Ok(y)) = (x.as_float(), y.as_int()) {

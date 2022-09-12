@@ -12,6 +12,13 @@ fn criterion_benchmark(c: &mut Criterion) {
     assert!(diags.is_empty());
     let func = vm.eval(&func.unwrap(), &[]).unwrap();
     c.bench_function("fib 25", |b| b.iter(|| fib(&mut vm, &func, 25)));
+
+    let mut vm = Vm::new();
+    let source = "let helper = fn(n, a, b): if n == 0 then a else if n == 1 then b else helper(n - 1, b, a + b), fib = fn(n): helper(n, 0, 1) in fib";
+    let (func, diags) = compile_text(source);
+    assert!(diags.is_empty());
+    let func = vm.eval(&func.unwrap(), &[]).unwrap();
+    c.bench_function("fib 46 (TCO)", |b| b.iter(|| fib(&mut vm, &func, 46)));
 }
 
 criterion_group!(benches, criterion_benchmark);

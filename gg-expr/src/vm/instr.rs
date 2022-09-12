@@ -20,6 +20,7 @@ pub enum Opcode {
     JumpIfTrue,
     JumpIfFalse,
     Call,
+    TailCall,
     Ret,
 
     OpOr,
@@ -97,6 +98,7 @@ impl Opcode {
             Jump => [Offset, None, None],
             JumpIfTrue | JumpIfFalse => [RegA, Offset, None],
             Call => [RegSeq, RegC, None],
+            TailCall => [RegSeq, RegC, None],
             Ret => [RegA, None, None],
             OpOr | OpCoalesce | OpAnd | OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd
             | OpSub | OpMul | OpDiv | OpRem | OpPow | OpIndex | OpIndexNullable => {
@@ -293,6 +295,10 @@ pub struct Instrs(pub Vec<Instr>);
 impl Instrs {
     pub fn next_idx(&self) -> InstrIdx {
         InstrIdx(self.0.len() as u32)
+    }
+
+    pub fn last_idx(&self) -> InstrIdx {
+        InstrIdx(self.0.len() as u32 - 1)
     }
 
     pub fn add(&mut self, instr: Instr) -> InstrIdx {
