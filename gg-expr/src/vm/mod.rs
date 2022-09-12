@@ -385,7 +385,13 @@ impl VmContext {
         Ok(())
     }
 
+    const MAX_DEPTH: usize = 1024;
+
     fn instr_call(&mut self, instr: Instr) -> Result<()> {
+        if self.frames.len() == Self::MAX_DEPTH {
+            return Err(self.error_stack_overflow());
+        }
+
         let (func_reg, args) = instr.reg_seq().split_first();
         let dst_reg = instr.reg_c();
 
@@ -414,6 +420,11 @@ impl VmContext {
         self.frames.push(old_frame);
 
         Ok(())
+    }
+
+    #[cold]
+    fn error_stack_overflow(&self) -> Error {
+        self.error_simple("stack overflow")
     }
 
     fn push_nulls(&mut self, count: usize) {

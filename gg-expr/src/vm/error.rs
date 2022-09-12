@@ -78,9 +78,28 @@ pub struct StackFrame {
 impl Display for StackTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}", Paint::new("stack trace:").bold())?;
-        for (i, frame) in self.frames.iter().enumerate() {
-            write!(indented(f), "{}: {}", i, frame)?;
+
+        let max_top = 7;
+        let max_bottom = 3;
+
+        if self.frames.len() <= max_top + max_bottom {
+            for (i, frame) in self.frames.iter().enumerate() {
+                write!(indented(f), "{}: {}", i, frame)?;
+            }
+        } else {
+            for (i, frame) in self.frames.iter().enumerate().take(max_top) {
+                write!(indented(f), "{}: {}", i, frame)?;
+            }
+
+            let omit = self.frames.len() - max_top - max_bottom;
+            let msg = format!("... {} frames omitted ...", omit);
+            writeln!(indented(f), "{}", Paint::new(msg).dimmed())?;
+
+            for (i, frame) in self.frames.iter().enumerate().rev().take(max_bottom).rev() {
+                write!(indented(f), "{}: {}", i, frame)?;
+            }
         }
+
         Ok(())
     }
 }
