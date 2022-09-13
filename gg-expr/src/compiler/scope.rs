@@ -32,6 +32,7 @@ impl From<UpfnId> for VarLoc {
 #[derive(Clone, Debug, Default)]
 pub struct Scope {
     vars: HashMap<Ident, VarLoc>,
+    locs: Vec<VarLoc>,
 }
 
 #[derive(Clone, Debug)]
@@ -63,19 +64,18 @@ impl ScopeStack {
 
     pub fn pop(&mut self) -> impl Iterator<Item = VarLoc> + '_ {
         let prev = self.stack.pop().unwrap();
-        let next = self.scope();
-        prev.vars
-            .into_iter()
-            .filter(|(name, loc)| next.vars.get(&name) != Some(loc))
-            .map(|(_, loc)| loc)
+        prev.locs.into_iter()
     }
 
     pub fn get(&self, ident: &Ident) -> Option<VarLoc> {
         self.scope().vars.get(ident).copied()
     }
 
-    pub fn set(&mut self, ident: Ident, loc: impl Into<VarLoc>) -> Option<VarLoc> {
-        self.scope_mut().vars.insert(ident, loc.into())
+    pub fn set(&mut self, ident: Ident, loc: impl Into<VarLoc>) {
+        let loc = loc.into();
+        let scope = self.scope_mut();
+        scope.vars.insert(ident, loc);
+        scope.locs.push(loc);
     }
 
     pub fn names(&self) -> impl Iterator<Item = Ident> + '_ {
