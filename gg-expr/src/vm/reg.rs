@@ -56,4 +56,16 @@ impl Iterator for RegSeqIter {
     fn next(&mut self) -> Option<RegId> {
         self.range.next().map(RegId)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.range.size_hint()
+    }
 }
+
+impl DoubleEndedIterator for RegSeqIter {
+    fn next_back(&mut self) -> Option<RegId> {
+        self.range.next_back().map(RegId)
+    }
+}
+
+impl ExactSizeIterator for RegSeqIter {}

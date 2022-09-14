@@ -131,7 +131,11 @@ impl VmContext {
         message: impl Into<String>,
         extra: impl FnOnce(&mut Diagnostic, Option<Arc<Source>>),
     ) -> Error {
-        let debug_info = self.cur_func().ok().and_then(|f| f.debug_info.as_ref());
+        let debug_info = self
+            .stack
+            .get(self.frame.func)
+            .and_then(|v| v.as_func().ok())
+            .and_then(|f| f.debug_info.as_ref());
         let source = debug_info.map(|v| v.source.clone());
 
         let mut diagnostic = Diagnostic::new(Severity::Error, message.into());
@@ -437,7 +441,7 @@ impl VmContext {
         let seq = instr.reg_seq();
         let (func_reg, arg_regs) = seq.split_first();
 
-        let func_val = self.reg_read(func_reg)?;
+        let func_val = self.reg_write(func_reg, Value::null())?;
         let func = func_val.as_func().map_err(|_| self.error_bad_fn())?;
 
         let base = self.frame.base;
@@ -448,10 +452,6 @@ impl VmContext {
             self.push_nulls(req_slots - cur_slots);
         }
 
-        let src = base + usize::from(func_reg.0);
-        let dst = self.stack.len() - 1;
-        self.stack.swap(src, dst);
-
         for (i, arg) in arg_regs.into_iter().enumerate() {
             let src = base + usize::from(arg.0);
             let dst = base + i;
@@ -460,6 +460,7 @@ impl VmContext {
 
         self.frame.ip = InstrIdx(0);
         self.frame.func = self.stack.len() - 1;
+        self.stack[self.frame.func] = func_val;
 
         Ok(())
     }

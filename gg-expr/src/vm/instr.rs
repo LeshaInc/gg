@@ -100,7 +100,7 @@ impl Opcode {
             Jump => [Offset, None, None],
             JumpIfTrue | JumpIfFalse => [RegA, Offset, None],
             Call => [RegSeq, RegC, None],
-            TailCall => [RegSeq, RegC, None],
+            TailCall => [RegSeq, None, None],
             Ret => [RegA, None, None],
             OpOr | OpCoalesce | OpAnd | OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd
             | OpSub | OpMul | OpDiv | OpRem | OpPow | OpIndex | OpIndexNullable => {
