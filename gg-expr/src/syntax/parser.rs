@@ -482,10 +482,16 @@ impl Parser<'_> {
         let root = self.checkpoint();
         self.pat_atom();
 
-        while self.peek() == Some(TokPipe) {
+        if self.peek() == Some(TokPipe) {
             self.start_node_at(root, PatOr);
             self.bump();
             self.pat_atom();
+
+            while self.peek() == Some(TokPipe) {
+                self.bump();
+                self.pat_atom();
+            }
+
             self.finish_node();
         }
     }

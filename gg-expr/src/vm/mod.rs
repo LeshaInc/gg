@@ -241,6 +241,7 @@ impl VmContext {
             Opcode::LoadUpvalue => self.instr_load_upvalue(instr),
             Opcode::LoadUpfn => self.instr_load_upfn(instr),
             Opcode::Copy => self.instr_copy(instr),
+            Opcode::CopyIfTrue => self.instr_copy_if_true(instr),
             Opcode::NewList => self.instr_new_list(instr),
             Opcode::NewMap => self.instr_new_map(instr),
             Opcode::NewFunc => self.instr_new_func(instr),
@@ -288,6 +289,15 @@ impl VmContext {
     fn instr_copy(&mut self, instr: Instr) -> Result<()> {
         let val = self.reg_read(instr.reg_a())?;
         self.reg_write(instr.reg_b(), val.clone())?;
+        Ok(())
+    }
+
+    fn instr_copy_if_true(&mut self, instr: Instr) -> Result<()> {
+        let cond = self.reg_read(instr.reg_c())?;
+        if cond.is_truthy() {
+            let val = self.reg_read(instr.reg_a())?;
+            self.reg_write(instr.reg_b(), val.clone())?;
+        }
         Ok(())
     }
 
@@ -369,16 +379,16 @@ impl VmContext {
     }
 
     fn instr_jump_if_true(&mut self, instr: Instr) -> Result<()> {
-        let val = self.reg_read(instr.reg_a())?;
-        if val.is_truthy() {
+        let cond = self.reg_read(instr.reg_a())?;
+        if cond.is_truthy() {
             self.frame.ip += instr.offset();
         }
         Ok(())
     }
 
     fn instr_jump_if_false(&mut self, instr: Instr) -> Result<()> {
-        let val = self.reg_read(instr.reg_a())?;
-        if !val.is_truthy() {
+        let cond = self.reg_read(instr.reg_a())?;
+        if !cond.is_truthy() {
             self.frame.ip += instr.offset();
         }
         Ok(())

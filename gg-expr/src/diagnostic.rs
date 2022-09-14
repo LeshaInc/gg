@@ -123,18 +123,21 @@ impl SourceComponent {
         }
     }
 
+    pub fn add_label(&mut self, severity: Severity, range: TextRange, message: impl Into<String>) {
+        self.labels.push(Label {
+            severity,
+            range,
+            message: message.into(),
+        });
+    }
+
     pub fn with_label(
         mut self,
         severity: Severity,
         range: TextRange,
         message: impl Into<String>,
     ) -> SourceComponent {
-        self.labels.push(Label {
-            severity,
-            range,
-            message: message.into(),
-        });
-
+        self.add_label(severity, range, message);
         self
     }
 }

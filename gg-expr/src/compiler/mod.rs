@@ -1,7 +1,7 @@
 mod reg_alloc;
 mod scope;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
@@ -19,6 +19,8 @@ pub struct Compiler {
     consts: Consts,
     upvalues: UpvalueNames,
     scopes: ScopeStack,
+    pattern_scope: HashMap<Ident, RegId>,
+    sibling_pattern_scope: HashMap<Ident, RegId>,
     diagnostics: Vec<Diagnostic>,
     debug_info: DebugInfo,
     arity: u16,
@@ -33,6 +35,8 @@ impl Compiler {
             consts: Default::default(),
             upvalues: Default::default(),
             scopes: Default::default(),
+            pattern_scope: Default::default(),
+            sibling_pattern_scope: Default::default(),
             diagnostics: Default::default(),
             debug_info: DebugInfo::new(source),
             arity: 0,
@@ -538,8 +542,7 @@ impl Compiler {
     fn compile_expr_when(&mut self, expr: ExprWhen, dst: &mut RegId) {
         let src_tmp = self.regs.alloc();
         let mut src = src_tmp;
-        let cond_tmp = self.regs.alloc();
-        let mut cond = cond_tmp;
+        let cond = self.regs.alloc();
 
         if let Some(expr) = expr.expr() {
             let in_ret_expr = self.in_ret_expr;
@@ -557,8 +560,7 @@ impl Compiler {
             self.in_ret_expr = false;
 
             if let Some(pat) = case.pat() {
-                cond = cond_tmp;
-                self.compile_pat(pat.clone(), src, &mut cond);
+                self.compile_pat_root(pat.clone(), src, cond);
             }
 
             let jump_idx = self.instrs.add(Instr::new(Opcode::Nop));
@@ -594,7 +596,7 @@ impl Compiler {
         }
 
         self.regs.free(src_tmp);
-        self.regs.free(cond_tmp);
+        self.regs.free(cond);
     }
 
     fn compile_args(&mut self, args: impl Iterator<Item = Ident>) {
@@ -676,30 +678,101 @@ impl Compiler {
         self.compile_expr_ret(range, *dst);
     }
 
-    fn compile_pat(&mut self, pat: Pat, src: RegId, dst: &mut RegId) {
+    fn compile_pat_root(&mut self, pat: Pat, val: RegId, cond: RegId) {
+        self.pattern_scope.clear();
+
+        self.compile_pat(pat, val, cond);
+
+        for (name, &loc) in self.pattern_scope.iter() {
+            self.scopes.set(name.clone(), loc);
+        }
+    }
+
+    fn compile_pat(&mut self, pat: Pat, val: RegId, cond: RegId) {
         match pat {
-            Pat::Grouped(pat) => self.compile_pat_grouped(pat, src, dst),
-            Pat::Or(pat) => self.compile_pat_or(pat, src, dst),
-            Pat::List(pat) => self.compile_pat_list(pat, src, dst),
-            Pat::Int(pat) => self.compile_pat_int(pat, src, dst),
-            Pat::String(pat) => self.compile_pat_string(pat, src, dst),
-            Pat::Rest(pat) => self.compile_pat_rest(pat, src, dst),
-            Pat::Hole(pat) => self.compile_pat_hole(pat, src, dst),
-            Pat::Binding(pat) => self.compile_pat_binding(pat, src, dst),
+            Pat::Grouped(pat) => self.compile_pat_grouped(pat, val, cond),
+            Pat::Or(pat) => self.compile_pat_or(pat, val, cond),
+            Pat::List(pat) => self.compile_pat_list(pat, val, cond),
+            Pat::Int(pat) => self.compile_pat_int(pat, val, cond),
+            Pat::String(pat) => self.compile_pat_string(pat, val, cond),
+            Pat::Rest(pat) => self.compile_pat_rest(pat, val, cond),
+            Pat::Hole(pat) => self.compile_pat_hole(pat, val, cond),
+            Pat::Binding(pat) => self.compile_pat_binding(pat, val, cond),
         }
     }
 
-    fn compile_pat_grouped(&mut self, pat: PatGrouped, src: RegId, dst: &mut RegId) {
+    fn compile_pat_grouped(&mut self, pat: PatGrouped, val: RegId, cond: RegId) {
         if let Some(pat) = pat.pat() {
-            self.compile_pat(pat, src, dst);
+            self.compile_pat(pat, val, cond);
         }
     }
 
-    fn compile_pat_or(&mut self, _pat: PatOr, _src: RegId, _dst: &mut RegId) {
-        todo!()
+    fn compile_pat_or(&mut self, pat: PatOr, val: RegId, cond: RegId) {
+        let mut holes = Vec::new();
+
+        let upscope = std::mem::take(&mut self.pattern_scope);
+        let mut scope = HashMap::new();
+        let mut subscopes = Vec::new();
+
+        self.sibling_pattern_scope = HashMap::new();
+
+        for (i, pat) in pat.pats().enumerate() {
+            if i > 0 {
+                self.sibling_pattern_scope = subscopes.pop().unwrap();
+            }
+
+            self.compile_pat(pat, val, cond);
+            holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+
+            for (var, &loc) in &self.pattern_scope {
+                scope.insert(var.clone(), loc);
+            }
+
+            if i > 0 {
+                subscopes.push(std::mem::take(&mut self.sibling_pattern_scope));
+            }
+
+            subscopes.push(std::mem::take(&mut self.pattern_scope));
+        }
+
+        let end = self.instrs.last_idx();
+        for hole in holes {
+            let instr = Instr::new(Opcode::JumpIfTrue)
+                .with_reg_a(cond)
+                .with_offset(end - hole);
+            self.instrs.set(hole, instr);
+        }
+
+        for var in scope.keys() {
+            if subscopes.iter().all(|scope| scope.contains_key(&var)) {
+                continue;
+            }
+
+            let mut src = SourceComponent::new(self.debug_info.source.clone());
+
+            for (subscope, pat) in subscopes.iter().zip(pat.pats()) {
+                if subscope.contains_key(&var) {
+                    continue;
+                }
+
+                let msg = format!("doesn't bind `{}`", var.name());
+                src.add_label(Severity::Error, pat.range(), msg);
+            }
+
+            src.add_label(Severity::Error, var.range(), "not in all patterns");
+
+            let msg = format!("variable `{}` is not bound in all patterns", var.name());
+            let diag = Diagnostic::new(Severity::Error, msg).with_source(src);
+            self.add_error(diag);
+        }
+
+        self.pattern_scope = upscope;
+        for (var, loc) in scope {
+            self.pattern_scope.insert(var, loc);
+        }
     }
 
-    fn compile_pat_list(&mut self, _pat: PatList, _src: RegId, _dst: &mut RegId) {
+    fn compile_pat_list(&mut self, _pat: PatList, _val: RegId, _cond: RegId) {
         todo!()
     }
 
@@ -707,31 +780,31 @@ impl Compiler {
         &mut self,
         range: TextRange,
         value: impl Into<Value>,
-        src: RegId,
-        dst: &mut RegId,
+        val: RegId,
+        cond: RegId,
     ) {
-        let lhs = *dst;
+        let lhs = cond;
         self.compile_const(range, value, lhs);
         let instr = Instr::new(Opcode::OpEq)
             .with_reg_a(lhs)
-            .with_reg_b(src)
-            .with_reg_c(*dst);
+            .with_reg_b(val)
+            .with_reg_c(cond);
         self.instrs.add(instr);
     }
 
-    fn compile_pat_int(&mut self, pat: PatInt, src: RegId, dst: &mut RegId) {
+    fn compile_pat_int(&mut self, pat: PatInt, val: RegId, cond: RegId) {
         if let Some(value) = pat.value() {
-            self.compile_pat_const_eq(pat.range(), value, src, dst);
+            self.compile_pat_const_eq(pat.range(), value, val, cond);
         }
     }
 
-    fn compile_pat_string(&mut self, pat: PatString, src: RegId, dst: &mut RegId) {
+    fn compile_pat_string(&mut self, pat: PatString, val: RegId, cond: RegId) {
         if let Some(value) = pat.value() {
-            self.compile_pat_const_eq(pat.range(), value, src, dst);
+            self.compile_pat_const_eq(pat.range(), value, val, cond);
         }
     }
 
-    fn compile_pat_rest(&mut self, pat: PatRest, _src: RegId, _dst: &mut RegId) {
+    fn compile_pat_rest(&mut self, pat: PatRest, _val: RegId, _cond: RegId) {
         self.add_simple_error(
             pat.range(),
             "invalid pattern",
@@ -739,19 +812,38 @@ impl Compiler {
         );
     }
 
-    fn compile_pat_hole(&mut self, pat: PatHole, _src: RegId, dst: &mut RegId) {
-        self.compile_const(pat.range(), true, *dst)
+    fn compile_pat_hole(&mut self, pat: PatHole, _val: RegId, cond: RegId) {
+        self.compile_const(pat.range(), true, cond)
     }
 
-    fn compile_pat_binding(&mut self, pat: PatBinding, src: RegId, dst: &mut RegId) {
+    fn compile_pat_binding(&mut self, pat: PatBinding, val: RegId, cond: RegId) {
         if let Some(pat) = pat.pat() {
-            self.compile_pat(pat, src, dst);
+            self.compile_pat(pat, val, cond);
         } else {
-            self.compile_const(pat.range(), true, *dst)
+            self.compile_const(pat.range(), true, cond)
         }
 
         if let Some(ident) = pat.ident() {
-            self.scopes.set(ident, *dst);
+            let loc = if self.pattern_scope.contains_key(&ident) {
+                let msg = format!(
+                    "identifier `{}` is bound more than once in a pattern",
+                    ident.name()
+                );
+                self.add_simple_error(ident.range(), &msg, "already bound");
+                self.regs.alloc()
+            } else if let Some(&reg) = self.sibling_pattern_scope.get(&ident) {
+                reg
+            } else {
+                self.regs.alloc()
+            };
+
+            self.pattern_scope.insert(ident, loc);
+
+            let instr = Instr::new(Opcode::CopyIfTrue)
+                .with_reg_a(val)
+                .with_reg_b(loc)
+                .with_reg_c(cond);
+            self.instrs.add(instr);
         }
     }
 
