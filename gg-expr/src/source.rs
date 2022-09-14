@@ -31,6 +31,10 @@ impl SourceText {
             end += chunk.len() as u32;
         });
 
+        if end > start {
+            lines.push(TextRange::new(TextSize::from(start), TextSize::from(end)));
+        }
+
         SourceText { root, lines }
     }
 
