@@ -9,20 +9,28 @@ use super::{ConstId, UpfnId, UpvalueId};
 pub enum Opcode {
     Nop,
     Panic,
+
     LoadConst,
     LoadUpvalue,
     LoadUpfn,
+
     Copy,
     CopyIfTrue,
+
     NewList,
     NewMap,
     NewFunc,
+
     Jump,
     JumpIfTrue,
     JumpIfFalse,
+
     Call,
     TailCall,
     Ret,
+
+    IsList,
+    Len,
 
     OpOr,
     OpCoalesce,
@@ -102,6 +110,8 @@ impl Opcode {
             Call => [RegSeq, RegC, None],
             TailCall => [RegSeq, None, None],
             Ret => [RegA, None, None],
+            IsList => [RegA, RegB, None],
+            Len => [RegA, RegB, None],
             OpOr | OpCoalesce | OpAnd | OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd
             | OpSub | OpMul | OpDiv | OpRem | OpPow | OpIndex | OpIndexNullable => {
                 [RegA, RegB, RegC]

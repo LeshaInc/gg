@@ -255,6 +255,8 @@ impl VmContext {
             Opcode::Call => self.instr_call(instr),
             Opcode::TailCall => self.instr_tail_call(instr),
             Opcode::Ret => self.instr_ret(instr),
+            Opcode::IsList => self.instr_is_list(instr),
+            Opcode::Len => self.instr_len(instr),
             Opcode::OpOr => self.instr_op_or(instr),
             Opcode::OpCoalesce => self.instr_op_coalesce(instr),
             Opcode::OpAnd => self.instr_op_and(instr),
@@ -497,6 +499,19 @@ impl VmContext {
         Ok(())
     }
 
+    fn instr_is_list(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        self.reg_write(instr.reg_b(), Value::from(val.is_list()))?;
+        Ok(())
+    }
+
+    fn instr_len(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        let len = val.as_list().unwrap().len(); // TODO
+        self.reg_write(instr.reg_b(), Value::from(len as i32))?;
+        Ok(())
+    }
+
     fn instr_bin_op(
         &mut self,
         instr: Instr,
@@ -524,6 +539,9 @@ impl VmContext {
     fn error_bin_op(&self, instr: Instr) -> Error {
         let lhs = self.reg_read(instr.reg_a()).unwrap();
         let rhs = self.reg_read(instr.reg_b()).unwrap();
+
+        dbg!(&lhs);
+        dbg!(&rhs);
 
         let message = format!(
             "operator `{}` cannot be applied to `{:?}` and `{:?}`",

@@ -772,8 +772,104 @@ impl Compiler {
         }
     }
 
-    fn compile_pat_list(&mut self, _pat: PatList, _val: RegId, _cond: RegId) {
-        todo!()
+    fn compile_pat_list(&mut self, pat: PatList, val: RegId, cond: RegId) {
+        let range = pat.range();
+        let mut holes = Vec::new();
+
+        let inner_reg = self.regs.alloc();
+        let len_reg = self.regs.alloc();
+        let idx_reg = self.regs.alloc();
+
+        let num_pats = pat.pats().count();
+        let mut expected_len = 0;
+        let mut rest_start = false;
+        let mut rest_end = false;
+
+        for (i, pat) in pat.pats().enumerate() {
+            if let Pat::Rest(_) = pat {
+                if i == 0 {
+                    rest_start = true;
+                } else if i == num_pats - 1 && !rest_start {
+                    rest_end = true;
+                } else {
+                    self.add_simple_error(
+                        pat.range(),
+                        "invalid pattern",
+                        "`...` invalid in this position",
+                    );
+                }
+            } else {
+                expected_len += 1;
+            }
+        }
+
+        let instr = Instr::new(Opcode::IsList).with_reg_a(val).with_reg_b(cond);
+        self.instrs.add(instr);
+        holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+
+        let instr = Instr::new(Opcode::Len).with_reg_a(val).with_reg_b(len_reg);
+        self.instrs.add(instr);
+
+        self.compile_const(range, expected_len, idx_reg);
+
+        let op = if rest_start || rest_end {
+            Opcode::OpGe
+        } else {
+            Opcode::OpEq
+        };
+
+        let instr = Instr::new(op)
+            .with_reg_a(len_reg)
+            .with_reg_b(idx_reg)
+            .with_reg_c(cond);
+        self.instrs.add(instr);
+
+        holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+
+        let mut idx = if rest_start { expected_len } else { 0 };
+
+        for pat in pat.pats() {
+            if let Pat::Rest(_) = pat {
+                continue;
+            }
+
+            self.compile_const(range, idx, idx_reg);
+
+            if rest_start {
+                let instr = Instr::new(Opcode::OpSub)
+                    .with_reg_a(len_reg)
+                    .with_reg_b(idx_reg)
+                    .with_reg_c(idx_reg);
+                self.instrs.add(instr);
+            }
+
+            idx += if rest_start { -1 } else { 1 };
+
+            let instr = Instr::new(Opcode::OpIndex)
+                .with_reg_a(val)
+                .with_reg_b(idx_reg)
+                .with_reg_c(inner_reg);
+            self.instrs.add(instr);
+
+            self.compile_pat(pat, inner_reg, cond);
+            holes.push(self.instrs.add(Instr::new(Opcode::Nop)));
+        }
+
+        let end = self.instrs.last_idx();
+        for hole in holes {
+            if end == hole {
+                continue;
+            }
+
+            let instr = Instr::new(Opcode::JumpIfFalse)
+                .with_reg_a(cond)
+                .with_offset(end - hole);
+            self.instrs.set(hole, instr);
+        }
+
+        self.regs.free(idx_reg);
+        self.regs.free(len_reg);
+        self.regs.free(inner_reg);
     }
 
     fn compile_pat_const_eq(
