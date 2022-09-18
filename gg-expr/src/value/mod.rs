@@ -1,3 +1,4 @@
+mod ext_func;
 mod func;
 
 use std::fmt::{self, Debug};
@@ -8,6 +9,7 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Release};
 
+pub use self::ext_func::ExtFunc;
 pub use self::func::{DebugInfo, Func};
 
 pub type List = im::Vector<Value>;
@@ -21,25 +23,27 @@ pub enum Type {
     Bool = 3,
     String = 4,
     Func = 5,
-    List = 6,
-    Map = 7,
+    ExtFunc = 6,
+    List = 7,
+    Map = 8,
 }
 
 impl Type {
-    pub const VALUES: [Type; 8] = [
+    pub const VALUES: [Type; 9] = [
         Type::Null,
         Type::Int,
         Type::Float,
         Type::Bool,
         Type::String,
         Type::Func,
+        Type::ExtFunc,
         Type::List,
         Type::Map,
     ];
 
     fn is_heap(&self) -> bool {
         use Type::*;
-        matches!(self, String | Func | List | Map)
+        matches!(self, String | Func | ExtFunc | List | Map)
     }
 }
 
@@ -52,13 +56,14 @@ impl Debug for Type {
             Type::Bool => "bool",
             Type::String => "string",
             Type::Func => "func",
+            Type::ExtFunc => "ext_func",
             Type::List => "list",
             Type::Map => "map",
         })
     }
 }
 
-const TAG_MASK: u64 = 7;
+const TAG_MASK: u64 = 15;
 
 #[repr(C)]
 #[cfg(target_pointer_width = "64")]
@@ -67,7 +72,7 @@ pub union Value {
     ptr: *mut HeapValue,
 }
 
-#[repr(align(8))]
+#[repr(align(16))]
 struct HeapValue {
     refcount: AtomicUsize,
     payload: HeapPayload,
@@ -76,6 +81,7 @@ struct HeapValue {
 union HeapPayload {
     string: ManuallyDrop<String>,
     func: ManuallyDrop<Func>,
+    ext_func: ManuallyDrop<ExtFunc>,
     list: ManuallyDrop<List>,
     map: ManuallyDrop<Map>,
 }
@@ -97,13 +103,12 @@ impl Value {
             3 => Type::Bool,
             4 => Type::String,
             5 => Type::Func,
-            6 => Type::List,
-            7 => Type::Map,
+            6 => Type::ExtFunc,
+            7 => Type::List,
+            8 => Type::Map,
             _ => unsafe { unreachable_unchecked() },
         }
     }
-
-    // int
 
     pub fn from_int(v: i32) -> Value {
         Value {
@@ -126,8 +131,6 @@ impl Value {
         }
     }
 
-    // float
-
     pub fn from_float(v: f32) -> Value {
         Value {
             u64: u64::from(v.to_bits()) << 32 | (Type::Float as u64),
@@ -148,8 +151,6 @@ impl Value {
             })
         }
     }
-
-    // bool
 
     pub fn from_bool(v: bool) -> Value {
         Value {
@@ -176,8 +177,6 @@ impl Value {
         !self.is_null() && self.as_bool() != Ok(false)
     }
 
-    // heap
-
     fn from_heap(ty: Type, heap: HeapValue) -> Value {
         let mut v = Value {
             ptr: Box::into_raw(Box::new(heap)),
@@ -203,8 +202,6 @@ impl Value {
         v.u64 &= !TAG_MASK;
         &mut *v.ptr
     }
-
-    // string
 
     pub fn from_string(string: String) -> Value {
         Value::from_heap(
@@ -233,8 +230,6 @@ impl Value {
         }
     }
 
-    // func
-
     pub fn from_func(func: Func) -> Value {
         Value::from_heap(
             Type::Func,
@@ -262,7 +257,32 @@ impl Value {
         }
     }
 
-    // list
+    pub fn from_ext_func(ext_func: ExtFunc) -> Value {
+        Value::from_heap(
+            Type::ExtFunc,
+            HeapValue {
+                refcount: AtomicUsize::new(1),
+                payload: HeapPayload {
+                    ext_func: ManuallyDrop::new(ext_func),
+                },
+            },
+        )
+    }
+
+    pub fn is_ext_func(&self) -> bool {
+        self.ty() == Type::ExtFunc
+    }
+
+    pub fn as_ext_func(&self) -> Result<&ExtFunc, FromValueError> {
+        if self.is_ext_func() {
+            unsafe { Ok(&self.get_heap().payload.ext_func) }
+        } else {
+            Err(FromValueError {
+                expected: Type::Func,
+                got: self.ty(),
+            })
+        }
+    }
 
     pub fn from_list(list: List) -> Value {
         Value::from_heap(
@@ -290,8 +310,6 @@ impl Value {
             })
         }
     }
-
-    // list
 
     pub fn from_map(map: Map) -> Value {
         Value::from_heap(
@@ -355,6 +373,7 @@ unsafe fn drop_slow(value: &mut Value) {
         Type::Null | Type::Int | Type::Float | Type::Bool => unreachable_unchecked(),
         Type::String => ManuallyDrop::drop(&mut payload.string),
         Type::Func => ManuallyDrop::drop(&mut payload.func),
+        Type::ExtFunc => ManuallyDrop::drop(&mut payload.ext_func),
         Type::List => ManuallyDrop::drop(&mut payload.list),
         Type::Map => ManuallyDrop::drop(&mut payload.map),
     }
@@ -369,6 +388,7 @@ impl Debug for Value {
             Type::Bool => self.as_bool().unwrap().fmt(f),
             Type::String => self.as_string().unwrap().fmt(f),
             Type::Func => self.as_func().unwrap().fmt(f),
+            Type::ExtFunc => self.as_ext_func().unwrap().fmt(f),
             Type::List => self.as_list().unwrap().fmt(f),
             Type::Map => fmt_map(self.as_map().unwrap(), f),
         }
@@ -412,6 +432,7 @@ impl PartialEq for Value {
             Type::Bool => self.as_bool() == other.as_bool(),
             Type::String => self.as_string() == other.as_string(),
             Type::Func => self.as_func() == other.as_func(),
+            Type::ExtFunc => self.as_ext_func() == other.as_ext_func(),
             Type::List => self.as_list() == other.as_list(),
             Type::Map => self.as_map() == other.as_map(),
         }
@@ -439,6 +460,9 @@ impl Hash for Value {
             }
             Type::Func => {
                 self.as_func().unwrap().hash(state);
+            }
+            Type::ExtFunc => {
+                self.as_ext_func().unwrap().hash(state);
             }
             Type::List => {
                 self.as_list().unwrap().hash(state);
@@ -486,6 +510,12 @@ impl From<Func> for Value {
     }
 }
 
+impl From<ExtFunc> for Value {
+    fn from(v: ExtFunc) -> Value {
+        Value::from_ext_func(v)
+    }
+}
+
 impl From<List> for Value {
     fn from(v: List) -> Value {
         Value::from_list(v)
@@ -530,6 +560,13 @@ impl<'a> TryFrom<&'a Value> for &'a Func {
     type Error = FromValueError;
     fn try_from(v: &'a Value) -> Result<&'a Func, FromValueError> {
         v.as_func()
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a ExtFunc {
+    type Error = FromValueError;
+    fn try_from(v: &'a Value) -> Result<&'a ExtFunc, FromValueError> {
+        v.as_ext_func()
     }
 }
 

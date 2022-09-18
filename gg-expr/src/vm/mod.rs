@@ -409,10 +409,14 @@ impl VmContext {
 
         let seq = instr.reg_seq();
         let (func_reg, arg_regs) = seq.split_first();
-
         let dst_reg = instr.reg_c();
 
         let func_val = self.reg_read(func_reg)?;
+        if func_val.is_ext_func() {
+            let dst = self.frame.base + usize::from(dst_reg.0);
+            return self.instr_call_ext(seq, dst);
+        }
+
         let func = func_val.as_func().map_err(|_| self.error_bad_fn())?;
 
         let old_base = self.frame.base;
@@ -443,7 +447,25 @@ impl VmContext {
         let seq = instr.reg_seq();
         let (func_reg, arg_regs) = seq.split_first();
 
+        let func_val = self.reg_read(func_reg)?;
+        if func_val.is_ext_func() {
+            self.instr_call_ext(seq, self.frame.dst)?;
+
+            while self.stack.len() > self.frame.base {
+                self.stack.pop();
+            }
+
+            if let Some(v) = self.frames.pop() {
+                self.frame = v;
+            } else {
+                self.frame.ip = InstrIdx(u32::MAX);
+            }
+
+            return Ok(());
+        }
+
         let func_val = self.reg_write(func_reg, Value::null())?;
+
         let func = func_val.as_func().map_err(|_| self.error_bad_fn())?;
 
         let base = self.frame.base;
@@ -463,6 +485,24 @@ impl VmContext {
         self.frame.ip = InstrIdx(0);
         self.frame.func = self.stack.len() - 1;
         self.stack[self.frame.func] = func_val;
+
+        Ok(())
+    }
+
+    fn instr_call_ext(&mut self, seq: RegSeq, dst: usize) -> Result<()> {
+        let (func_reg, arg_regs) = seq.split_first();
+
+        let func_val = self.reg_read(func_reg)?;
+        let func = func_val.as_ext_func().map_err(|_| self.error_bad_fn())?;
+
+        let start = self.frame.base + usize::from(arg_regs.base.0);
+        let end = start + usize::from(arg_regs.len);
+
+        let args = self.stack.get(start..end);
+        let args = args.ok_or_else(|| self.error_bad_reg())?;
+
+        let res = (func.func)(args);
+        self.stack[dst] = res;
 
         Ok(())
     }

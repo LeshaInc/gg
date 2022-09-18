@@ -5,10 +5,12 @@ pub mod syntax;
 mod value;
 pub mod vm;
 
+use diagnostic::Severity;
+
 pub use self::compiler::{compile, Compiler};
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
-pub use self::value::{DebugInfo, Func, FuncValue, List, Map, Type, Value};
-pub use self::vm::Vm;
+pub use self::value::{DebugInfo, ExtFunc, Func, FuncValue, List, Map, Type, Value};
+pub use self::vm::{Error, Result, Vm};
 use crate::diagnostic::Diagnostic;
 
 pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {
@@ -23,4 +25,26 @@ pub fn compile_text(text: &str) -> (Option<Value>, Vec<Diagnostic>) {
     });
 
     (value, diagnostics)
+}
+
+pub fn eval(text: &str) -> (Result<Value>, Vec<Diagnostic>) {
+    let (val, diagnostics) = compile_text(text);
+    let val = match val {
+        Some(v) => v,
+        None => {
+            return (
+                Err(Error::new(Diagnostic::new(
+                    Severity::Error,
+                    "compilation failed",
+                ))),
+                diagnostics,
+            )
+        }
+    };
+
+    let mut vm = Vm::new();
+    match vm.eval(&val, &[]) {
+        Ok(v) => (Ok(v), diagnostics),
+        Err(e) => (Err(e), diagnostics),
+    }
 }
