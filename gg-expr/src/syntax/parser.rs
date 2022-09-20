@@ -308,22 +308,35 @@ impl Parser<'_> {
             s.start_node(MapPair);
             s.push_recovery(&[TokAssign]);
 
-            match s.peek() {
-                Some(TokIdent) => s.bump(),
-                Some(TokString) => s.expr_string(s.checkpoint()),
+            let is_ident = match s.peek() {
+                Some(TokIdent) => {
+                    s.bump();
+                    true
+                }
+                Some(TokString) => {
+                    s.expr_string(s.checkpoint());
+                    false
+                }
                 Some(TokLBracket) => {
                     s.bump();
                     s.push_recovery(&[TokRBracket]);
                     s.expr();
                     s.pop_recovery();
                     s.expect(TokRBracket);
+                    false
                 }
-                _ => s.error_unexpected_token("map key"),
-            }
+                _ => {
+                    s.error_unexpected_token("map key");
+                    false
+                }
+            };
 
             s.pop_recovery();
-            s.expect(TokAssign);
-            s.expr();
+
+            if s.peek() == Some(TokAssign) || !is_ident {
+                s.expect(TokAssign);
+                s.expr();
+            }
 
             s.finish_node();
         });

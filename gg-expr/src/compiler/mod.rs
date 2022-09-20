@@ -367,8 +367,11 @@ impl Compiler {
                 self.compile_const(ident.range(), ident.name(), dst);
             }
 
+            let dst = RegId(dst.0 + 1);
             if let Some(expr) = pair.value() {
-                self.compile_expr_dst(expr, RegId(dst.0 + 1));
+                self.compile_expr_dst(expr, dst);
+            } else if let Some(ident) = pair.key_ident() {
+                self.compile_var_dst(ident, dst);
             }
         }
 
