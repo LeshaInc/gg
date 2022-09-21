@@ -11,9 +11,10 @@ use self::scope::{ScopeStack, VarLoc};
 use crate::diagnostic::{Diagnostic, Severity, SourceComponent};
 use crate::syntax::{SyntaxKind as SK, *};
 use crate::vm::*;
-use crate::{DebugInfo, Func, Source, Value};
+use crate::{DebugInfo, Func, Map, Source, Value};
 
 pub struct Compiler {
+    env: Map,
     regs: RegAlloc,
     instrs: Instrs,
     consts: Consts,
@@ -28,13 +29,22 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn new(source: Arc<Source>) -> Compiler {
+    pub fn new(env: Map, source: Arc<Source>) -> Compiler {
+        let mut scopes = ScopeStack::default();
+
+        for (k, v) in env.iter() {
+            if let Ok(str) = k.as_string() {
+                scopes.set(Ident::from(str), v.clone());
+            }
+        }
+
         Compiler {
+            env,
+            scopes,
             regs: Default::default(),
             instrs: Default::default(),
             consts: Default::default(),
             upvalues: Default::default(),
-            scopes: Default::default(),
             pattern_scope: Default::default(),
             sibling_pattern_scope: Default::default(),
             diagnostics: Default::default(),
@@ -162,11 +172,11 @@ impl Compiler {
         let range = ident.range();
         match self.scopes.get(&ident) {
             Some(VarLoc::Reg(id)) => {
-                *dst = id;
+                *dst = *id;
             }
             Some(VarLoc::Upvalue(id)) => {
                 let instr = Instr::new(Opcode::LoadUpvalue)
-                    .with_upvalue_id(id)
+                    .with_upvalue_id(*id)
                     .with_reg_b(*dst);
                 self.add_instr_ranged(&[range], instr);
             }
@@ -180,9 +190,13 @@ impl Compiler {
             }
             Some(VarLoc::Upfn(id)) => {
                 let instr = Instr::new(Opcode::LoadUpfn)
-                    .with_upfn_id(id)
+                    .with_upfn_id(*id)
                     .with_reg_b(*dst);
                 self.add_instr_ranged(&[range], instr);
+            }
+            Some(VarLoc::Value(val)) => {
+                let value = val.clone();
+                self.compile_const(range, value, *dst);
             }
             None => {
                 self.no_such_var(ident);
@@ -626,7 +640,7 @@ impl Compiler {
     fn compile_expr_fn_named(&mut self, expr: ExprFn, dst: &mut RegId, name: Option<Ident>) {
         let range = expr.range();
 
-        let mut compiler = Compiler::new(self.debug_info.source.clone());
+        let mut compiler = Compiler::new(self.env.clone(), self.debug_info.source.clone());
         compiler.debug_info.range = range;
         compiler.debug_info.name = Some(
             name.clone()
@@ -961,8 +975,8 @@ impl Compiler {
     }
 }
 
-pub fn compile(source: Arc<Source>, expr: Expr) -> CompileResult {
-    let mut compiler = Compiler::new(source);
+pub fn compile(env: Map, source: Arc<Source>, expr: Expr) -> CompileResult {
+    let mut compiler = Compiler::new(env, source);
     compiler.debug_info.name = Some("<main>".into());
     compiler.debug_info.range = expr.range();
     compiler.compile_fn(iter::empty(), expr);

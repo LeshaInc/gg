@@ -1,12 +1,12 @@
 use eyre::{bail, Result};
-use gg_expr::{compile_text, Vm};
+use gg_expr::{compile_text, ExtFunc, Map, Vm};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 fn main() -> Result<()> {
     let mut editor = Editor::<()>::new()?;
 
-    let mut ctx = Context::default();
+    let mut ctx = Context::new();
 
     loop {
         let readline = editor.readline(">>> ");
@@ -30,13 +30,39 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Default)]
 struct Context {
+    env: Map,
     show_bytecode: bool,
     show_time: bool,
 }
 
 impl Context {
+    fn new() -> Context {
+        let mut env = Map::new();
+
+        let mut math = Map::new();
+
+        math.insert("pi".into(), std::f32::consts::PI.into());
+
+        math.insert(
+            "sin".into(),
+            ExtFunc::new(|[x]| x.as_float().unwrap().sin().into()).into(),
+        );
+
+        math.insert(
+            "cos".into(),
+            ExtFunc::new(|[x]| x.as_float().unwrap().cos().into()).into(),
+        );
+
+        env.insert("math".into(), math.into());
+
+        Context {
+            env,
+            show_bytecode: false,
+            show_time: false,
+        }
+    }
+
     fn handle_line(&mut self, input: &str) {
         if input.trim() == "/b" {
             self.show_bytecode ^= true;
@@ -48,7 +74,7 @@ impl Context {
             return;
         }
 
-        let (value, diagnostics) = compile_text(&input);
+        let (value, diagnostics) = compile_text(self.env.clone(), &input);
 
         for diagnostic in &diagnostics {
             println!("{}", diagnostic);

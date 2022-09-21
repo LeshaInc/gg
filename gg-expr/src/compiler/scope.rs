@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use crate::syntax::Ident;
 use crate::vm::{RegId, UpfnId, UpvalueId};
+use crate::Value;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VarLoc {
     Reg(RegId),
     Upvalue(UpvalueId),
     PossibleUpvalue,
     Upfn(UpfnId),
+    Value(Value),
 }
 
 impl From<RegId> for VarLoc {
@@ -26,6 +28,12 @@ impl From<UpvalueId> for VarLoc {
 impl From<UpfnId> for VarLoc {
     fn from(v: UpfnId) -> VarLoc {
         VarLoc::Upfn(v)
+    }
+}
+
+impl From<Value> for VarLoc {
+    fn from(v: Value) -> VarLoc {
+        VarLoc::Value(v)
     }
 }
 
@@ -62,19 +70,19 @@ impl ScopeStack {
         self.stack.push(scope);
     }
 
-    pub fn pop(&mut self) -> impl Iterator<Item = VarLoc> + '_ {
+    pub fn pop(&mut self) -> impl Iterator<Item = VarLoc> {
         let prev = self.stack.pop().unwrap();
         prev.locs.into_iter()
     }
 
-    pub fn get(&self, ident: &Ident) -> Option<VarLoc> {
-        self.scope().vars.get(ident).copied()
+    pub fn get(&self, ident: &Ident) -> Option<&VarLoc> {
+        self.scope().vars.get(ident)
     }
 
     pub fn set(&mut self, ident: Ident, loc: impl Into<VarLoc>) {
         let loc = loc.into();
         let scope = self.scope_mut();
-        scope.vars.insert(ident, loc);
+        scope.vars.insert(ident, loc.clone());
         scope.locs.push(loc);
     }
 

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use rowan::NodeOrToken;
+use rowan::{GreenNode, GreenToken, NodeOrToken};
 
 use super::{parser, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange};
 
@@ -426,6 +426,22 @@ impl Ident {
 
     pub fn name(&self) -> &str {
         self.syntax.text()
+    }
+}
+
+impl<'a> From<&'a str> for Ident {
+    fn from(v: &'a str) -> Ident {
+        let node = GreenNode::new(
+            SyntaxKind::Root.into(),
+            [NodeOrToken::Token(GreenToken::new(
+                SyntaxKind::TokIdent.into(),
+                &v,
+            ))],
+        );
+
+        Ident {
+            syntax: SyntaxNode::new_root(node).first_token().unwrap(),
+        }
     }
 }
 
