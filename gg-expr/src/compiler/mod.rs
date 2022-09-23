@@ -253,6 +253,10 @@ impl Compiler {
     }
 
     fn compile_expr_binary(&mut self, expr: ExprBinary, dst: &mut RegId) {
+        if let Some(SK::TokOr | SK::TokCoalesce | SK::TokAnd) = expr.op() {
+            return self.compile_expr_binary_logic(expr, dst);
+        }
+
         let in_ret_expr = self.in_ret_expr;
         self.in_ret_expr = false;
 
@@ -283,9 +287,6 @@ impl Compiler {
         }
 
         let opcode = match expr.op() {
-            Some(SK::TokOr) => Opcode::OpOr,
-            Some(SK::TokCoalesce) => Opcode::OpCoalesce,
-            Some(SK::TokAnd) => Opcode::OpAnd,
             Some(SK::TokLt) => Opcode::OpLt,
             Some(SK::TokLe) => Opcode::OpLe,
             Some(SK::TokEq) => Opcode::OpEq,
@@ -306,6 +307,75 @@ impl Compiler {
             .with_reg_b(rhs)
             .with_reg_c(*dst);
         self.add_instr_ranged(&[expr.range(), lhs_range, rhs_range], instr);
+
+        self.in_ret_expr = in_ret_expr;
+        self.compile_expr_ret(range, *dst);
+    }
+
+    fn compile_expr_binary_logic(&mut self, expr: ExprBinary, dst: &mut RegId) {
+        let in_ret_expr = self.in_ret_expr;
+        self.in_ret_expr = false;
+
+        let range = expr.range();
+        let is_coalesce = expr.op() == Some(SK::TokCoalesce);
+
+        let mut cond = *dst;
+        if is_coalesce {
+            cond = self.regs.alloc();
+        }
+
+        if let Some(expr) = expr.lhs() {
+            let mut lhs = *dst;
+            self.compile_expr(expr, &mut lhs);
+
+            if is_coalesce && lhs != *dst {
+                let instr = Instr::new(Opcode::Copy).with_reg_a(lhs).with_reg_b(*dst);
+                self.instrs.add(instr);
+            }
+
+            let opcode = if is_coalesce {
+                Opcode::IsNull
+            } else {
+                Opcode::IsTruthy
+            };
+
+            let instr = Instr::new(opcode).with_reg_a(lhs).with_reg_b(cond);
+            self.instrs.add(instr);
+        }
+
+        let hole = self.instrs.add(Instr::new(Opcode::Nop));
+
+        if let Some(expr) = expr.rhs() {
+            let mut rhs = *dst;
+            self.compile_expr(expr, &mut rhs);
+
+            if is_coalesce && rhs != *dst {
+                let instr = Instr::new(Opcode::Copy).with_reg_a(rhs).with_reg_b(*dst);
+                self.instrs.add(instr);
+            }
+
+            if !is_coalesce {
+                let instr = Instr::new(Opcode::IsTruthy)
+                    .with_reg_a(rhs)
+                    .with_reg_b(*dst);
+                self.instrs.add(instr);
+            }
+        }
+
+        if is_coalesce {
+            self.regs.free(cond);
+        }
+
+        let end = self.instrs.last_idx();
+
+        let opcode = if expr.op() == Some(SK::TokOr) {
+            Opcode::JumpIfTrue
+        } else {
+            Opcode::JumpIfFalse
+        };
+
+        let instr = Instr::new(opcode).with_reg_a(cond).with_offset(end - hole);
+        self.instrs.set(hole, instr);
 
         self.in_ret_expr = in_ret_expr;
         self.compile_expr_ret(range, *dst);

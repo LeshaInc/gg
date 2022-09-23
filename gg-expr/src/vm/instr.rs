@@ -32,9 +32,9 @@ pub enum Opcode {
     IsList,
     Len,
 
-    OpOr,
-    OpCoalesce,
-    OpAnd,
+    IsTruthy,
+    IsNull,
+
     OpLt,
     OpLe,
     OpEq,
@@ -71,9 +71,6 @@ impl Opcode {
         use Opcode::*;
 
         match self {
-            OpOr => "||",
-            OpCoalesce => "??",
-            OpAnd => "&&",
             OpLt => "<",
             OpLe => "<=",
             OpEq => "==",
@@ -112,10 +109,10 @@ impl Opcode {
             Ret => [RegA, None, None],
             IsList => [RegA, RegB, None],
             Len => [RegA, RegB, None],
-            OpOr | OpCoalesce | OpAnd | OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd
-            | OpSub | OpMul | OpDiv | OpRem | OpPow | OpIndex | OpIndexNullable => {
-                [RegA, RegB, RegC]
-            }
+            IsTruthy => [RegA, RegB, None],
+            IsNull => [RegA, RegB, None],
+            OpLt | OpLe | OpEq | OpNeq | OpGe | OpGt | OpAdd | OpSub | OpMul | OpDiv | OpRem
+            | OpPow | OpIndex | OpIndexNullable => [RegA, RegB, RegC],
             UnOpNeg | UnOpNot => [RegA, RegB, None],
         }
     }

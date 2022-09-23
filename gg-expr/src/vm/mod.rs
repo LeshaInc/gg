@@ -257,9 +257,8 @@ impl VmContext {
             Opcode::Ret => self.instr_ret(instr),
             Opcode::IsList => self.instr_is_list(instr),
             Opcode::Len => self.instr_len(instr),
-            Opcode::OpOr => self.instr_op_or(instr),
-            Opcode::OpCoalesce => self.instr_op_coalesce(instr),
-            Opcode::OpAnd => self.instr_op_and(instr),
+            Opcode::IsTruthy => self.instr_is_truthy(instr),
+            Opcode::IsNull => self.instr_is_null(instr),
             Opcode::OpLt => self.instr_op_lt(instr),
             Opcode::OpLe => self.instr_op_le(instr),
             Opcode::OpEq => self.instr_op_eq(instr),
@@ -552,6 +551,20 @@ impl VmContext {
         Ok(())
     }
 
+    fn instr_is_truthy(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        let res = val.is_truthy();
+        self.reg_write(instr.reg_b(), Value::from(res))?;
+        Ok(())
+    }
+
+    fn instr_is_null(&mut self, instr: Instr) -> Result<()> {
+        let val = self.reg_read(instr.reg_a())?;
+        let res = val.is_null();
+        self.reg_write(instr.reg_b(), Value::from(res))?;
+        Ok(())
+    }
+
     fn instr_bin_op(
         &mut self,
         instr: Instr,
@@ -626,20 +639,6 @@ impl VmContext {
                 ));
             }
         })
-    }
-
-    fn instr_op_or(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, |_, x, y| Ok((x.is_truthy() || y.is_truthy()).into()))
-    }
-
-    fn instr_op_coalesce(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, |_, x, y| {
-            Ok((if x.is_null() { y } else { x }).clone())
-        })
-    }
-
-    fn instr_op_and(&mut self, instr: Instr) -> Result<()> {
-        self.instr_bin_op(instr, |_, x, y| Ok((x.is_truthy() && y.is_truthy()).into()))
     }
 
     fn instr_op_index(&mut self, instr: Instr) -> Result<()> {
