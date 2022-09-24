@@ -126,7 +126,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Int,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -147,7 +147,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Float,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -168,7 +168,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Bool,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -225,7 +225,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::String,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -252,7 +252,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Func,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -279,7 +279,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Func,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -306,7 +306,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::List,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -333,7 +333,7 @@ impl Value {
         } else {
             Err(FromValueError {
                 expected: Type::Map,
-                got: self.ty(),
+                found: self.ty(),
             })
         }
     }
@@ -610,7 +610,7 @@ impl TryFrom<Value> for FuncValue {
         } else {
             Err(FromValueError {
                 expected: Type::Func,
-                got: value.ty(),
+                found: value.ty(),
             })
         }
     }
@@ -623,8 +623,8 @@ impl Debug for FuncValue {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("expected {:?}, found {:?}", self.expected, self.got)]
+#[error("expected {:?}, found {:?}", self.expected, self.found)]
 pub struct FromValueError {
     pub expected: Type,
-    pub got: Type,
+    pub found: Type,
 }

@@ -10,7 +10,7 @@ use diagnostic::Severity;
 pub use self::compiler::{compile, Compiler};
 pub use self::source::{LineColPos, LineColRange, Source, SourceText};
 pub use self::value::{DebugInfo, ExtFunc, Func, FuncValue, List, Map, Type, Value};
-pub use self::vm::{Error, Result, Vm};
+pub use self::vm::{Error, Result, Vm, VmContext};
 use crate::diagnostic::Diagnostic;
 
 pub fn compile_text(env: Map, text: &str) -> (Option<Value>, Vec<Diagnostic>) {

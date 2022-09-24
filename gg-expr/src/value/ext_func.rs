@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 
-use crate::Value;
+use crate::{Result, Value, VmContext};
 
 pub struct ExtFunc {
     pub arity: u16,
@@ -12,20 +12,20 @@ pub struct ExtFunc {
 impl ExtFunc {
     pub fn new<const N: usize, F>(func: F) -> ExtFunc
     where
-        F: Fn(&[Value; N]) -> Value + 'static,
+        F: Fn(&VmContext, &[Value; N]) -> Result<Value> + 'static,
     {
         ExtFunc {
             arity: N as u16,
             name: None,
-            func: Box::new(move |args| {
+            func: Box::new(move |ctx, args| {
                 let args = <&[Value; N]>::try_from(args).unwrap();
-                func(args)
+                func(ctx, args)
             }),
         }
     }
 }
 
-type DynFn = dyn Fn(&[Value]) -> Value;
+type DynFn = dyn Fn(&VmContext, &[Value]) -> Result<Value>;
 
 impl Hash for ExtFunc {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -49,6 +49,6 @@ impl Debug for ExtFunc {
             write!(f, "fn")?;
         }
 
-        write!(f, "({} args): {:p}", self.arity, self.func)
+        write!(f, "({} args)", self.arity)
     }
 }

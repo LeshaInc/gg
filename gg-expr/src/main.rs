@@ -1,4 +1,5 @@
 use eyre::{bail, Result};
+use gg_expr::diagnostic::{Severity, SourceComponent};
 use gg_expr::{compile_text, ExtFunc, Map, Vm};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -46,12 +47,29 @@ impl Context {
 
         math.insert(
             "sin".into(),
-            ExtFunc::new(|[x]| x.as_float().unwrap().sin().into()).into(),
-        );
+            ExtFunc::new(|ctx, [x]| {
+                let x = match x.as_float() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let ranges = ctx.cur_ranges();
+                        let call_range = ranges.as_ref().and_then(|v| v.get(0)).copied();
+                        let arg_range = ranges.as_ref().and_then(|v| v.get(2)).copied();
+                        let message = format!("{}", e);
+                        return Err(ctx.error(call_range, message, |diag, source| {
+                            if let (Some(source), Some(range)) = (source, arg_range) {
+                                diag.add_source(SourceComponent::new(source).with_label(
+                                    Severity::Error,
+                                    range,
+                                    format!("{:?}", e.found),
+                                ));
+                            }
+                        }));
+                    }
+                };
 
-        math.insert(
-            "cos".into(),
-            ExtFunc::new(|[x]| x.as_float().unwrap().cos().into()).into(),
+                Ok(x.sin().into())
+            })
+            .into(),
         );
 
         env.insert("math".into(), math.into());

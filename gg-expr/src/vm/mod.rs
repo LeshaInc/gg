@@ -23,7 +23,7 @@ pub struct Vm {
 }
 
 #[derive(Debug)]
-struct VmContext {
+pub struct VmContext {
     frame: Frame,
     frames: Vec<Frame>,
     stack: Vec<Value>,
@@ -93,7 +93,8 @@ impl Vm {
 }
 
 impl VmContext {
-    fn stack_trace(&self, range: Option<TextRange>) -> StackTrace {
+    #[inline(never)]
+    pub fn stack_trace(&self, range: Option<TextRange>) -> StackTrace {
         let mut frames = Vec::with_capacity(self.frames.len() + 1);
 
         frames.push(StackFrame {
@@ -117,7 +118,7 @@ impl VmContext {
         StackTrace { frames }
     }
 
-    fn cur_ranges(&self) -> Option<Vec<TextRange>> {
+    pub fn cur_ranges(&self) -> Option<Vec<TextRange>> {
         if let Some(di) = &self.cur_func().ok()?.debug_info {
             let prev_ip = &(self.frame.ip + InstrOffset(-1));
             return di.instruction_ranges.get(&prev_ip).cloned();
@@ -125,7 +126,7 @@ impl VmContext {
         None
     }
 
-    fn error(
+    pub fn error(
         &self,
         range: Option<TextRange>,
         message: impl Into<String>,
@@ -145,7 +146,7 @@ impl VmContext {
     }
 
     #[inline(never)]
-    fn error_simple(&self, message: &str) -> Error {
+    pub fn error_simple(&self, message: &str) -> Error {
         self.error(None, message, |_, _| ())
     }
 
@@ -500,7 +501,7 @@ impl VmContext {
         let args = self.stack.get(start..end);
         let args = args.ok_or_else(|| self.error_bad_reg())?;
 
-        let res = (func.func)(args);
+        let res = (func.func)(self, args)?;
         self.stack[dst] = res;
 
         Ok(())

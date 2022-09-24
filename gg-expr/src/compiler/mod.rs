@@ -474,16 +474,18 @@ impl Compiler {
         self.in_ret_expr = false;
 
         let range = expr.range();
-        let mut fn_range = range;
+        let mut ranges = vec![range];
+
         let arity = expr.args().count() as u16;
         let seq = self.regs.alloc_seq(arity + 1);
 
         if let Some(expr) = expr.func() {
-            fn_range = expr.range();
+            ranges.push(expr.range());
             self.compile_expr_dst(expr, seq.base);
         }
 
         for (expr, dst) in expr.args().zip(seq.into_iter().skip(1)) {
+            ranges.push(expr.range());
             self.compile_expr_dst(expr, dst);
         }
 
@@ -494,7 +496,7 @@ impl Compiler {
             Instr::new(Opcode::Call).with_reg_seq(seq).with_reg_c(*dst)
         };
 
-        self.add_instr_ranged(&[range, fn_range], instr);
+        self.add_instr_ranged(&ranges, instr);
         self.regs.free_seq(seq);
     }
 
