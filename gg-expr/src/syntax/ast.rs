@@ -188,6 +188,8 @@ define_terms![
     PatGrouped,
     PatOr,
     PatList,
+    PatNull,
+    PatBool,
     PatInt,
     PatString,
     PatRest,
@@ -222,6 +224,8 @@ define_enum!(Pat {
     Grouped(PatGrouped),
     Or(PatOr),
     List(PatList),
+    Null(PatNull),
+    Bool(PatBool),
     Int(PatInt),
     String(PatString),
     Rest(PatRest),
@@ -378,6 +382,13 @@ impl LetBinding {
 impl ExprFn {
     pub fn args(&self) -> impl Iterator<Item = Ident> {
         self.nontrivial_tokens().flat_map(Ident::cast)
+    }
+}
+
+impl PatBool {
+    pub fn value(&self) -> Option<bool> {
+        let token = self.nontrivial_tokens().next()?;
+        Some(token.kind() == SyntaxKind::TokTrue)
     }
 }
 

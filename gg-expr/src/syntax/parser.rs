@@ -516,6 +516,8 @@ impl Parser<'_> {
             Some(TokLParen) => self.pat_grouped(),
             Some(TokLBracket) => self.pat_list(),
             Some(TokRest) => self.pat_rest(),
+            Some(TokNull) => self.pat_null(),
+            Some(TokTrue | TokFalse) => self.pat_bool(),
             Some(TokInt) => self.pat_int(),
             Some(TokString) => self.pat_string(),
             Some(TokIdent) => self.pat_binding(),
@@ -554,6 +556,18 @@ impl Parser<'_> {
     fn pat_rest(&mut self) {
         self.start_node(PatRest);
         self.expect(TokRest);
+        self.finish_node();
+    }
+
+    fn pat_null(&mut self) {
+        self.start_node(PatNull);
+        self.expect(TokNull);
+        self.finish_node();
+    }
+
+    fn pat_bool(&mut self) {
+        self.start_node(PatBool);
+        self.expect_one_of(&[TokTrue, TokFalse]);
         self.finish_node();
     }
 

@@ -782,6 +782,8 @@ impl Compiler {
             Pat::Grouped(pat) => self.compile_pat_grouped(pat, val, cond),
             Pat::Or(pat) => self.compile_pat_or(pat, val, cond),
             Pat::List(pat) => self.compile_pat_list(pat, val, cond),
+            Pat::Null(pat) => self.compile_pat_null(pat, val, cond),
+            Pat::Bool(pat) => self.compile_pat_bool(pat, val, cond),
             Pat::Int(pat) => self.compile_pat_int(pat, val, cond),
             Pat::String(pat) => self.compile_pat_string(pat, val, cond),
             Pat::Rest(pat) => self.compile_pat_rest(pat, val, cond),
@@ -975,6 +977,16 @@ impl Compiler {
             .with_reg_b(val)
             .with_reg_c(cond);
         self.instrs.add(instr);
+    }
+
+    fn compile_pat_null(&mut self, pat: PatNull, val: RegId, cond: RegId) {
+        self.compile_pat_const_eq(pat.range(), Value::null(), val, cond);
+    }
+
+    fn compile_pat_bool(&mut self, pat: PatBool, val: RegId, cond: RegId) {
+        if let Some(value) = pat.value() {
+            self.compile_pat_const_eq(pat.range(), value, val, cond);
+        }
     }
 
     fn compile_pat_int(&mut self, pat: PatInt, val: RegId, cond: RegId) {

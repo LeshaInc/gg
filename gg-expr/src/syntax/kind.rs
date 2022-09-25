@@ -130,6 +130,8 @@ pub enum SyntaxKind {
     PatGrouped,
     PatOr,
     PatList,
+    PatNull,
+    PatBool,
     PatInt,
     PatString,
     PatRest,
