@@ -144,6 +144,8 @@ impl Value {
     pub fn as_float(&self) -> Result<f32, FromValueError> {
         if self.is_float() {
             unsafe { Ok(f32::from_bits((self.u64 >> 32) as u32)) }
+        } else if self.is_int() {
+            unsafe { Ok((self.u64 >> 32) as i32 as f32) }
         } else {
             Err(FromValueError {
                 expected: Type::Float,
