@@ -642,6 +642,7 @@ pub fn float_value(text: &str) -> Option<f32> {
 pub fn string_value(text: &str) -> String {
     text[1..text.len() - 1]
         .replace("\\\\", "\\")
+        .replace("\\\"", "\"")
         .replace("\\r", "\r")
         .replace("\\n", "\n")
         .replace("\\t", "\t")
