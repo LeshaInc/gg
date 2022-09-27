@@ -1,6 +1,6 @@
 use eyre::{bail, Result};
-use gg_expr::diagnostic::{Severity, SourceComponent};
-use gg_expr::{compile_text, ExtFunc, Map, Vm};
+use gg_expr::builtins::builtins;
+use gg_expr::{compile_text, Map, Vm};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -39,43 +39,8 @@ struct Context {
 
 impl Context {
     fn new() -> Context {
-        let mut env = Map::new();
-
-        let mut math = Map::new();
-
-        math.insert("pi".into(), std::f32::consts::PI.into());
-
-        math.insert(
-            "sin".into(),
-            ExtFunc::new(|ctx, [x]| {
-                let x = match x.as_float() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        let ranges = ctx.cur_ranges();
-                        let call_range = ranges.as_ref().and_then(|v| v.get(0)).copied();
-                        let arg_range = ranges.as_ref().and_then(|v| v.get(2)).copied();
-                        let message = format!("{}", e);
-                        return Err(ctx.error(call_range, message, |diag, source| {
-                            if let (Some(source), Some(range)) = (source, arg_range) {
-                                diag.add_source(SourceComponent::new(source).with_label(
-                                    Severity::Error,
-                                    range,
-                                    format!("{:?}", e.found),
-                                ));
-                            }
-                        }));
-                    }
-                };
-
-                Ok(x.sin().into())
-            })
-            .into(),
-        );
-
-        env.insert("math".into(), math.into());
-
         Context {
-            env,
+            env: builtins(),
             show_bytecode: false,
             show_time: false,
         }

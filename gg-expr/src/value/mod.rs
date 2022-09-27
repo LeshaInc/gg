@@ -627,6 +627,6 @@ impl Debug for FuncValue {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("expected {:?}, found {:?}", self.expected, self.found)]
 pub struct FromValueError {
-    pub expected: Type,
+    pub expected: Type, // TODO
     pub found: Type,
 }
