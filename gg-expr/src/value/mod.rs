@@ -125,7 +125,7 @@ impl Value {
             unsafe { Ok((self.u64 >> 32) as i32) }
         } else {
             Err(FromValueError {
-                expected: Type::Int,
+                expected: &[Type::Int],
                 found: self.ty(),
             })
         }
@@ -148,7 +148,7 @@ impl Value {
             unsafe { Ok((self.u64 >> 32) as i32 as f32) }
         } else {
             Err(FromValueError {
-                expected: Type::Float,
+                expected: &[Type::Float, Type::Int],
                 found: self.ty(),
             })
         }
@@ -169,7 +169,7 @@ impl Value {
             unsafe { Ok((self.u64 >> 32) != 0) }
         } else {
             Err(FromValueError {
-                expected: Type::Bool,
+                expected: &[Type::Bool],
                 found: self.ty(),
             })
         }
@@ -226,7 +226,7 @@ impl Value {
             unsafe { Ok(&self.get_heap().payload.string) }
         } else {
             Err(FromValueError {
-                expected: Type::String,
+                expected: &[Type::String],
                 found: self.ty(),
             })
         }
@@ -253,7 +253,7 @@ impl Value {
             unsafe { Ok(&self.get_heap().payload.func) }
         } else {
             Err(FromValueError {
-                expected: Type::Func,
+                expected: &[Type::Func],
                 found: self.ty(),
             })
         }
@@ -280,7 +280,7 @@ impl Value {
             unsafe { Ok(&self.get_heap().payload.ext_func) }
         } else {
             Err(FromValueError {
-                expected: Type::Func,
+                expected: &[Type::Func],
                 found: self.ty(),
             })
         }
@@ -307,7 +307,7 @@ impl Value {
             unsafe { Ok(&self.get_heap().payload.list) }
         } else {
             Err(FromValueError {
-                expected: Type::List,
+                expected: &[Type::List],
                 found: self.ty(),
             })
         }
@@ -334,7 +334,7 @@ impl Value {
             unsafe { Ok(&self.get_heap().payload.map) }
         } else {
             Err(FromValueError {
-                expected: Type::Map,
+                expected: &[Type::Map],
                 found: self.ty(),
             })
         }
@@ -611,7 +611,7 @@ impl TryFrom<Value> for FuncValue {
             Ok(FuncValue(value))
         } else {
             Err(FromValueError {
-                expected: Type::Func,
+                expected: &[Type::Func],
                 found: value.ty(),
             })
         }
@@ -625,8 +625,28 @@ impl Debug for FuncValue {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("expected {:?}, found {:?}", self.expected, self.found)]
+#[error("expected {}, found {:?}", FormatExpectedList(self.expected), self.found)]
 pub struct FromValueError {
-    pub expected: Type, // TODO
+    pub expected: &'static [Type], // TODO
     pub found: Type,
+}
+
+struct FormatExpectedList(&'static [Type]);
+
+impl fmt::Display for FormatExpectedList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 == &[Type::Float, Type::Int] {
+            return write!(f, "number");
+        }
+
+        for (i, v) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, " or ")?;
+            }
+
+            write!(f, "{:?}", v)?;
+        }
+
+        Ok(())
+    }
 }
