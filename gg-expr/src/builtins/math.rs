@@ -76,9 +76,59 @@ fn tan(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
     Ok(x.tan().into())
 }
 
+fn sinh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.sinh().into())
+}
+
+fn cosh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.cosh().into())
+}
+
+fn tanh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.tanh().into())
+}
+
+fn asin(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.asin().into())
+}
+
+fn acos(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.acos().into())
+}
+
+fn atan(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.atan().into())
+}
+
+fn asinh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.asinh().into())
+}
+
+fn acosh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.acosh().into())
+}
+
+fn atanh(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.atanh().into())
+}
+
 fn exp(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
     let x = to_float(ctx, 0, x)?;
     Ok(x.exp().into())
+}
+
+fn ln(ctx: &VmContext, [x]: &[Value; 1]) -> Result<Value> {
+    let x = to_float(ctx, 0, x)?;
+    Ok(x.ln().into())
 }
 
 fn add_value(map: &mut Map, name: &str, val: impl Into<Value>) {
@@ -108,7 +158,17 @@ pub fn module() -> Value {
     add_func(&mut map, "sin", sin);
     add_func(&mut map, "cos", cos);
     add_func(&mut map, "tan", tan);
+    add_func(&mut map, "sinh", sinh);
+    add_func(&mut map, "cosh", cosh);
+    add_func(&mut map, "tanh", tanh);
+    add_func(&mut map, "asin", asin);
+    add_func(&mut map, "acos", acos);
+    add_func(&mut map, "atan", atan);
+    add_func(&mut map, "asinh", asinh);
+    add_func(&mut map, "acosh", acosh);
+    add_func(&mut map, "atanh", atanh);
     add_func(&mut map, "exp", exp);
+    add_func(&mut map, "ln", ln);
 
     map.into()
 }
