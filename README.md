@@ -1,5 +1,11 @@
 WIP: My personal game engine.
 
+Some features:
+ - Custom programming language (functional, expression-oriented)
+ - Custom UI with complex text layout and emoji support
+ - Simple 2D graphics based on WGPU (abstraction over platform APIs)
+ - Multithreaded asset loading
+
 ## License
 
 This project is licensed under either of
